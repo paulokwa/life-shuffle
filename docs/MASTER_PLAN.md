@@ -58,6 +58,17 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 7. User can regenerate unlocked items while preserving locked ones.
 8. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
+## Calendar views
+
+The app should eventually support switchable calendar views:
+
+- Day view
+- Week view
+- Month view
+- Year view
+
+For MVP 1, the priority is a mobile-friendly agenda/week view. Day, month, and year views are part of the product direction, but they do not all need to be fully implemented before the rule-based planner is proven useful.
+
 ## MVP 1: local mobile-first planner
 
 MVP 1 should prove the app is useful without AI, accounts, or cloud sync.
@@ -69,6 +80,7 @@ Must include:
 - Activity categories with colours/icons
 - Activity rules
 - 7-day agenda generation
+- Mobile-friendly agenda/week calendar view
 - Lock/unlock planned items
 - Regenerate unlocked items only
 - Local storage
