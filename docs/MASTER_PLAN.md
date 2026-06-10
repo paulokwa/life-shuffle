@@ -35,28 +35,37 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 
 4. Keep early scope personal.
    - First version is for Kwame and Laura.
-   - Do not overbuild social, marketplace, public profile, or complex account features too early.
+   - The app should support a simple shared calendar between Kwame and Laura from Version 1.
+   - Do not overbuild public profiles, marketplace, subscriptions, or broad social features too early.
 
 5. The app should reduce stuckness, not increase admin.
    - Adding activities should feel light.
    - The user should never need to perfectly know what they like before starting.
    - AI assistance can help suggest ideas, but the user stays in control.
 
+6. Shared editing should be simple, not enterprise-grade.
+   - Use Firebase and Google sign-in for Version 1 shared editing.
+   - Avoid building a custom password system.
+   - Avoid full public account/profile complexity until much later.
+
 ## Core user flow
 
 1. User opens the app.
-2. User adds activities one at a time.
-3. Each activity can include category, location type, duration, notes, icon/colour, and energy/social level.
-4. User can add rules such as:
+2. User signs in with Google.
+3. User enters or creates the shared Kwame/Laura calendar.
+4. User adds activities one at a time.
+5. Each activity can include category, location type, duration, notes, icon/colour, and energy/social level.
+6. User can add rules such as:
    - Allowed days
    - Allowed time windows
    - Max times per week/month/year
    - Do not repeat on consecutive days
    - Do not schedule outside a specific timeframe
-5. App generates a calendar/agenda from the activity bank.
-6. User can lock certain planned items.
-7. User can regenerate unlocked items while preserving locked ones.
-8. Later, AI can suggest activities and generate plans while respecting the user's rules.
+7. App generates a calendar/agenda from the activity bank.
+8. User can lock certain planned items.
+9. User can regenerate unlocked items while preserving locked ones.
+10. Laura and Kwame can both edit the shared calendar inside Life Shuffle.
+11. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
 ## Calendar views
 
@@ -69,13 +78,16 @@ The app should eventually support switchable calendar views:
 
 For MVP 1, the priority is a mobile-friendly agenda/week view. Day, month, and year views are part of the product direction, but they do not all need to be fully implemented before the rule-based planner is proven useful.
 
-## MVP 1: local mobile-first planner
+## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful without AI, accounts, or cloud sync.
+MVP 1 should prove the app is useful for Kwame and Laura with shared editing, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
 - Mobile-first layout
+- Firebase setup
+- Google sign-in
+- Simple shared calendar membership for Kwame and Laura
 - Activity creation flow
 - Activity categories with colours/icons
 - Activity rules
@@ -83,24 +95,25 @@ Must include:
 - Mobile-friendly agenda/week calendar view
 - Lock/unlock planned items
 - Regenerate unlocked items only
-- Local storage
+- Firestore persistence for shared activities and planned items
 
 Should not include yet:
-- Full login/profile system
-- Public user accounts
+- Custom password system
+- Full public profile system
+- Public user accounts beyond the private shared setup
 - AI local event discovery
 - Paid subscriptions
 - Complex social sharing
 - Native app store release
+- ICS calendar subscription feed
 
-## MVP 2: persistence and sharing
+## MVP 2: calendar subscription and polish
 
 After MVP 1 feels useful:
-- Add Firebase
-- Add anonymous auth or simple private user setup
-- Save activities and plans remotely
 - Add shared calendar subscription via ICS feed
-- Allow Laura/Kwame calendar sharing
+- Allow read-only subscription from phone calendar apps
+- Improve sharing/invite flow if needed
+- Add stronger polish around shared editing states
 
 Important: calendar subscription updates are not guaranteed to be instant on every phone/calendar provider.
 
@@ -125,7 +138,7 @@ Life Shuffle could eventually become a public app for people who need help creat
 
 But the first win is much smaller:
 
-Can this help Kwame and Laura make a better week?
+Can this help Kwame and Laura make a better week together?
 
 ## Master plan change rule
 
