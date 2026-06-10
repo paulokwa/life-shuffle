@@ -28,7 +28,7 @@ Each entry should include:
 
 ### 2026-06-10 — Build the rule-based planner before AI
 
-- **Decision**: MVP 1 will focus on activities, rules, agenda generation, lock/unlock, regeneration, and local storage before adding AI.
+- **Decision**: MVP 1 will focus on activities, rules, agenda generation, lock/unlock, and regeneration before adding AI.
 - **Why**: The planner engine is the real foundation. AI should assist the experience later, not hide a weak core.
 - **Alternatives considered**:
   - Add BYOK AI immediately.
@@ -38,10 +38,10 @@ Each entry should include:
 ### 2026-06-10 — Start personal before public
 
 - **Decision**: First version is for Kwame and Laura, not a public multi-user product.
-- **Why**: The fastest way to prove value is to make the app useful in real life first. Full auth, public profiles, and social features can be expensive distractions early.
+- **Why**: The fastest way to prove value is to make the app useful in real life first. Public profiles, subscriptions, and broad social features can be expensive distractions early.
 - **Alternatives considered**:
-  - Build profile/login support from day one.
   - Build as a public SaaS immediately.
+  - Add social/community sharing early.
 - **Status**: Active
 
 ### 2026-06-10 — Use docs as continuity guardrails
@@ -51,4 +51,14 @@ Each entry should include:
 - **Alternatives considered**:
   - Keep everything in chat memory.
   - Let the implementation evolve without written guardrails.
+- **Status**: Active
+
+### 2026-06-10 — Include Firebase shared editing in MVP 1
+
+- **Decision**: MVP 1 will include Firebase, Google sign-in, Firestore persistence, and a simple shared calendar that Kwame and Laura can both edit.
+- **Why**: Shared editing is part of the real intended use. A purely local MVP would prove the planner engine but would not let Laura participate in the same calendar. Since this is a personal shared app rather than a solo-only tool, shared editing is worth including from Version 1.
+- **Alternatives considered**:
+  - Keep MVP 1 local-only and add sharing later.
+  - Use Supabase instead of Firebase.
+  - Use only an ICS feed, which would allow read-only calendar subscription but not editing.
 - **Status**: Active
