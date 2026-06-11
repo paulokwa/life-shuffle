@@ -43,6 +43,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - The user should never need to perfectly know what they like before starting.
    - Optional planning dimensions should be switchable so users can keep the app simple if they do not want extra fields.
    - Check-ins should not require typing by default.
+   - Onboarding should be short, skippable where possible, and focused on getting to the first useful generated week.
    - AI assistance can help suggest ideas, but the user stays in control.
 
 6. Shared editing should be simple, not enterprise-grade.
@@ -65,28 +66,72 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 
 1. User opens the app.
 2. User signs in with Google.
-3. User creates or selects a named Life Shuffle calendar.
-4. During setup/onboarding, the user is asked to name the first calendar, with a sensible default such as `Kwame and Laura` or `My Life Shuffle`.
-5. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
-6. User adds activities one at a time.
-7. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
-8. User can add rules such as:
-   - Allowed days
-   - Allowed time windows
-   - Max times per week/month/year
-   - Do not repeat on consecutive days
-   - Do not schedule outside a specific timeframe
-   - Avoid too many high-difficulty activities if difficulty is enabled
-   - Avoid back-to-back high-difficulty activities if difficulty is enabled
-9. App generates a calendar/agenda from the selected calendar's activity bank.
-10. User can lock certain planned items.
-11. User can regenerate unlocked items while preserving locked ones.
-12. Laura and Kwame can both edit shared calendars inside Life Shuffle when they are members of that calendar.
-13. User can mark past planned items as skipped, partly done, or done.
-14. User can view basic progress/statistics for the selected calendar.
-15. User can print/export the selected calendar with chosen visible details.
-16. User can publish a read-only calendar subscription feed for the selected calendar.
-17. Later, AI can suggest activities and generate plans while respecting the user's rules.
+3. User confirms or edits their display name.
+4. User creates or selects a named Life Shuffle calendar.
+5. During setup/onboarding, the user is asked to name the first calendar, with a sensible default such as `Kwame and Laura` or `My Life Shuffle`.
+6. User can optionally add/share the calendar with another person.
+7. User chooses which planning dimensions are enabled: difficulty, energy, and/or social level.
+8. User picks starter activities from a built-in starter activity library.
+9. User can use sensible default rules or review rules before generating.
+10. User chooses a first plan style, such as Gentle, Balanced, or Push me a little.
+11. App generates a calendar/agenda from the selected calendar's activity bank.
+12. User can lock certain planned items.
+13. User can regenerate unlocked items while preserving locked ones.
+14. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
+15. Laura and Kwame can both edit shared calendars inside Life Shuffle when they are members of that calendar.
+16. User can mark past planned items as skipped, partly done, or done.
+17. User can view basic progress/statistics for the selected calendar.
+18. User can print/export the selected calendar with chosen visible details.
+19. User can publish a read-only calendar subscription feed for the selected calendar.
+20. Later, AI can suggest activities and generate plans while respecting the user's rules.
+
+## Onboarding and setup
+
+Version 1 should include a short onboarding flow that helps the user create their first useful calendar without too much setup friction.
+
+Recommended flow:
+1. Welcome: brief explanation of Life Shuffle.
+2. Continue with Google.
+3. Confirm display name. Use the Google display name as a default, but let the user edit it.
+4. Name first calendar. Provide a default such as `My Life Shuffle` or, for the initial personal use case, `Kwame and Laura`.
+5. Optional sharing/member step. Let the user add another person by email or skip.
+6. Choose planning dimensions: Difficulty, Energy, and Social. Explain each in plain language and let the user switch them on or off.
+7. Pick starter activities from a built-in starter library.
+8. Choose whether to use sensible default rules or review rules now.
+9. Choose first plan style: Gentle, Balanced, or Push me a little.
+10. Generate first week.
+11. Show the agenda/week view with small hints for lock and shuffle.
+
+Onboarding should avoid:
+- Long profile questionnaires.
+- Forcing users to configure rules for every activity before they can continue.
+- Asking users to type notes or goals before they have seen the app work.
+- Pulling activity ideas from websites in Version 1.
+- Presenting too many activity suggestions at once.
+
+## Starter activity library
+
+Version 1 should include a built-in starter activity library so the user is not forced to invent ideas from a blank page.
+
+The starter library should be hardcoded/static in Version 1, not pulled from websites or AI.
+
+Suggested starter categories:
+- At home
+- Outside
+- Health / movement
+- Social
+- Creative
+- Rest
+- Food
+- Chores / life admin
+- Couple time
+- Low-energy ideas
+
+The picker should show a small number of suggestions first and use a `See more` pattern for larger lists. Users should also be able to add their own custom activities.
+
+Selected starter activities should be added to the selected calendar's activity bank and used by the planner when generating the first week.
+
+Starter activities may include sensible default metadata such as category, default duration, difficulty, energy, social level, and basic rules. The user should be able to change these later.
 
 ## Multiple named calendars
 
@@ -221,16 +266,23 @@ Private/internal notes should not be printed or exported unless explicitly inclu
 
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, onboarding, starter activities, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
 - Mobile-first layout
 - Firebase setup
 - Google sign-in
+- Short onboarding/setup flow
+- Confirm/edit display name after Google sign-in
 - Multiple named Life Shuffle calendars
 - Setup/onboarding prompt to name the first calendar, with a sensible default
+- Optional sharing/member setup step
 - Calendar switcher or clear way to create/select calendars
+- Built-in starter activity library
+- Starter activity picker with `See more` pattern
+- Sensible default rules for starter activities
+- First plan style choice: Gentle, Balanced, or Push me a little
 - Simple shared calendar membership for Kwame and Laura
 - Activity creation flow
 - Activity categories with colours/icons
@@ -256,6 +308,9 @@ Should not include yet:
 - Paid subscriptions
 - Complex social sharing
 - Native app store release
+- Pulling starter activity ideas from websites
+- Long onboarding/profile questionnaires
+- Forced rule setup for every starter activity
 
 ## MVP 2: polish and expansion
 
