@@ -41,6 +41,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 5. The app should reduce stuckness, not increase admin.
    - Adding activities should feel light.
    - The user should never need to perfectly know what they like before starting.
+   - Optional planning dimensions should be switchable so users can keep the app simple if they do not want extra fields.
    - AI assistance can help suggest ideas, but the user stays in control.
 
 6. Shared editing should be simple, not enterprise-grade.
@@ -60,13 +61,15 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 2. User signs in with Google.
 3. User enters or creates the shared Kwame/Laura calendar.
 4. User adds activities one at a time.
-5. Each activity can include category, location type, duration, notes, icon/colour, and energy/social level.
+5. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
 6. User can add rules such as:
    - Allowed days
    - Allowed time windows
    - Max times per week/month/year
    - Do not repeat on consecutive days
    - Do not schedule outside a specific timeframe
+   - Avoid too many high-difficulty activities if difficulty is enabled
+   - Avoid back-to-back high-difficulty activities if difficulty is enabled
 7. App generates a calendar/agenda from the activity bank.
 8. User can lock certain planned items.
 9. User can regenerate unlocked items while preserving locked ones.
@@ -74,6 +77,26 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 11. User can print/export the calendar with chosen visible details.
 12. User can publish a read-only calendar subscription feed for external calendar apps.
 13. Later, AI can suggest activities and generate plans while respecting the user's rules.
+
+## Optional planning dimensions
+
+Version 1 should support optional planning dimensions that can be enabled or disabled in settings.
+
+Planning dimensions:
+- Difficulty/resistance level: how hard the activity feels to actually do, from 1 to 5.
+- Energy level: the physical or mental load of the activity, such as Low, Medium, or High.
+- Social level: the social shape of the activity, such as Solo, Together, Group, or Either.
+
+Users should be able to switch these dimensions on or off so disabled dimensions do not appear in activity creation, editing, calendar cards, planner rules, or print/export options.
+
+Settings should allow defaults such as:
+- Default difficulty: for example 3/5.
+- Default energy level: for example Medium.
+- Default social level: for example Either.
+
+Difficulty should not rely on colour because category already uses colour. A compact dot display such as `●●●○○` is preferred, with accessible text such as `Difficulty 3 of 5` available where needed.
+
+If difficulty is enabled, the planner should use it to avoid unrealistic weeks, such as too many hard activities or hard activities scheduled back-to-back.
 
 ## Calendar views
 
@@ -118,6 +141,7 @@ Users should be able to choose which details appear in output, such as:
 - Colour/icon
 - Location
 - Who it is for: Kwame, Laura, Both, or Either
+- Enabled planning dimensions, such as difficulty, energy, and social level
 - Notes
 - Locked status
 
@@ -135,6 +159,8 @@ Must include:
 - Simple shared calendar membership for Kwame and Laura
 - Activity creation flow
 - Activity categories with colours/icons
+- Optional planning dimensions: difficulty, energy, and social level
+- Settings to enable/disable planning dimensions and set their defaults
 - Activity rules
 - 7-day agenda generation
 - Mobile-friendly agenda/week calendar view
