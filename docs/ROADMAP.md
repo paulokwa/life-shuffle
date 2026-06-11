@@ -4,7 +4,7 @@
 
 Life Shuffle helps users create a realistic shared activity calendar from things they already like, things they might like, and rules that make the plan livable.
 
-The first version should help Kwame and Laura plan better weeks together. Public-app thinking comes later.
+The first version should help Kwame and Laura plan better weeks together, publish that plan to normal phone calendars, and print/export useful versions of the plan. Public-app thinking comes later.
 
 ## Current status
 
@@ -12,11 +12,12 @@ The first version should help Kwame and Laura plan better weeks together. Public
 - Flutter chosen as the main technology direction
 - Planning docs created
 - Firebase + Google sign-in moved into MVP 1 for shared editing
+- Calendar publishing and print/export moved into MVP 1
 - No app code yet
 
-## MVP 1 — Shared mobile-first planner
+## MVP 1 — Shared mobile-first planner with publishing/export
 
-Goal: prove the core experience works for Kwame and Laura with shared editing, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with shared editing, calendar publishing, and practical print/export, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
@@ -42,21 +43,43 @@ Goal: prove the core experience works for Kwame and Laura with shared editing, w
 - [ ] Add regenerate-unlocked-only behaviour
 - [ ] Save activities and generated plans in Firestore
 - [ ] Add Firestore security rules for shared calendar access
+- [ ] Generate read-only ICS/iCalendar feed for external calendar apps
+- [ ] Add private/unguessable calendar feed URL
+- [ ] Add ability to revoke/regenerate calendar feed URL
+- [ ] Add printable calendar view
+- [ ] Add PDF export if practical
+- [ ] Add simple text/share export if practical
+- [ ] Add output detail toggles for print/export
+
+### MVP 1 export/output detail options
+
+Users should be able to choose whether exported/printed output includes:
+
+- [ ] Activity title
+- [ ] Date and time
+- [ ] Duration
+- [ ] Category
+- [ ] Colour/icon
+- [ ] Location
+- [ ] Who it is for: Kwame, Laura, Both, or Either
+- [ ] Notes
+- [ ] Locked status
+
+Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, access the same shared calendar, add/edit activities, generate a useful week, and preserve locked items during regeneration.
+MVP 1 is successful if Kwame and Laura can both sign in, access the same shared calendar, add/edit activities, generate a useful week, preserve locked items during regeneration, publish a read-only subscribed calendar feed, and print/export the plan with chosen details.
 
-## MVP 2 — Calendar subscription and polish
+## MVP 2 — Polish and expansion
 
-Goal: make the shared plan visible from normal phone calendar apps and improve the shared experience.
+Goal: improve the shared experience after the core Version 1 works.
 
-- [ ] Add shared calendar export/feed
-- [ ] Generate ICS calendar feed
-- [ ] Let another person subscribe to the calendar
-- [ ] Document calendar refresh limitations
 - [ ] Improve invite/member management if needed
 - [ ] Improve conflict/loading/error states for shared editing
+- [ ] Improve calendar feed controls if needed
+- [ ] Add richer print/export templates if needed
+- [ ] Expand day/month/year calendar views if needed
 
 ## MVP 3 — AI assistant
 
@@ -87,4 +110,4 @@ When in doubt, build the smallest useful shared planner first.
 
 No feature should be added to MVP 1 unless it helps answer this question:
 
-Can Kwame and Laura sign in, share one calendar, and generate a useful, rule-respecting week from their activity list?
+Can Kwame and Laura sign in, share one calendar, generate a useful rule-respecting week, publish it to normal calendar apps, and print/export the plan with useful details?
