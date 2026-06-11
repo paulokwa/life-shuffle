@@ -62,3 +62,13 @@ Each entry should include:
   - Use Supabase instead of Firebase.
   - Use only an ICS feed, which would allow read-only calendar subscription but not editing.
 - **Status**: Active
+
+### 2026-06-10 — Include calendar publishing and print/export in MVP 1
+
+- **Decision**: MVP 1 will include a read-only published calendar feed for external calendar apps, plus print/export support with user-selectable output details.
+- **Why**: The app is more useful if plans can appear in normal phone calendar apps and be printed/exported in a controlled way. This supports real household use, especially when someone wants to see the plan outside Life Shuffle.
+- **Alternatives considered**:
+  - Put calendar publishing and print/export in MVP 2.
+  - Only support shared editing inside Life Shuffle.
+  - Only support a static export that does not update.
+- **Status**: Active
