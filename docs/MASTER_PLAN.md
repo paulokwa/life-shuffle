@@ -35,7 +35,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 
 4. Keep early scope personal.
    - First version is for Kwame and Laura.
-   - The app should support a simple shared calendar between Kwame and Laura from Version 1.
+   - The app should support simple shared calendars between Kwame and Laura from Version 1.
    - Do not overbuild public profiles, marketplace, subscriptions, or broad social features too early.
 
 5. The app should reduce stuckness, not increase admin.
@@ -65,11 +65,12 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 
 1. User opens the app.
 2. User signs in with Google.
-3. User enters or creates the shared Kwame/Laura calendar.
-4. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
-5. User adds activities one at a time.
-6. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
-7. User can add rules such as:
+3. User creates or selects a named Life Shuffle calendar.
+4. During setup/onboarding, the user is asked to name the first calendar, with a sensible default such as `Kwame and Laura` or `My Life Shuffle`.
+5. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
+6. User adds activities one at a time.
+7. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
+8. User can add rules such as:
    - Allowed days
    - Allowed time windows
    - Max times per week/month/year
@@ -77,15 +78,44 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Do not schedule outside a specific timeframe
    - Avoid too many high-difficulty activities if difficulty is enabled
    - Avoid back-to-back high-difficulty activities if difficulty is enabled
-8. App generates a calendar/agenda from the activity bank.
-9. User can lock certain planned items.
-10. User can regenerate unlocked items while preserving locked ones.
-11. Laura and Kwame can both edit the shared calendar inside Life Shuffle.
-12. User can mark past planned items as skipped, partly done, or done.
-13. User can view basic progress/statistics.
-14. User can print/export the calendar with chosen visible details.
-15. User can publish a read-only calendar subscription feed for external calendar apps.
-16. Later, AI can suggest activities and generate plans while respecting the user's rules.
+9. App generates a calendar/agenda from the selected calendar's activity bank.
+10. User can lock certain planned items.
+11. User can regenerate unlocked items while preserving locked ones.
+12. Laura and Kwame can both edit shared calendars inside Life Shuffle when they are members of that calendar.
+13. User can mark past planned items as skipped, partly done, or done.
+14. User can view basic progress/statistics for the selected calendar.
+15. User can print/export the selected calendar with chosen visible details.
+16. User can publish a read-only calendar subscription feed for the selected calendar.
+17. Later, AI can suggest activities and generate plans while respecting the user's rules.
+
+## Multiple named calendars
+
+Version 1 should support multiple named Life Shuffle calendars.
+
+Purpose:
+- Let users separate different planning needs.
+- Allow different calendars to have different activity banks, rules, members, published feeds, and progress stats.
+- Avoid forcing every activity into one giant mixed calendar.
+
+Examples:
+- `Kwame and Laura`
+- `Solo getting out`
+- `Health and movement`
+- `Weekend ideas`
+- `House projects`
+
+Each calendar should have:
+- A title/name.
+- Members and roles.
+- Its own activity bank.
+- Its own generated plans.
+- Its own check-in history and progress stats.
+- Its own print/export settings.
+- Its own optional published calendar feed.
+
+Onboarding/setup should ask the user to name their first Life Shuffle calendar. The app may provide a default name so the user can continue quickly without typing if they prefer.
+
+Users should be able to create additional calendars later from a clear calendar switcher or settings area.
 
 ## Optional planning dimensions
 
@@ -191,13 +221,16 @@ Private/internal notes should not be printed or exported unless explicitly inclu
 
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with shared editing, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
 - Mobile-first layout
 - Firebase setup
 - Google sign-in
+- Multiple named Life Shuffle calendars
+- Setup/onboarding prompt to name the first calendar, with a sensible default
+- Calendar switcher or clear way to create/select calendars
 - Simple shared calendar membership for Kwame and Laura
 - Activity creation flow
 - Activity categories with colours/icons
