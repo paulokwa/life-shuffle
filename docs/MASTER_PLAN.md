@@ -44,6 +44,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Optional planning dimensions should be switchable so users can keep the app simple if they do not want extra fields.
    - Check-ins should not require typing by default.
    - Onboarding should be short, skippable where possible, and focused on getting to the first useful generated week.
+   - Empty states, error messages, and planner failures should help the user take the next small action.
    - AI assistance can help suggest ideas, but the user stays in control.
 
 6. Shared editing should be simple, not enterprise-grade.
@@ -75,15 +76,17 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 9. User can use sensible default rules or review rules before generating.
 10. User chooses a first plan style, such as Gentle, Balanced, or Push me a little.
 11. App generates a calendar/agenda from the selected calendar's activity bank.
-12. User can lock certain planned items.
-13. User can regenerate unlocked items while preserving locked ones.
-14. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
-15. Laura and Kwame can both edit shared calendars inside Life Shuffle when they are members of that calendar.
-16. User can mark past planned items as skipped, partly done, or done.
-17. User can view basic progress/statistics for the selected calendar.
-18. User can print/export the selected calendar with chosen visible details.
-19. User can publish a read-only calendar subscription feed for the selected calendar.
-20. Later, AI can suggest activities and generate plans while respecting the user's rules.
+12. User lands on a Today/Home screen or agenda view that clearly shows what matters next.
+13. User can lock certain planned items.
+14. User can preview regeneration changes before applying them, or otherwise undo the last regeneration.
+15. User can regenerate unlocked items while preserving locked ones.
+16. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
+17. Laura and Kwame can both edit shared calendars inside Life Shuffle when they are members of that calendar.
+18. User can mark past planned items as skipped, partly done, or done.
+19. User can view basic progress/statistics for the selected calendar.
+20. User can print/export the selected calendar with chosen visible details.
+21. User can publish a read-only calendar subscription feed for the selected calendar.
+22. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
 ## Onboarding and setup
 
@@ -157,10 +160,31 @@ Each calendar should have:
 - Its own check-in history and progress stats.
 - Its own print/export settings.
 - Its own optional published calendar feed.
+- Its own calendar-level plan settings.
 
 Onboarding/setup should ask the user to name their first Life Shuffle calendar. The app may provide a default name so the user can continue quickly without typing if they prefer.
 
 Users should be able to create additional calendars later from a clear calendar switcher or settings area.
+
+Calendar lifecycle rules for Version 1 should stay simple:
+- Each calendar has an owner.
+- Owners can rename or delete the calendar.
+- Members can leave a calendar.
+- Deleting a calendar revokes its published feed.
+- Access should be controlled by calendar membership.
+
+## Calendar-level plan settings
+
+Each calendar should have simple plan settings that affect generation without forcing every activity to carry the same rules.
+
+Version 1 plan settings may include:
+- Week starts on Monday or Sunday.
+- Earliest activity time.
+- Latest activity time.
+- Default plan style: Gentle, Balanced, or Push me a little.
+- Default number of activities per week.
+
+These settings should be separate from activity-specific rules.
 
 ## Optional planning dimensions
 
@@ -181,6 +205,68 @@ Settings should allow defaults such as:
 Difficulty should not rely on colour because category already uses colour. A compact dot display such as `●●●○○` is preferred, with accessible text such as `Difficulty 3 of 5` available where needed.
 
 If difficulty is enabled, the planner should use it to avoid unrealistic weeks, such as too many hard activities or hard activities scheduled back-to-back.
+
+## Activity lifecycle
+
+Version 1 should allow activities to be enabled or disabled.
+
+Disabled activities should:
+- Stay in the activity bank.
+- Not be used in future generation.
+- Preserve past plans, check-ins, and stats history.
+
+Deleting should be more cautious than disabling and should not be the main way to pause an activity.
+
+## Generation safety and conflicts
+
+Version 1 should protect users from accidental or confusing planner changes.
+
+Regeneration should either:
+- Preview proposed changes before applying them, or
+- Offer an undo action for the last regeneration.
+
+The app should show clear messages when:
+- A plan cannot fit all requested activities.
+- A locked item conflicts with new rules.
+- An activity has nowhere valid to go.
+- An activity is disabled but still exists in older plans.
+- Another member has updated the calendar.
+- Sync fails or the app is offline.
+
+Messages should explain what happened and suggest the next small action, such as relaxing rules, widening the time window, unlocking an item, or trying fewer activities.
+
+## Today/Home screen and empty states
+
+Version 1 should include a simple Today/Home screen or clear landing view after onboarding.
+
+It should show:
+- Selected calendar name.
+- Today's planned items.
+- Next activity.
+- Any pending check-in prompt.
+- Quick actions such as Generate, Regenerate, Add activity, or View progress.
+
+Version 1 should include helpful empty states for:
+- No calendars yet.
+- No activities yet.
+- No generated plan yet.
+- No check-ins yet.
+- No stats yet.
+- Offline or sync problem.
+
+Empty states should guide the next action instead of feeling like dead ends.
+
+## Privacy and feed explanation
+
+Version 1 should include a simple privacy/settings explanation in plain language.
+
+It should explain:
+- Calendars are private to their members.
+- Shared calendar members can see and edit that calendar based on their role.
+- Published calendar feeds are read-only.
+- Anyone with a published feed link may be able to view that feed.
+- Users can revoke/regenerate a feed link.
+- Deleting a calendar revokes its feed.
 
 ## Check-ins and progress
 
@@ -266,7 +352,7 @@ Private/internal notes should not be printed or exported unless explicitly inclu
 
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, onboarding, starter activities, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, onboarding, starter activities, safety UX, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
@@ -277,26 +363,33 @@ Must include:
 - Confirm/edit display name after Google sign-in
 - Multiple named Life Shuffle calendars
 - Setup/onboarding prompt to name the first calendar, with a sensible default
-- Optional sharing/member setup step
+- Calendar ownership, membership, leave, delete, and feed-revocation basics
 - Calendar switcher or clear way to create/select calendars
+- Calendar-level plan settings
 - Built-in starter activity library
 - Starter activity picker with `See more` pattern
 - Sensible default rules for starter activities
 - First plan style choice: Gentle, Balanced, or Push me a little
 - Simple shared calendar membership for Kwame and Laura
 - Activity creation flow
+- Activity enabled/disabled state
 - Activity categories with colours/icons
 - Optional planning dimensions: difficulty, energy, and social level
 - Settings to enable/disable planning dimensions and set their defaults
 - Activity rules
 - 7-day agenda generation
 - Mobile-friendly agenda/week calendar view
+- Today/Home screen or clear landing view
+- Helpful empty states
 - Lock/unlock planned items
+- Regeneration preview or undo
 - Regenerate unlocked items only
+- Basic conflict/failure messages for generation and sync
 - Low-friction check-ins using skipped/partly/done status circles
 - Skippable check-in prompt on app open/login when past unchecked items exist
 - Basic stats/progress page
-- Firestore persistence for shared activities and planned items
+- Plain-language privacy and published feed explanation
+- Firestore persistence for calendars, activities, planned items, and check-in statuses
 - Read-only published calendar feed for external calendar apps
 - Print/export support with user-selectable output details
 
@@ -311,6 +404,8 @@ Should not include yet:
 - Pulling starter activity ideas from websites
 - Long onboarding/profile questionnaires
 - Forced rule setup for every starter activity
+- Rich analytics/charts beyond basic progress
+- Notifications/reminders unless explicitly needed later
 
 ## MVP 2: polish and expansion
 
