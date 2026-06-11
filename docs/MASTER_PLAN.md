@@ -30,7 +30,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Good-but-later ideas go into PARKING_LOT.md, not straight into the MVP.
 
 3. Build the boring useful engine before the shiny AI layer.
-   - Activity list, rules, calendar generation, locking, regeneration, shared editing, calendar publishing, and practical export/print come before AI.
+   - Activity list, rules, calendar generation, locking, regeneration, shared editing, calendar publishing, practical export/print, check-ins, and basic progress tracking come before AI.
    - AI support comes after the core planner works.
 
 4. Keep early scope personal.
@@ -42,6 +42,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Adding activities should feel light.
    - The user should never need to perfectly know what they like before starting.
    - Optional planning dimensions should be switchable so users can keep the app simple if they do not want extra fields.
+   - Check-ins should not require typing by default.
    - AI assistance can help suggest ideas, but the user stays in control.
 
 6. Shared editing should be simple, not enterprise-grade.
@@ -55,14 +56,20 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Users should be able to choose which details appear in printed/exported output.
    - External calendar apps may not refresh subscribed calendars immediately.
 
+8. Progress tracking should be gentle.
+   - Check-ins should help users learn from their plans, not shame them.
+   - The app should use fast visual status controls before asking for notes.
+   - Notes should be optional and hidden behind an explicit action.
+
 ## Core user flow
 
 1. User opens the app.
 2. User signs in with Google.
 3. User enters or creates the shared Kwame/Laura calendar.
-4. User adds activities one at a time.
-5. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
-6. User can add rules such as:
+4. If there are past unchecked activities, the app offers a quick check-in prompt that the user can complete or skip.
+5. User adds activities one at a time.
+6. Each activity can include category, location type, duration, notes, icon/colour, and any enabled planning dimensions.
+7. User can add rules such as:
    - Allowed days
    - Allowed time windows
    - Max times per week/month/year
@@ -70,13 +77,15 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Do not schedule outside a specific timeframe
    - Avoid too many high-difficulty activities if difficulty is enabled
    - Avoid back-to-back high-difficulty activities if difficulty is enabled
-7. App generates a calendar/agenda from the activity bank.
-8. User can lock certain planned items.
-9. User can regenerate unlocked items while preserving locked ones.
-10. Laura and Kwame can both edit the shared calendar inside Life Shuffle.
-11. User can print/export the calendar with chosen visible details.
-12. User can publish a read-only calendar subscription feed for external calendar apps.
-13. Later, AI can suggest activities and generate plans while respecting the user's rules.
+8. App generates a calendar/agenda from the activity bank.
+9. User can lock certain planned items.
+10. User can regenerate unlocked items while preserving locked ones.
+11. Laura and Kwame can both edit the shared calendar inside Life Shuffle.
+12. User can mark past planned items as skipped, partly done, or done.
+13. User can view basic progress/statistics.
+14. User can print/export the calendar with chosen visible details.
+15. User can publish a read-only calendar subscription feed for external calendar apps.
+16. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
 ## Optional planning dimensions
 
@@ -97,6 +106,38 @@ Settings should allow defaults such as:
 Difficulty should not rely on colour because category already uses colour. A compact dot display such as `●●●○○` is preferred, with accessible text such as `Difficulty 3 of 5` available where needed.
 
 If difficulty is enabled, the planner should use it to avoid unrealistic weeks, such as too many hard activities or hard activities scheduled back-to-back.
+
+## Check-ins and progress
+
+Version 1 should include a low-friction check-in system for past planned activities.
+
+The app should prompt the user to check in when they open/log into the app if there are past planned items without a status. This prompt should be skippable.
+
+Check-in statuses:
+- `○` Skipped / not done
+- `◐` Partly done
+- `●` Done
+
+Check-ins should not require typing by default. Users may add an optional note, but notes should be hidden behind an explicit `Add note` action rather than presented automatically.
+
+Supported check-in views:
+- Quick catch-up: shows unchecked past activities since the last check-in.
+- One-by-one review: lets the user check in one activity at a time.
+- Week review: shows one week at a time and lets the user mark statuses across that week before saving.
+- Day sheet: tapping a day from the agenda/calendar opens that day's planned items and status circles.
+
+Month view check-in should not rely on hidden long-press behaviour. A month/day view may show status summaries, but the main action should be tapping a day to open a clear day sheet.
+
+The stats/progress page should show basic information such as:
+- Past 7 days
+- Past 30 days
+- Planned vs done/partly/skipped
+- Category breakdown
+- Difficulty summary if difficulty is enabled
+- Simple streaks or trends
+- Looking-ahead summary for upcoming planned items
+
+Progress language should be gentle and descriptive rather than shame-based.
 
 ## Calendar views
 
@@ -142,6 +183,7 @@ Users should be able to choose which details appear in output, such as:
 - Location
 - Who it is for: Kwame, Laura, Both, or Either
 - Enabled planning dimensions, such as difficulty, energy, and social level
+- Check-in status
 - Notes
 - Locked status
 
@@ -149,7 +191,7 @@ Private/internal notes should not be printed or exported unless explicitly inclu
 
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with shared editing, calendar publishing, and practical print/export, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with shared editing, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
@@ -166,6 +208,9 @@ Must include:
 - Mobile-friendly agenda/week calendar view
 - Lock/unlock planned items
 - Regenerate unlocked items only
+- Low-friction check-ins using skipped/partly/done status circles
+- Skippable check-in prompt on app open/login when past unchecked items exist
+- Basic stats/progress page
 - Firestore persistence for shared activities and planned items
 - Read-only published calendar feed for external calendar apps
 - Print/export support with user-selectable output details
@@ -187,6 +232,7 @@ After MVP 1 feels useful:
 - Improve calendar feed controls if needed
 - Add richer print/export templates if needed
 - Expand day/month/year calendar views if needed
+- Add richer analytics/charts if needed
 
 Important: calendar subscription updates are not guaranteed to be instant on every phone/calendar provider.
 
