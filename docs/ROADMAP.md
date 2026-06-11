@@ -16,11 +16,12 @@ The first version should help Kwame and Laura plan better weeks together, create
 - Optional planning dimensions added to MVP 1: difficulty, energy, and social level
 - Check-ins and basic progress tracking added to MVP 1
 - Multiple named calendars added to MVP 1
+- Onboarding and starter activity library added to MVP 1
 - No app code yet
 
-## MVP 1 — Shared mobile-first planner with publishing/export/check-ins
+## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
-Goal: prove the core experience works for Kwame and Laura with multiple named calendars, shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with a short setup flow, starter activities, multiple named calendars, shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
@@ -30,17 +31,29 @@ Goal: prove the core experience works for Kwame and Laura with multiple named ca
 - [ ] Add Firebase project setup
 - [ ] Add Google sign-in
 - [ ] Add basic auth gate
+- [ ] Add short onboarding/setup flow
+- [ ] Add welcome screen with brief app explanation
+- [ ] Confirm/edit display name after Google sign-in
 - [ ] Create calendar data model with title/name
 - [ ] Support multiple named Life Shuffle calendars per user/member
 - [ ] Add onboarding/setup prompt to name the first calendar, with a sensible default
+- [ ] Add optional sharing/member setup step
 - [ ] Add calendar switcher or clear way to create/select calendars
 - [ ] Create simple Kwame/Laura membership model per calendar
+- [ ] Add planning-dimensions onboarding screen: Difficulty, Energy, Social
 - [ ] Create activity model scoped to a calendar
 - [ ] Create activity rule model scoped to a calendar
 - [ ] Create planned item model scoped to a calendar
 - [ ] Add check-in status model: skipped, partly done, done, unchecked
 - [ ] Add optional planning dimension settings
 - [ ] Add default values for enabled planning dimensions
+- [ ] Add built-in starter activity library
+- [ ] Add starter categories: At home, Outside, Health/movement, Social, Creative, Rest, Food, Chores/life admin, Couple time, Low-energy ideas
+- [ ] Add starter activity picker with limited first view and `See more` pattern
+- [ ] Add ability to create custom activities from onboarding or after onboarding
+- [ ] Add sensible default metadata/rules for starter activities
+- [ ] Add option to use sensible default rules or review rules now
+- [ ] Add first plan style choice: Gentle, Balanced, or Push me a little
 - [ ] Build one-activity-at-a-time creation flow
 - [ ] Add category, colour, and icon support
 - [ ] Add optional difficulty/resistance field, 1 to 5
@@ -55,6 +68,7 @@ Goal: prove the core experience works for Kwame and Laura with multiple named ca
 - [ ] Build agenda-first calendar view
 - [ ] Add lock/unlock planned item behaviour
 - [ ] Add regenerate-unlocked-only behaviour
+- [ ] Add first-run hints for lock and shuffle in agenda/week view
 - [ ] Add skippable check-in prompt on app open/login when past unchecked items exist
 - [ ] Add quick catch-up check-in view
 - [ ] Add one-by-one check-in review
@@ -98,7 +112,7 @@ Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, create/select a named shared calendar, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, and print/export the plan with chosen details.
+MVP 1 is successful if Kwame and Laura can both sign in, complete a short setup flow, create/select a named shared calendar, pick starter activities without a blank page, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, and print/export the plan with chosen details.
 
 ## MVP 2 — Polish and expansion
 
@@ -110,6 +124,7 @@ Goal: improve the shared experience after the core Version 1 works.
 - [ ] Add richer print/export templates if needed
 - [ ] Expand day/month/year calendar views if needed
 - [ ] Add richer analytics/charts if needed
+- [ ] Add richer starter activity templates if needed
 
 ## MVP 3 — AI assistant
 
@@ -140,4 +155,4 @@ When in doubt, build the smallest useful shared planner first.
 
 No feature should be added to MVP 1 unless it helps answer this question:
 
-Can Kwame and Laura sign in, create/select a named shared calendar, generate a useful rule-respecting week, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
+Can Kwame and Laura sign in, complete a short setup, create/select a named shared calendar, generate a useful rule-respecting week, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
