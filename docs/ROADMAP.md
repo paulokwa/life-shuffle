@@ -13,11 +13,12 @@ The first version should help Kwame and Laura plan better weeks together, publis
 - Planning docs created
 - Firebase + Google sign-in moved into MVP 1 for shared editing
 - Calendar publishing and print/export moved into MVP 1
+- Optional planning dimensions added to MVP 1: difficulty, energy, and social level
 - No app code yet
 
 ## MVP 1 — Shared mobile-first planner with publishing/export
 
-Goal: prove the core experience works for Kwame and Laura with shared editing, calendar publishing, and practical print/export, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with shared editing, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
@@ -32,11 +33,18 @@ Goal: prove the core experience works for Kwame and Laura with shared editing, c
 - [ ] Create activity model
 - [ ] Create activity rule model
 - [ ] Create planned item model
+- [ ] Add optional planning dimension settings
+- [ ] Add default values for enabled planning dimensions
 - [ ] Build one-activity-at-a-time creation flow
 - [ ] Add category, colour, and icon support
+- [ ] Add optional difficulty/resistance field, 1 to 5
+- [ ] Add optional energy level field: Low, Medium, High
+- [ ] Add optional social level field: Solo, Together, Group, Either
+- [ ] Hide disabled planning dimensions from forms, cards, planner rules, and export options
 - [ ] Add allowed day/time rules
 - [ ] Add max-per-week rule
 - [ ] Add no-consecutive-days rule
+- [ ] Add difficulty-aware planner rules if difficulty is enabled
 - [ ] Build 7-day agenda generator
 - [ ] Build agenda-first calendar view
 - [ ] Add lock/unlock planned item behaviour
@@ -62,6 +70,7 @@ Users should be able to choose whether exported/printed output includes:
 - [ ] Colour/icon
 - [ ] Location
 - [ ] Who it is for: Kwame, Laura, Both, or Either
+- [ ] Enabled planning dimensions: difficulty, energy, and/or social level
 - [ ] Notes
 - [ ] Locked status
 
@@ -69,7 +78,7 @@ Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, access the same shared calendar, add/edit activities, generate a useful week, preserve locked items during regeneration, publish a read-only subscribed calendar feed, and print/export the plan with chosen details.
+MVP 1 is successful if Kwame and Laura can both sign in, access the same shared calendar, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, publish a read-only subscribed calendar feed, and print/export the plan with chosen details.
 
 ## MVP 2 — Polish and expansion
 
