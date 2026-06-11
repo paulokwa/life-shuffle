@@ -2,9 +2,9 @@
 
 ## Vision
 
-Life Shuffle helps users create a realistic shared activity calendar from things they already like, things they might like, and rules that make the plan livable.
+Life Shuffle helps users create realistic shared activity calendars from things they already like, things they might like, and rules that make the plans livable.
 
-The first version should help Kwame and Laura plan better weeks together, check in on what happened, publish that plan to normal phone calendars, and print/export useful versions of the plan. Public-app thinking comes later.
+The first version should help Kwame and Laura plan better weeks together, create more than one named calendar if needed, check in on what happened, publish plans to normal phone calendars, and print/export useful versions of the plan. Public-app thinking comes later.
 
 ## Current status
 
@@ -15,11 +15,12 @@ The first version should help Kwame and Laura plan better weeks together, check 
 - Calendar publishing and print/export moved into MVP 1
 - Optional planning dimensions added to MVP 1: difficulty, energy, and social level
 - Check-ins and basic progress tracking added to MVP 1
+- Multiple named calendars added to MVP 1
 - No app code yet
 
 ## MVP 1 — Shared mobile-first planner with publishing/export/check-ins
 
-Goal: prove the core experience works for Kwame and Laura with shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with multiple named calendars, shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
@@ -29,11 +30,14 @@ Goal: prove the core experience works for Kwame and Laura with shared editing, c
 - [ ] Add Firebase project setup
 - [ ] Add Google sign-in
 - [ ] Add basic auth gate
-- [ ] Create shared calendar data model
-- [ ] Create simple Kwame/Laura membership model
-- [ ] Create activity model
-- [ ] Create activity rule model
-- [ ] Create planned item model
+- [ ] Create calendar data model with title/name
+- [ ] Support multiple named Life Shuffle calendars per user/member
+- [ ] Add onboarding/setup prompt to name the first calendar, with a sensible default
+- [ ] Add calendar switcher or clear way to create/select calendars
+- [ ] Create simple Kwame/Laura membership model per calendar
+- [ ] Create activity model scoped to a calendar
+- [ ] Create activity rule model scoped to a calendar
+- [ ] Create planned item model scoped to a calendar
 - [ ] Add check-in status model: skipped, partly done, done, unchecked
 - [ ] Add optional planning dimension settings
 - [ ] Add default values for enabled planning dimensions
@@ -57,17 +61,17 @@ Goal: prove the core experience works for Kwame and Laura with shared editing, c
 - [ ] Add week review check-in view
 - [ ] Add day sheet check-in from agenda/calendar
 - [ ] Add optional note action for check-ins, hidden by default
-- [ ] Add basic progress/stats page
+- [ ] Add basic progress/stats page scoped to selected calendar
 - [ ] Add past 7 days and past 30 days summaries
 - [ ] Add planned vs done/partly/skipped counts
 - [ ] Add category breakdown
 - [ ] Add difficulty summary if difficulty is enabled
 - [ ] Add simple streaks or trends
 - [ ] Add looking-ahead summary for upcoming planned items
-- [ ] Save activities, generated plans, and check-in statuses in Firestore
+- [ ] Save calendars, activities, generated plans, and check-in statuses in Firestore
 - [ ] Add Firestore security rules for shared calendar access
-- [ ] Generate read-only ICS/iCalendar feed for external calendar apps
-- [ ] Add private/unguessable calendar feed URL
+- [ ] Generate read-only ICS/iCalendar feed for each published calendar
+- [ ] Add private/unguessable calendar feed URL per published calendar
 - [ ] Add ability to revoke/regenerate calendar feed URL
 - [ ] Add printable calendar view
 - [ ] Add PDF export if practical
@@ -94,7 +98,7 @@ Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, access the same shared calendar, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed, and print/export the plan with chosen details.
+MVP 1 is successful if Kwame and Laura can both sign in, create/select a named shared calendar, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, and print/export the plan with chosen details.
 
 ## MVP 2 — Polish and expansion
 
@@ -136,4 +140,4 @@ When in doubt, build the smallest useful shared planner first.
 
 No feature should be added to MVP 1 unless it helps answer this question:
 
-Can Kwame and Laura sign in, share one calendar, generate a useful rule-respecting week, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
+Can Kwame and Laura sign in, create/select a named shared calendar, generate a useful rule-respecting week, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
