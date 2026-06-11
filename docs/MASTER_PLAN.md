@@ -106,6 +106,12 @@ Recommended flow:
 10. Generate first week.
 11. Show the agenda/week view with small hints for lock and shuffle.
 
+Onboarding transitions should feel polished but not flashy:
+- Use subtle fade or small slide transitions when pressing Next.
+- Keep transitions quick so setup does not feel slow.
+- Avoid dramatic, bouncy, spinning, or distracting animation.
+- Respect reduced-motion accessibility settings.
+
 Onboarding should avoid:
 - Long profile questionnaires.
 - Forcing users to configure rules for every activity before they can continue.
@@ -414,6 +420,7 @@ Must include:
 - Firebase setup
 - Google sign-in
 - Short onboarding/setup flow
+- Subtle onboarding transitions that respect reduced-motion settings
 - Confirm/edit display name after Google sign-in
 - Multiple named Life Shuffle calendars
 - Setup/onboarding prompt to name the first calendar, with a sensible default
