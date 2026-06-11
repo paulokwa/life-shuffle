@@ -17,11 +17,12 @@ The first version should help Kwame and Laura plan better weeks together, create
 - Check-ins and basic progress tracking added to MVP 1
 - Multiple named calendars added to MVP 1
 - Onboarding and starter activity library added to MVP 1
+- V1 foundations and safety UX added: Today/Home, empty states, regeneration preview/undo, activity enable/disable, conflict messages, calendar-level plan settings, privacy/feed explanation, and calendar lifecycle basics
 - No app code yet
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
-Goal: prove the core experience works for Kwame and Laura with a short setup flow, starter activities, multiple named calendars, shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, and optional planning dimensions, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with a short setup flow, starter activities, multiple named calendars, shared editing, check-ins, basic progress tracking, calendar publishing, practical print/export, optional planning dimensions, and safety UX, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
@@ -40,6 +41,8 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [ ] Add optional sharing/member setup step
 - [ ] Add calendar switcher or clear way to create/select calendars
 - [ ] Create simple Kwame/Laura membership model per calendar
+- [ ] Add calendar ownership, member leave, delete, and feed-revocation basics
+- [ ] Add calendar-level plan settings: week start, earliest/latest time, default plan style, default activity count
 - [ ] Add planning-dimensions onboarding screen: Difficulty, Energy, Social
 - [ ] Create activity model scoped to a calendar
 - [ ] Create activity rule model scoped to a calendar
@@ -56,6 +59,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [ ] Add first plan style choice: Gentle, Balanced, or Push me a little
 - [ ] Build one-activity-at-a-time creation flow
 - [ ] Add category, colour, and icon support
+- [ ] Add activity enabled/disabled state
 - [ ] Add optional difficulty/resistance field, 1 to 5
 - [ ] Add optional energy level field: Low, Medium, High
 - [ ] Add optional social level field: Solo, Together, Group, Either
@@ -66,8 +70,13 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [ ] Add difficulty-aware planner rules if difficulty is enabled
 - [ ] Build 7-day agenda generator
 - [ ] Build agenda-first calendar view
+- [ ] Add Today/Home screen or clear landing view
+- [ ] Add helpful empty states: no calendars, no activities, no plan, no check-ins, no stats, offline/sync problem
 - [ ] Add lock/unlock planned item behaviour
+- [ ] Add regeneration preview or undo for last regeneration
 - [ ] Add regenerate-unlocked-only behaviour
+- [ ] Add clear generation conflict/failure messages
+- [ ] Add basic shared-edit/sync conflict messages
 - [ ] Add first-run hints for lock and shuffle in agenda/week view
 - [ ] Add skippable check-in prompt on app open/login when past unchecked items exist
 - [ ] Add quick catch-up check-in view
@@ -82,6 +91,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [ ] Add difficulty summary if difficulty is enabled
 - [ ] Add simple streaks or trends
 - [ ] Add looking-ahead summary for upcoming planned items
+- [ ] Add plain-language privacy/feed explanation
 - [ ] Save calendars, activities, generated plans, and check-in statuses in Firestore
 - [ ] Add Firestore security rules for shared calendar access
 - [ ] Generate read-only ICS/iCalendar feed for each published calendar
@@ -112,19 +122,20 @@ Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, complete a short setup flow, create/select a named shared calendar, pick starter activities without a blank page, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, and print/export the plan with chosen details.
+MVP 1 is successful if Kwame and Laura can both sign in, complete a short setup flow, create/select a named shared calendar, pick starter activities without a blank page, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, preview or undo regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, understand feed privacy, and print/export the plan with chosen details.
 
 ## MVP 2 — Polish and expansion
 
 Goal: improve the shared experience after the core Version 1 works.
 
-- [ ] Improve invite/member management if needed
-- [ ] Improve conflict/loading/error states for shared editing
+- [ ] Improve sharing/invite flow if needed
+- [ ] Add stronger polish around shared editing states
 - [ ] Improve calendar feed controls if needed
 - [ ] Add richer print/export templates if needed
 - [ ] Expand day/month/year calendar views if needed
 - [ ] Add richer analytics/charts if needed
 - [ ] Add richer starter activity templates if needed
+- [ ] Add notifications/reminders if needed
 
 ## MVP 3 — AI assistant
 
@@ -155,4 +166,4 @@ When in doubt, build the smallest useful shared planner first.
 
 No feature should be added to MVP 1 unless it helps answer this question:
 
-Can Kwame and Laura sign in, complete a short setup, create/select a named shared calendar, generate a useful rule-respecting week, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
+Can Kwame and Laura sign in, complete a short setup, create/select a named shared calendar, generate a useful rule-respecting week, safely adjust that plan, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
