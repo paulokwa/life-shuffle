@@ -30,7 +30,7 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Good-but-later ideas go into PARKING_LOT.md, not straight into the MVP.
 
 3. Build the boring useful engine before the shiny AI layer.
-   - Activity list, rules, calendar generation, locking, and regeneration come first.
+   - Activity list, rules, calendar generation, locking, regeneration, shared editing, calendar publishing, and practical export/print come before AI.
    - AI support comes after the core planner works.
 
 4. Keep early scope personal.
@@ -47,6 +47,12 @@ Life Shuffle should help turn "I should do something" into a small set of realis
    - Use Firebase and Google sign-in for Version 1 shared editing.
    - Avoid building a custom password system.
    - Avoid full public account/profile complexity until much later.
+
+7. Export and publishing should be practical, not perfect.
+   - Version 1 should include a way to publish a read-only calendar feed that Apple Calendar, Google Calendar, Outlook, and similar calendar apps can subscribe to.
+   - Version 1 should include print/export options for the generated calendar.
+   - Users should be able to choose which details appear in printed/exported output.
+   - External calendar apps may not refresh subscribed calendars immediately.
 
 ## Core user flow
 
@@ -65,7 +71,9 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 8. User can lock certain planned items.
 9. User can regenerate unlocked items while preserving locked ones.
 10. Laura and Kwame can both edit the shared calendar inside Life Shuffle.
-11. Later, AI can suggest activities and generate plans while respecting the user's rules.
+11. User can print/export the calendar with chosen visible details.
+12. User can publish a read-only calendar subscription feed for external calendar apps.
+13. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
 ## Calendar views
 
@@ -78,9 +86,46 @@ The app should eventually support switchable calendar views:
 
 For MVP 1, the priority is a mobile-friendly agenda/week view. Day, month, and year views are part of the product direction, but they do not all need to be fully implemented before the rule-based planner is proven useful.
 
+## Calendar publishing
+
+Version 1 should include a read-only published calendar feed using an external-calendar-friendly format such as ICS/iCalendar.
+
+Purpose:
+- Let the generated Life Shuffle plan appear in normal phone calendar apps.
+- Allow Apple Calendar, Google Calendar, Outlook, and compatible Android calendar apps to subscribe to the feed.
+- Reflect changes when Life Shuffle plans are updated, subject to each calendar app's refresh behaviour.
+
+Important limits:
+- The feed is read-only from external calendar apps.
+- Editing happens inside Life Shuffle.
+- Updates may not appear instantly in external calendar apps.
+- Feed URLs should be private/unguessable and revocable.
+
+## Print and export
+
+Version 1 should include practical print/export support for the generated calendar.
+
+Output types may include:
+- Printable calendar view
+- PDF export
+- Simple text/share export
+
+Users should be able to choose which details appear in output, such as:
+- Activity title
+- Date and time
+- Duration
+- Category
+- Colour/icon
+- Location
+- Who it is for: Kwame, Laura, Both, or Either
+- Notes
+- Locked status
+
+Private/internal notes should not be printed or exported unless explicitly included by the user.
+
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with shared editing, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with shared editing, calendar publishing, and practical print/export, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
@@ -96,6 +141,8 @@ Must include:
 - Lock/unlock planned items
 - Regenerate unlocked items only
 - Firestore persistence for shared activities and planned items
+- Read-only published calendar feed for external calendar apps
+- Print/export support with user-selectable output details
 
 Should not include yet:
 - Custom password system
@@ -105,15 +152,15 @@ Should not include yet:
 - Paid subscriptions
 - Complex social sharing
 - Native app store release
-- ICS calendar subscription feed
 
-## MVP 2: calendar subscription and polish
+## MVP 2: polish and expansion
 
 After MVP 1 feels useful:
-- Add shared calendar subscription via ICS feed
-- Allow read-only subscription from phone calendar apps
 - Improve sharing/invite flow if needed
 - Add stronger polish around shared editing states
+- Improve calendar feed controls if needed
+- Add richer print/export templates if needed
+- Expand day/month/year calendar views if needed
 
 Important: calendar subscription updates are not guaranteed to be instant on every phone/calendar provider.
 
