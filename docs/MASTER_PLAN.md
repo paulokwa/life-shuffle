@@ -86,7 +86,8 @@ Life Shuffle should help turn "I should do something" into a small set of realis
 19. User can view basic progress/statistics for the selected calendar.
 20. User can print/export the selected calendar with chosen visible details.
 21. User can publish a read-only calendar subscription feed for the selected calendar.
-22. Later, AI can suggest activities and generate plans while respecting the user's rules.
+22. User can manage account, calendar, planning, publishing, export, and privacy controls from Settings.
+23. Later, AI can suggest activities and generate plans while respecting the user's rules.
 
 ## Onboarding and setup
 
@@ -172,6 +173,59 @@ Calendar lifecycle rules for Version 1 should stay simple:
 - Members can leave a calendar.
 - Deleting a calendar revokes its published feed.
 - Access should be controlled by calendar membership.
+
+## Settings
+
+Version 1 should include a clear Settings area so important controls are not scattered or hidden.
+
+Settings should be grouped in plain-language sections:
+
+### Account
+- Display name.
+- Sign out.
+
+### Calendar
+- Current calendar name.
+- Calendar switcher.
+- Create another calendar.
+- Members.
+- Owner/member roles.
+- Leave calendar.
+- Delete calendar.
+
+### Planning
+- Week starts on Monday or Sunday.
+- Earliest activity time.
+- Latest activity time.
+- Default plan style: Gentle, Balanced, or Push me a little.
+- Default number of activities per week.
+
+### Activity defaults
+- Enable/disable Difficulty.
+- Enable/disable Energy.
+- Enable/disable Social.
+- Default difficulty.
+- Default energy.
+- Default social level.
+
+### Publishing
+- Enable/disable published calendar feed.
+- Copy feed link.
+- Revoke/regenerate feed link.
+- Explain feed privacy and refresh limitations.
+
+### Export / print
+- Choose default output details.
+- Include/exclude notes.
+- Include/exclude check-in status.
+- Include/exclude enabled planning dimensions.
+
+### Privacy / help
+- Plain-language privacy explanation.
+- Published feed explanation.
+- Basic help/about screen.
+
+Settings should respect the selected calendar. Calendar-specific settings should clearly apply to the current calendar, not every calendar the user has access to.
 
 ## Calendar-level plan settings
 
@@ -352,7 +406,7 @@ Private/internal notes should not be printed or exported unless explicitly inclu
 
 ## MVP 1: shared mobile-first planner
 
-MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, onboarding, starter activities, safety UX, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
+MVP 1 should prove the app is useful for Kwame and Laura with multiple named calendars, shared editing, onboarding, starter activities, structured settings, safety UX, calendar publishing, practical print/export, check-ins, and basic progress tracking, without AI or public-app complexity.
 
 Must include:
 - Flutter app structure
@@ -365,6 +419,7 @@ Must include:
 - Setup/onboarding prompt to name the first calendar, with a sensible default
 - Calendar ownership, membership, leave, delete, and feed-revocation basics
 - Calendar switcher or clear way to create/select calendars
+- Structured Settings area
 - Calendar-level plan settings
 - Built-in starter activity library
 - Starter activity picker with `See more` pattern
