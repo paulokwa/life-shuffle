@@ -19,17 +19,23 @@ The first version should help Kwame and Laura plan better weeks together, create
 - Onboarding and starter activity library added to MVP 1
 - V1 foundations and safety UX added: Today/Home, empty states, regeneration preview/undo, activity enable/disable, conflict messages, calendar-level plan settings, privacy/feed explanation, and calendar lifecycle basics
 - Structured Settings area added to MVP 1
+- Navigation and responsive layout direction added to MVP 1
 - No app code yet
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
-Goal: prove the core experience works for Kwame and Laura with a short setup flow, starter activities, multiple named calendars, shared editing, structured settings, check-ins, basic progress tracking, calendar publishing, practical print/export, optional planning dimensions, and safety UX, while still avoiding AI and public-app complexity.
+Goal: prove the core experience works for Kwame and Laura with a short setup flow, starter activities, multiple named calendars, shared editing, structured settings, clear navigation, check-ins, basic progress tracking, calendar publishing, practical print/export, optional planning dimensions, and safety UX, while still avoiding AI and public-app complexity.
 
 ### Build tasks
 
 - [ ] Create Flutter project structure
 - [ ] Add mobile-first app shell
-- [ ] Add bottom navigation
+- [ ] Add responsive layout system: phone first, wider screens adapt
+- [ ] Add bottom navigation on mobile: Today, Plan, Activities, Progress, Settings
+- [ ] Add sidebar navigation on tablet/desktop using the same sections
+- [ ] Add consistent top/header area with selected calendar name and calendar switcher
+- [ ] Keep Export, Publish, Check-in, Calendar switcher, and AI out of the main bottom nav
+- [ ] Add one clear primary action per main screen
 - [ ] Add Firebase project setup
 - [ ] Add Google sign-in
 - [ ] Add basic auth gate
@@ -131,13 +137,13 @@ Private/internal notes should be excluded by default.
 
 ### MVP 1 success test
 
-MVP 1 is successful if Kwame and Laura can both sign in, complete a short setup flow, create/select a named shared calendar, use structured settings, pick starter activities without a blank page, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, preview or undo regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, understand feed privacy, and print/export the plan with chosen details.
+MVP 1 is successful if Kwame and Laura can both sign in, complete a short setup flow, create/select a named shared calendar, navigate between Today/Plan/Activities/Progress/Settings, use structured settings, pick starter activities without a blank page, add/edit activities with enabled planning dimensions, generate a useful week, preserve locked items during regeneration, preview or undo regeneration, check in on past planned items without typing, view basic progress, publish a read-only subscribed calendar feed for that calendar, understand feed privacy, and print/export the plan with chosen details.
 
 ## MVP 2 — Polish and expansion
 
 Goal: improve the shared experience after the core Version 1 works.
 
-- [ ] Improve sharing/invite flow if needed
+- [ ] Improve invite/member management if needed
 - [ ] Add stronger polish around shared editing states
 - [ ] Improve calendar feed controls if needed
 - [ ] Add richer print/export templates if needed
@@ -175,4 +181,4 @@ When in doubt, build the smallest useful shared planner first.
 
 No feature should be added to MVP 1 unless it helps answer this question:
 
-Can Kwame and Laura sign in, complete a short setup, create/select a named shared calendar, manage settings clearly, generate a useful rule-respecting week, safely adjust that plan, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
+Can Kwame and Laura sign in, complete a short setup, create/select a named shared calendar, navigate clearly, manage settings clearly, generate a useful rule-respecting week, safely adjust that plan, check in without friction, see basic progress, publish it to normal calendar apps, and print/export the plan with useful details?
