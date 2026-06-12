@@ -1,8 +1,28 @@
 # Life Shuffle AI Communications
 
-This file is the active controlled handoff log between ChatGPT and coding agents such as Claude, Codex, or other IDE assistants.
+This file is the active controlled handoff log between ChatGPT and coding agents such as Claude, Codex, OpenCode, or other IDE assistants.
 
 It is not a general chat transcript.
+
+## User-triggered read rule
+
+No AI agent should read this file automatically.
+
+Only read `docs/AI_COMMS.md` when Kwame explicitly says:
+
+`check comms`
+
+This applies to:
+- ChatGPT
+- Claude
+- Codex
+- OpenCode
+- Any future AI coding agent
+- Any other IDE assistant
+
+Outside of `check comms`, assume Kwame is using manual copy/paste for handoff.
+
+Agents may append to this file after completing work, hitting a blocker, or needing a structured handoff, but they should not read or process prior entries unless Kwame explicitly asks them to `check comms`.
 
 ## Active-file rule
 
@@ -38,8 +58,8 @@ No completed features logged yet.
 
 - Only use this file for direct AI-to-AI implementation instructions, completion reports, blockers, and handoff notes.
 - Do not paste casual conversation with the user into this file.
-- ChatGPT should read this file only when the user explicitly says: `check comms`.
-- Coding agents should update this file when they complete work, hit a blocker, or need clarification.
+- All AI agents should read this file only when the user explicitly says: `check comms`.
+- Coding agents may append to this file when they complete work, hit a blocker, or need clarification, but should not read prior entries unless the user has said `check comms`.
 - Each entry must include a timestamp.
 - Completion entries must list what was changed so the same feature is not rebuilt accidentally.
 - Completion entries must include a `Feature/work completed` section.
