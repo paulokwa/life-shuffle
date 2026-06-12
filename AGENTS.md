@@ -76,7 +76,7 @@ Use the Figma-derived details to translate the visual style into Flutter widgets
 
 ## AI communications workflow
 
-`docs/AI_COMMS.md` is a controlled handoff log between ChatGPT and coding agents such as Claude, Codex, or other IDE assistants.
+`docs/AI_COMMS.md` is a controlled active handoff log between ChatGPT and coding agents such as Claude, Codex, or other IDE assistants.
 
 Rules:
 
@@ -88,6 +88,30 @@ Rules:
 - Completion entries must list changed files, commands run, tests run, and any unfinished work.
 - Completion entries must clearly say what feature/work was completed so duplicate implementation can be avoided.
 - If Kwame manually copies instructions instead of using the file, that is fine. This file is a bridge, not the only communication path.
+
+### AI comms archiving
+
+Keep `docs/AI_COMMS.md` short and current.
+
+Archive older resolved entries when `docs/AI_COMMS.md`:
+
+- Exceeds roughly 250 lines, or
+- Contains entries from more than one major milestone, or
+- Starts taking too long/noisy to read.
+
+Archive path pattern:
+
+`docs/comms_archive/AI_COMMS_YYYY-MM-DD.md`
+
+When archiving:
+
+1. Move old completed/resolved entries into a dated archive file.
+2. Keep active rules in `docs/AI_COMMS.md`.
+3. Keep only the current pending instruction, latest completion, latest blocker, and latest open question.
+4. Add the archive file to the archive index in `docs/AI_COMMS.md`.
+5. Keep/update the completed feature index in `docs/AI_COMMS.md`.
+
+Do not create numbered files like `AI_COMMS_2.md`.
 
 ## Required end-of-session routine
 
