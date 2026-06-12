@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../models/mock_data.dart';
+import '../models/mock_data.dart' show CheckStatus;
+import '../models/day_plan.dart';
+import '../state/app_state.dart';
 import 'category_chip.dart';
 import 'check_in_circle.dart';
 
 class ActivityPlanCard extends StatefulWidget {
   const ActivityPlanCard({super.key, required this.activity});
 
-  final ActivityMock activity;
+  final PlannedActivity activity;
 
   @override
   State<ActivityPlanCard> createState() => _ActivityPlanCardState();
@@ -26,26 +28,26 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
   void _cycleStatus() {
     setState(() {
       _status = switch (_status) {
-        CheckStatus.none => CheckStatus.done,
-        CheckStatus.done => CheckStatus.partly,
-        CheckStatus.partly => CheckStatus.skipped,
+        CheckStatus.none    => CheckStatus.done,
+        CheckStatus.done    => CheckStatus.partly,
+        CheckStatus.partly  => CheckStatus.skipped,
         CheckStatus.skipped => CheckStatus.none,
       };
       widget.activity.status = _status;
     });
+    // Propagate to AppState: persists status and rebuilds Today stats immediately.
+    AppStateScope.of(context).notifyCheckIn(widget.activity);
   }
 
-  IconData get _icon {
-    return switch (widget.activity.category) {
-      'Creative' => Icons.menu_book_rounded,
-      'Outside' => Icons.waves_rounded,
-      'Couple time' => Icons.restaurant_rounded,
-      'Social' => Icons.people_rounded,
-      'At home' => Icons.home_rounded,
-      'Rest' => Icons.self_improvement_rounded,
-      _ => Icons.star_rounded,
-    };
-  }
+  IconData get _icon => switch (widget.activity.category) {
+    'Creative'    => Icons.menu_book_rounded,
+    'Outside'     => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Social'      => Icons.people_rounded,
+    'At home'     => Icons.home_rounded,
+    'Rest'        => Icons.self_improvement_rounded,
+    _             => Icons.star_rounded,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +89,7 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                       color: textPrimary,
-                      decoration:
-                          isSkipped ? TextDecoration.lineThrough : null,
+                      decoration: isSkipped ? TextDecoration.lineThrough : null,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -98,10 +99,7 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
                     children: [
                       Text(
                         widget.activity.time,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: textMuted,
-                        ),
+                        style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                       ),
                       CategoryChip(category: widget.activity.category),
                     ],

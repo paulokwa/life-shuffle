@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
+import '../models/day_plan.dart';
+import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
@@ -8,8 +10,26 @@ import '../widgets/category_chip.dart';
 class PlanScreen extends StatelessWidget {
   const PlanScreen({super.key});
 
+  static String _weekRange(List<DayPlan> plans) {
+    final first = plans.first.date;
+    final last = plans.last.date;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    if (first.month == last.month) {
+      return 'Week of ${first.day}–${last.day} ${months[last.month - 1]}';
+    }
+    return 'Week of ${first.day} ${months[first.month - 1]} – ${last.day} ${months[last.month - 1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final plans = state.weekPlan;
+    final activeDays = plans.where((d) => d.activities.isNotEmpty).toList();
+    final restCount = plans.where((d) => d.activities.isEmpty).length;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -31,38 +51,30 @@ class PlanScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Week of 9 – 15 June',
+                    _weekRange(plans),
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 20),
-                  _DayStrip(),
+                  _DayStrip(plans: plans),
                   const SizedBox(height: 16),
-                  _DayBlock(
-                    label: 'Monday · 9 June',
-                    activities: const [
-                      _PlanRow(title: 'Yoga at home', time: '7:00 AM', category: 'Rest'),
-                      _PlanRow(title: 'Farmers market', time: '10:00 AM', category: 'Outside', locked: true),
-                    ],
+                  ...activeDays.map(
+                    (d) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _DayBlock(plan: d),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  _DayBlock(
-                    label: 'Wednesday · 11 June',
-                    activities: const [
-                      _PlanRow(title: 'Cafe reading', time: '11:00 AM', category: 'Creative'),
-                      _PlanRow(title: 'Walk waterfront', time: '6:30 PM', category: 'Outside'),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _DayBlock(
-                    label: 'Thursday · 12 June',
-                    activities: const [
-                      _PlanRow(title: 'Cook together', time: '8:00 PM', category: 'Couple time'),
-                    ],
-                  ),
+                  if (restCount > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '$restCount rest ${restCount == 1 ? "day" : "days"} this week',
+                      style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                    ),
+                  ],
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
+                  GestureDetector(
+                    onTap: () => state.regenerate(),
                     child: Container(
+                      width: double.infinity,
                       height: 48,
                       decoration: BoxDecoration(
                         color: primaryTerracotta,
@@ -97,20 +109,24 @@ class PlanScreen extends StatelessWidget {
   }
 }
 
+// ─── Day strip ────────────────────────────────────────────────────────────────
+
 class _DayStrip extends StatelessWidget {
-  static const _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  static const _dates = ['9', '10', '11', '12', '13', '14', '15'];
+  const _DayStrip({required this.plans});
+
+  final List<DayPlan> plans;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: List.generate(7, (i) {
-        final isToday = i == 3;
+      children: plans.map((d) {
+        final isToday = d.isToday;
+        final hasActivities = d.activities.isNotEmpty;
         return Expanded(
           child: Column(
             children: [
               Text(
-                _days[i],
+                d.weekdayShort,
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
                   color: textMuted,
@@ -127,27 +143,43 @@ class _DayStrip extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  _dates[i],
+                  d.dayOfMonth,
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: isToday ? Colors.white : textPrimary,
+                    color: isToday
+                        ? Colors.white
+                        : hasActivities
+                            ? textPrimary
+                            : textMuted,
                   ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: hasActivities && !isToday
+                      ? accentSage
+                      : Colors.transparent,
                 ),
               ),
             ],
           ),
         );
-      }),
+      }).toList(),
     );
   }
 }
 
-class _DayBlock extends StatelessWidget {
-  const _DayBlock({required this.label, required this.activities});
+// ─── Day block card ───────────────────────────────────────────────────────────
 
-  final String label;
-  final List<_PlanRow> activities;
+class _DayBlock extends StatelessWidget {
+  const _DayBlock({required this.plan});
+
+  final DayPlan plan;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +188,7 @@ class _DayBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
+            plan.fullLabel,
             style: GoogleFonts.dmSans(
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -165,33 +197,28 @@ class _DayBlock extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          ...activities
-              .map((row) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: row,
-                  ))
-              .toList(),
+          ...plan.activities.map(
+            (a) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _PlanRow(activity: a),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _PlanRow extends StatelessWidget {
-  const _PlanRow({
-    required this.title,
-    required this.time,
-    required this.category,
-    this.locked = false,
-  });
+// ─── Plan row with tappable lock ──────────────────────────────────────────────
 
-  final String title;
-  final String time;
-  final String category;
-  final bool locked;
+class _PlanRow extends StatelessWidget {
+  const _PlanRow({required this.activity});
+
+  final PlannedActivity activity;
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
     return Row(
       children: [
         Expanded(
@@ -199,7 +226,7 @@ class _PlanRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
+                activity.title,
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -210,25 +237,34 @@ class _PlanRow extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    time,
+                    activity.timeSlot,
                     style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                   ),
                   const SizedBox(width: 8),
-                  CategoryChip(category: category),
+                  CategoryChip(category: activity.category),
                 ],
               ),
             ],
           ),
         ),
-        Icon(
-          locked ? Icons.lock_rounded : Icons.lock_open_rounded,
-          size: 16,
-          color: locked ? textMuted : const Color(0xFFBBB5AC),
+        GestureDetector(
+          onTap: () => state.toggleLock(activity),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(
+              activity.locked ? Icons.lock_rounded : Icons.lock_open_rounded,
+              size: 16,
+              color: activity.locked ? primaryTerracotta : const Color(0xFFBBB5AC),
+            ),
+          ),
         ),
       ],
     );
   }
 }
+
+// ─── Outline button ───────────────────────────────────────────────────────────
 
 class _OutlineButton extends StatelessWidget {
   const _OutlineButton({required this.label});

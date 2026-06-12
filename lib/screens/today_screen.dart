@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
-import '../models/mock_data.dart';
+import '../models/day_plan.dart';
+import '../models/mock_data.dart' show CheckStatus;
+import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
@@ -10,8 +12,40 @@ import '../widgets/activity_plan_card.dart';
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
 
+  static String _formattedDate() {
+    final now = DateTime.now();
+    const days = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+      'Friday', 'Saturday', 'Sunday',
+    ];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Registering via AppStateScope.of() ensures this screen rebuilds on
+    // check-in changes, regeneration, and activity enable/disable.
+    final state = AppStateScope.of(context);
+    final week = state.weekPlan;
+
+    DayPlan? today;
+    for (final d in week) {
+      if (d.isToday) { today = d; break; }
+    }
+
+    final allActivities = week.expand((d) => d.activities).toList();
+    final planned = allActivities.length;
+    final done    = allActivities.where((a) => a.status == CheckStatus.done).length;
+    final partly  = allActivities.where((a) => a.status == CheckStatus.partly).length;
+
+    final todayActivities = today?.activities ?? [];
+    final pending = todayActivities.where((a) => a.status == CheckStatus.none).toList();
+    final nextUp  = pending.isEmpty ? null : pending.first;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,17 +57,17 @@ class TodayScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _GreetingBlock(),
+                  _GreetingBlock(dateLabel: _formattedDate()),
                   const SizedBox(height: 16),
-                  _NextUpCard(),
+                  _NextUpCard(nextUp: nextUp),
                   const SizedBox(height: 12),
                   _CheckInCard(),
                   const SizedBox(height: 12),
-                  _ThisWeekCard(),
+                  _ThisWeekCard(planned: planned, done: done, partly: partly),
                   const SizedBox(height: 16),
-                  _QuickActionsSection(),
+                  const _QuickActionsSection(),
                   const SizedBox(height: 16),
-                  _TodaysPlanSection(),
+                  _TodaysPlanSection(activities: todayActivities),
                 ],
               ),
             ),
@@ -47,6 +81,10 @@ class TodayScreen extends StatelessWidget {
 // ─── Greeting block ──────────────────────────────────────────────────────────
 
 class _GreetingBlock extends StatelessWidget {
+  const _GreetingBlock({required this.dateLabel});
+
+  final String dateLabel;
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -62,10 +100,8 @@ class _GreetingBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          todayDate,
-          style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
-        ),
+        Text(dateLabel,
+            style: GoogleFonts.dmSans(fontSize: 14, color: textMuted)),
       ],
     );
   }
@@ -74,8 +110,57 @@ class _GreetingBlock extends StatelessWidget {
 // ─── Next up card ─────────────────────────────────────────────────────────────
 
 class _NextUpCard extends StatelessWidget {
+  const _NextUpCard({required this.nextUp});
+
+  final PlannedActivity? nextUp;
+
+  IconData _icon(String category) => switch (category) {
+    'Creative'    => Icons.menu_book_rounded,
+    'Outside'     => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Rest'        => Icons.self_improvement_rounded,
+    'Social'      => Icons.people_rounded,
+    'At home'     => Icons.home_rounded,
+    _             => Icons.star_rounded,
+  };
+
   @override
   Widget build(BuildContext context) {
+    if (nextUp == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: warmBeige,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.check_rounded, size: 18, color: accentSage),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Nothing else planned today — enjoy your day',
+                style: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -89,14 +174,10 @@ class _NextUpCard extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.20),
+              color: Colors.white.withValues(alpha: 0.20),
             ),
             alignment: Alignment.center,
-            child: const Icon(
-              Icons.waves_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
+            child: Icon(_icon(nextUp!.category), size: 18, color: Colors.white),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -109,12 +190,12 @@ class _NextUpCard extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 1.0,
-                    color: Colors.white.withOpacity(0.70),
+                    color: Colors.white.withValues(alpha: 0.70),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  nextUpTitle,
+                  nextUp!.title,
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -124,10 +205,10 @@ class _NextUpCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  nextUpTime,
+                  nextUp!.timeSlot,
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.80),
+                    color: Colors.white.withValues(alpha: 0.80),
                   ),
                 ),
               ],
@@ -170,7 +251,7 @@ class _CheckInCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '3 past activities need a quick check-in',
+                      'Past activities need a quick check-in',
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -180,10 +261,7 @@ class _CheckInCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       'No typing needed — just tap to mark how it went.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
-                      ),
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                     ),
                   ],
                 ),
@@ -232,22 +310,20 @@ class _PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      child: Container(
-        height: 42,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(100),
-          border: hasBorder ? Border.all(color: borderWarmStrong) : null,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: GoogleFonts.dmSans(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: textColor,
-          ),
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(100),
+        border: hasBorder ? Border.all(color: borderWarmStrong) : null,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: textColor,
         ),
       ),
     );
@@ -257,8 +333,20 @@ class _PillButton extends StatelessWidget {
 // ─── This week summary ────────────────────────────────────────────────────────
 
 class _ThisWeekCard extends StatelessWidget {
+  const _ThisWeekCard({
+    required this.planned,
+    required this.done,
+    required this.partly,
+  });
+
+  final int planned;
+  final int done;
+  final int partly;
+
   @override
   Widget build(BuildContext context) {
+    final progress =
+        planned == 0 ? 0.0 : (done + partly * 0.5) / planned;
     return LsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,25 +363,13 @@ class _ThisWeekCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _StatCell(
-                value: '$weekPlanned',
-                label: 'Planned',
-                valueColor: textPrimary,
-              ),
-              _StatCell(
-                value: '$weekDone',
-                label: 'Done',
-                valueColor: accentSage,
-              ),
-              _StatCell(
-                value: '$weekPartly',
-                label: 'Partly',
-                valueColor: sand,
-              ),
+              _StatCell(value: '$planned', label: 'Planned', valueColor: textPrimary),
+              _StatCell(value: '$done',    label: 'Done',    valueColor: accentSage),
+              _StatCell(value: '$partly',  label: 'Partly',  valueColor: sand),
             ],
           ),
           const SizedBox(height: 12),
-          _ProgressBar(value: 0.40),
+          _ProgressBar(value: progress),
         ],
       ),
     );
@@ -326,10 +402,8 @@ class _StatCell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
-          ),
+          Text(label,
+              style: GoogleFonts.dmSans(fontSize: 12, color: textMuted)),
         ],
       ),
     );
@@ -345,8 +419,7 @@ class _ProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final total = constraints.maxWidth;
-        final filled = total * value;
+        final filled = constraints.maxWidth * value.clamp(0.0, 1.0);
         return ClipRRect(
           borderRadius: BorderRadius.circular(100),
           child: SizedBox(
@@ -355,15 +428,11 @@ class _ProgressBar extends StatelessWidget {
               children: [
                 Positioned.fill(child: Container(color: warmBeige)),
                 Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: filled,
+                  left: 0, top: 0, bottom: 0, width: filled,
                   child: Container(
                     decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [accentSage, sand],
-                      ),
+                      gradient:
+                          LinearGradient(colors: [accentSage, sand]),
                     ),
                   ),
                 ),
@@ -443,43 +512,40 @@ class _QuickActionsSection extends StatelessWidget {
 // ─── Today's plan ─────────────────────────────────────────────────────────────
 
 class _TodaysPlanSection extends StatelessWidget {
+  const _TodaysPlanSection({required this.activities});
+
+  final List<PlannedActivity> activities;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "TODAY'S PLAN",
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 1.0,
-                color: textMuted,
-              ),
-            ),
-            GestureDetector(
-              onTap: () {},
-              child: Text(
-                'See all',
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: primaryTerracotta,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ...todayActivities.map(
-          (a) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: ActivityPlanCard(activity: a),
+        Text(
+          "TODAY'S PLAN",
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+            color: textMuted,
           ),
         ),
+        const SizedBox(height: 10),
+        if (activities.isEmpty)
+          LsCard(
+            child: Text(
+              'No activities planned for today. Go to the Plan tab to generate or adjust your week.',
+              style: GoogleFonts.dmSans(
+                  fontSize: 14, color: textMuted, height: 1.5),
+            ),
+          )
+        else
+          ...activities.map(
+            (a) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ActivityPlanCard(activity: a),
+            ),
+          ),
       ],
     );
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
+import '../models/activity.dart';
+import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
@@ -8,23 +10,11 @@ import '../widgets/category_chip.dart';
 class ActivitiesScreen extends StatelessWidget {
   const ActivitiesScreen({super.key});
 
-  static const _activities = [
-    _ActivityEntry(title: 'Cafe reading', category: 'Creative', duration: '1–2 hrs'),
-    _ActivityEntry(title: 'Walk waterfront', category: 'Outside', duration: '45 min'),
-    _ActivityEntry(title: 'Cook together', category: 'Couple time', duration: '1 hr'),
-    _ActivityEntry(title: 'Yoga at home', category: 'Rest', duration: '30 min'),
-    _ActivityEntry(title: 'Farmers market', category: 'Outside', duration: '1 hr'),
-    _ActivityEntry(title: 'Board games night', category: 'Social', duration: '2 hrs'),
-    _ActivityEntry(
-      title: 'Reorganise pantry',
-      category: 'At home',
-      duration: '1 hr',
-      enabled: false,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final activities = state.activities;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,7 +66,6 @@ class ActivitiesScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Starter library prompt
                   LsCard(
                     color: const Color(0xFFFFF8F5),
                     child: Row(
@@ -86,7 +75,7 @@ class ActivitiesScreen extends StatelessWidget {
                           height: 32,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: primaryTerracotta.withOpacity(0.12),
+                            color: primaryTerracotta.withValues(alpha: 0.12),
                           ),
                           alignment: Alignment.center,
                           child: const Icon(
@@ -137,10 +126,10 @@ class ActivitiesScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  ..._activities.map(
+                  ...activities.map(
                     (a) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _ActivityCard(entry: a),
+                      child: _ActivityCard(activity: a),
                     ),
                   ),
                 ],
@@ -153,42 +142,16 @@ class ActivitiesScreen extends StatelessWidget {
   }
 }
 
-class _ActivityEntry {
-  final String title;
-  final String category;
-  final String duration;
-  final bool enabled;
+class _ActivityCard extends StatelessWidget {
+  const _ActivityCard({required this.activity});
 
-  const _ActivityEntry({
-    required this.title,
-    required this.category,
-    required this.duration,
-    this.enabled = true,
-  });
-}
-
-class _ActivityCard extends StatefulWidget {
-  const _ActivityCard({required this.entry});
-
-  final _ActivityEntry entry;
-
-  @override
-  State<_ActivityCard> createState() => _ActivityCardState();
-}
-
-class _ActivityCardState extends State<_ActivityCard> {
-  late bool _enabled;
-
-  @override
-  void initState() {
-    super.initState();
-    _enabled = widget.entry.enabled;
-  }
+  final Activity activity;
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
     return AnimatedOpacity(
-      opacity: _enabled ? 1.0 : 0.5,
+      opacity: activity.enabled ? 1.0 : 0.5,
       duration: const Duration(milliseconds: 200),
       child: LsCard(
         child: Row(
@@ -198,7 +161,7 @@ class _ActivityCardState extends State<_ActivityCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.entry.title,
+                    activity.title,
                     style: GoogleFonts.dmSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -210,13 +173,10 @@ class _ActivityCardState extends State<_ActivityCard> {
                     spacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      CategoryChip(category: widget.entry.category),
+                      CategoryChip(category: activity.category),
                       Text(
-                        widget.entry.duration,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          color: textMuted,
-                        ),
+                        activity.duration,
+                        style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                       ),
                     ],
                   ),
@@ -225,13 +185,16 @@ class _ActivityCardState extends State<_ActivityCard> {
             ),
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: () => setState(() => _enabled = !_enabled),
+              onTap: () => state.setActivityEnabled(
+                activity.id,
+                enabled: !activity.enabled,
+              ),
               child: Icon(
-                _enabled
+                activity.enabled
                     ? Icons.toggle_on_rounded
                     : Icons.toggle_off_rounded,
                 size: 32,
-                color: _enabled ? accentSage : textMuted,
+                color: activity.enabled ? accentSage : textMuted,
               ),
             ),
           ],
