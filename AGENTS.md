@@ -17,7 +17,8 @@ Before proposing or making code changes, read these files:
 7. `docs/TROUBLESHOOTING_LOG.md`
 8. `docs/DESIGN.md`
 9. `docs/FIGMA_HANDOFF.md`
-10. `docs/AI_COMMS.md` only if Kwame explicitly asks you to use/check the AI communications file, or if you are appending a completion/blocker entry after work.
+
+Do not read `docs/AI_COMMS.md` during normal startup unless Kwame explicitly says `check comms`.
 
 Then summarize:
 
@@ -76,14 +77,33 @@ Use the Figma-derived details to translate the visual style into Flutter widgets
 
 ## AI communications workflow
 
-`docs/AI_COMMS.md` is a controlled active handoff log between ChatGPT and coding agents such as Claude, Codex, or other IDE assistants.
+`docs/AI_COMMS.md` is a controlled active handoff log between ChatGPT and coding agents such as Claude, Codex, OpenCode, or other IDE assistants.
+
+### User-triggered read rule
+
+No AI agent should read `docs/AI_COMMS.md` automatically.
+
+Only read `docs/AI_COMMS.md` when Kwame explicitly says:
+
+`check comms`
+
+This applies to:
+
+- ChatGPT
+- Claude
+- Codex
+- OpenCode
+- Any future AI coding agent
+- Any other IDE assistant
+
+Outside of `check comms`, assume Kwame is using manual copy/paste for handoff.
+
+Agents may append to `docs/AI_COMMS.md` after completing work, hitting a blocker, or needing a structured handoff, but they should not read/process prior entries unless Kwame explicitly says `check comms`.
 
 Rules:
 
 - Use it only for direct AI-to-AI implementation instructions, completion reports, blockers, questions, and review requests.
 - Do not paste casual user conversation into it.
-- ChatGPT should read it only when Kwame explicitly says `check comms`.
-- Coding agents should append to it when they complete work, hit a blocker, or need clarification.
 - Each entry must include a timestamp.
 - Completion entries must list changed files, commands run, tests run, and any unfinished work.
 - Completion entries must clearly say what feature/work was completed so duplicate implementation can be avoided.
