@@ -46,6 +46,32 @@ Approved direction from Figma Make:
 - Soft cards and chips
 - Gentle progress and check-in language
 
+## Figma MCP handoff
+
+When a coding agent has access to the Figma MCP connector, it should use the Figma Make file as the most accurate visual reference for the approved Today screen.
+
+Use Figma MCP to inspect and preserve, as closely as practical in Flutter:
+- Layout structure
+- Spacing
+- Dimensions
+- Padding
+- Card shapes
+- Border radius
+- Visual hierarchy
+- Colours
+- Typography choices
+- Component patterns
+- Bottom navigation pattern
+- Header/calendar switcher pattern
+- Category chips
+- Check-in circles
+
+The goal is not loose inspiration. The goal is to translate the approved Figma Today screen into Flutter with good visual fidelity.
+
+However, the Figma Make output is React code. Life Shuffle is a Flutter app.
+
+Use the Figma output as design authority for visual details, but do not copy the generated React architecture, shadcn components, routing, package structure, or React state model into the production Flutter app.
+
 ## Colour tokens
 
 Use these as starting Flutter theme tokens:
@@ -170,6 +196,8 @@ It should include:
 - Quick actions
 - Today's activity list
 
+The first Flutter implementation of Today should be built from the Figma MCP output as closely as practical, not merely guessed from this written guide.
+
 ### Plan
 
 Use an agenda-first weekly view.
@@ -241,7 +269,9 @@ Figma Make reference:
 
 `https://www.figma.com/make/TcI9RZkCl7wN3VAgGkte1Q/Read-File?t=zxUHjkMKmHmXf1At-0`
 
-Use the Today screen and generated theme as visual reference only.
+Use the Today screen and generated theme as the visual source for the first Flutter UI pass.
+
+The Figma MCP connector should be used for accurate layout, spacing, dimensions, colours, component patterns, and hierarchy where available.
 
 Do not copy the Figma React architecture into the Flutter app.
 
@@ -251,14 +281,15 @@ When implementing from this design guide:
 
 1. Read `docs/MASTER_PLAN.md`, `docs/ROADMAP.md`, and `docs/DECISIONS.md` first.
 2. Treat this file as visual guidance, not product scope.
-3. Translate the Figma Make visual style into Flutter widgets.
-4. Do not import the Figma Make React files into the Flutter app as production code.
-5. Start with a static UI shell and mock data before adding Firebase, auth, generation logic, or real persistence.
-6. Build the Today screen first as the closest match to the Figma reference.
-7. Use the Today screen design language for Plan, Activities, Progress, Settings, and Onboarding.
+3. Use Figma MCP, when available, to inspect the approved Today screen and extract accurate visual details.
+4. Translate the Figma Make visual style into Flutter widgets with good visual fidelity.
+5. Do not import the Figma Make React files into the Flutter app as production code.
+6. Start with a static UI shell and mock data before adding Firebase, auth, generation logic, or real persistence.
+7. Build the Today screen first as the closest match to the Figma reference.
+8. Use the Today screen design language for Plan, Activities, Progress, Settings, and Onboarding.
 
 Product truth = repo docs.
 
-Visual truth = this guide plus the Figma Today screen.
+Visual truth = Figma MCP / Figma Today screen, supported by this guide.
 
 Implementation truth = Flutter best practices.
