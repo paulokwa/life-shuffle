@@ -13,6 +13,7 @@ class AppState extends ChangeNotifier {
   final List<Activity> activities;
   late List<DayPlan> _weekPlan;
   int _seed = 0;
+  int _updatedAtMillis = 0;
   String? _userId;
 
   AppState({required this.activities, SavedState? savedState}) {
@@ -35,12 +36,28 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> syncWithFirestore() async {
-    if (_userId == null) return;
-    final saved = await FirestoreSyncService.loadState(_userId!);
-    if (saved != null) {
-      _applySavedState(saved);
+    final uid = _userId;
+    if (uid == null) return;
+    final remote = await FirestoreSyncService.loadState(uid);
+    if (_userId != uid) return;
+
+    final local = _currentSavedState();
+    if (remote != null && remote.updatedAtMillis > local.updatedAtMillis) {
+      _applySavedState(remote);
       notifyListeners();
+      return;
     }
+
+    final stateToSave = local.updatedAtMillis == 0
+        ? _currentSavedState(
+            updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+          )
+        : local;
+    if (stateToSave.updatedAtMillis != _updatedAtMillis) {
+      _updatedAtMillis = stateToSave.updatedAtMillis;
+      _persistLocal(stateToSave);
+    }
+    FirestoreSyncService.saveState(uid, stateToSave);
   }
 
   // ─── Activities ───────────────────────────────────────────────────────────
@@ -77,6 +94,7 @@ class AppState extends ChangeNotifier {
 
   void _applySavedState(SavedState saved, {bool persistLocal = true}) {
     _seed = saved.seed;
+    _updatedAtMillis = saved.updatedAtMillis;
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -90,7 +108,8 @@ class AppState extends ChangeNotifier {
   }
 
   void _persist() {
-    final state = _toSavedState();
+    _updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+    final state = _currentSavedState(updatedAtMillis: _updatedAtMillis);
     _persistLocal(state);
     if (_userId != null) {
       FirestoreSyncService.saveState(_userId!, state);
@@ -99,6 +118,7 @@ class AppState extends ChangeNotifier {
 
   void _persistLocal(SavedState state) {
     PersistenceService.saveSeed(state.seed);
+    PersistenceService.saveUpdatedAtMillis(state.updatedAtMillis);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -110,7 +130,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  SavedState _toSavedState() {
+  SavedState _currentSavedState({int? updatedAtMillis}) {
     final enabledMap = <String, bool>{};
     for (final a in activities) {
       enabledMap[a.id] = a.enabled;
@@ -127,6 +147,7 @@ class AppState extends ChangeNotifier {
 
     return SavedState(
       seed: _seed,
+      updatedAtMillis: updatedAtMillis ?? _updatedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,

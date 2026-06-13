@@ -34,7 +34,6 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void dispose() {
     _authSubscription?.cancel();
-    // widget.appState.dispose(); // AppState is a ChangeNotifier but not managed here
     super.dispose();
   }
 

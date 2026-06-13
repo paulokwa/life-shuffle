@@ -10,6 +10,7 @@ class PersistenceService {
 
   // ─── Key prefixes ─────────────────────────────────────────────────────────
   static const _keySeed    = 'ls_seed';
+  static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked  = 'ls_lk_';
@@ -24,6 +25,7 @@ class PersistenceService {
 
   static SavedState load(List<String> activityIds) {
     final seed = _prefs.getInt(_keySeed) ?? 0;
+    final updatedAtMillis = _prefs.getInt(_keyUpdatedAtMillis) ?? 0;
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap  = <String, bool>{};
@@ -41,6 +43,7 @@ class PersistenceService {
 
     return SavedState(
       seed: seed,
+      updatedAtMillis: updatedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -50,6 +53,7 @@ class PersistenceService {
   // ─── Save (fire-and-forget; synchronous on web localStorage) ─────────────
 
   static void saveSeed(int seed)               => _prefs.setInt(_keySeed, seed);
+  static void saveUpdatedAtMillis(int value)   => _prefs.setInt(_keyUpdatedAtMillis, value);
   static void saveEnabled(String id, bool v)   => _prefs.setBool('$_pfxEnabled$id', v);
   static void saveCheckin(String id, int v)    => _prefs.setInt('$_pfxCheckin$id', v);
   static void saveLocked(String id, bool v)    => _prefs.setBool('$_pfxLocked$id', v);
@@ -59,12 +63,14 @@ class PersistenceService {
 
 class SavedState {
   final int seed;
+  final int updatedAtMillis;
   final Map<String, bool> enabledMap; // activityId → enabled
   final Map<String, int>  checkinMap; // activityId → CheckStatus.index
   final Map<String, bool> lockedMap;  // activityId → locked
 
   const SavedState({
     required this.seed,
+    required this.updatedAtMillis,
     required this.enabledMap,
     required this.checkinMap,
     required this.lockedMap,
@@ -73,6 +79,7 @@ class SavedState {
   Map<String, dynamic> toMap() {
     return {
       'seed': seed,
+      'updatedAtMillis': updatedAtMillis,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -81,10 +88,17 @@ class SavedState {
 
   factory SavedState.fromMap(Map<String, dynamic> map) {
     return SavedState(
-      seed: map['seed'] as int? ?? 0,
+      seed: _readInt(map['seed']),
+      updatedAtMillis: _readInt(map['updatedAtMillis']),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
     );
+  }
+
+  static int _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
   }
 }

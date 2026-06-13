@@ -79,19 +79,19 @@ Use it when a session ends or when enough context has changed that the next assi
 ## 2026-06-13 — Firestore sync foundation
 
 - **Goal**: Add minimal Firestore sync foundation while preserving local fallback.
-- **Summary**: Added `cloud_firestore` and implemented `FirestoreSyncService`. Integrated sync into `AppState` so that when a user is signed in, their state (seed, enabled activities, check-ins, locked states) is persisted to Firestore. SharedPreferences remains as a local fallback and cache. `AuthGate` was updated to notify `AppState` of user auth changes.
+- **Summary**: Added `cloud_firestore` and implemented `FirestoreSyncService`. Integrated sync into `AppState` so that when a user is signed in, their state (seed, enabled activities, check-ins, locked states, and `updatedAtMillis`) is persisted to Firestore. SharedPreferences remains as a local fallback/cache. A follow-up sync-safety fix prevents older Firestore state from overwriting newer local state and ignores stale async loads if the signed-in user changes.
 - **Files changed**:
   - `pubspec.yaml` (added `cloud_firestore`)
-  - `lib/services/persistence_service.dart` (added serialization to `SavedState`)
+  - `lib/services/persistence_service.dart` (added serialization to `SavedState`, including `updatedAtMillis`)
   - `lib/services/firestore_sync_service.dart` (new service for Firestore operations)
-  - `lib/state/app_state.dart` (added sync logic and user ID management)
+  - `lib/state/app_state.dart` (added sync logic, user ID management, timestamp conflict handling, and auth-race guard)
   - `lib/widgets/auth_gate.dart` (added auth listener to trigger sync)
 - **Decisions made**:
   - Use a single document per user at `users/{userId}/calendars/default` for MVP.
   - `AppState` is the coordinator for both local and remote persistence.
-  - Sync is triggered on sign-in; local state is overwritten by Firestore state if available.
-- **Tests run**: `flutter test`, `flutter analyze`, `flutter build web`.
-- **Current state**: Firestore sync foundation is in place. App correctly handles signed-in vs local-only modes.
+  - Sync is triggered on sign-in; newer remote state is applied, while newer local state or missing remote state is saved to Firestore.
+- **Tests run**: Original PR reported `flutter test`, `flutter analyze`, `flutter build web`. Follow-up sync-safety fix ran `git diff --check`; `C:\src\flutter\bin\flutter.bat analyze` and `C:\src\flutter\bin\flutter.bat build web` were not run because that Flutter path was not present.
+- **Current state**: Firestore sync foundation is in place. App correctly handles signed-in vs local-only modes, preserves SharedPreferences fallback/cache, and avoids blind remote overwrite on sign-in.
 - **Next recommended step**: Shared editing — allow Kwame and Laura to point to the same calendar document or implement a sharing mechanism.
 - **Open questions**:
   - Should we implement a "Pull to Refresh" or real-time Firestore listeners for better multi-device experience?

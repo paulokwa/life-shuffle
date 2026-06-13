@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'persistence_service.dart';
 
 class FirestoreSyncService {
@@ -21,7 +22,9 @@ class FirestoreSyncService {
         SetOptions(merge: true),
       );
     } catch (e) {
-      // Log or handle error silently as per requirements
+      if (kDebugMode) {
+        debugPrint('Firestore saveState failed: $e');
+      }
     }
   }
 
@@ -33,6 +36,9 @@ class FirestoreSyncService {
       if (data == null) return null;
       return SavedState.fromMap(data);
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore loadState failed: $e');
+      }
       return null;
     }
   }
