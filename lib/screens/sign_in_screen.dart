@@ -1,0 +1,153 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../services/auth_service.dart';
+import '../theme/app_colors.dart';
+
+class SignInScreen extends StatefulWidget {
+  const SignInScreen({super.key});
+
+  @override
+  State<SignInScreen> createState() => _SignInScreenState();
+}
+
+class _SignInScreenState extends State<SignInScreen> {
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _signIn() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AuthService.signInWithGoogle();
+      // AuthGate rebuilds automatically via authStateChanges stream.
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Sign-in failed. Make sure Firebase is configured and try again.';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: backgroundCream,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              const Spacer(),
+              // Logo
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: primaryTerracotta.withValues(alpha: 0.12),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.shuffle_rounded,
+                  size: 32,
+                  color: primaryTerracotta,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Life Shuffle',
+                style: GoogleFonts.lora(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w500,
+                  color: textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'A calm way to plan your week together.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  color: textMuted,
+                  height: 1.5,
+                ),
+              ),
+              const Spacer(),
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: primaryTerracotta.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      color: primaryTerracotta,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              GestureDetector(
+                onTap: _loading ? null : _signIn,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: _loading
+                        ? primaryTerracotta.withValues(alpha: 0.6)
+                        : primaryTerracotta,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  alignment: Alignment.center,
+                  child: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.login_rounded,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Continue with Google',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Your plan, synced across devices.',
+                style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

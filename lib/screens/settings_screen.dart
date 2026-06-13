@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
@@ -30,6 +31,22 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  if (AuthService.isReady) ...[
+                    _SectionLabel(label: 'ACCOUNT'),
+                    const SizedBox(height: 10),
+                    _SettingsGroup(
+                      children: [
+                        _SettingsRow(
+                          icon: Icons.logout_rounded,
+                          label: 'Sign out',
+                          value: '',
+                          hasChevron: false,
+                          onTap: () => AuthService.signOut(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   // Profile card
                   LsCard(
                     child: Row(
@@ -266,6 +283,7 @@ class _SettingsRow extends StatelessWidget {
     required this.value,
     this.valueColor,
     this.hasChevron = true,
+    this.onTap,
   });
 
   final IconData icon;
@@ -273,10 +291,11 @@ class _SettingsRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
   final bool hasChevron;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       children: [
         Icon(icon, size: 18, color: textMuted),
         const SizedBox(width: 10),
@@ -308,6 +327,10 @@ class _SettingsRow extends StatelessWidget {
         ],
       ],
     );
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: row);
+    }
+    return row;
   }
 }
 

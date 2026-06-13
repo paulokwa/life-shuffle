@@ -1,13 +1,26 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'theme/app_theme.dart' show buildAppTheme;
-import 'state/app_state.dart';
+import 'firebase_options.dart';
+import 'services/auth_service.dart';
 import 'services/persistence_service.dart';
 import 'services/planner_service.dart';
-import 'screens/onboarding_screen.dart';
-import 'widgets/bottom_nav_shell.dart';
+import 'state/app_state.dart';
+import 'theme/app_theme.dart' show buildAppTheme;
+import 'widgets/auth_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    AuthService.markReady();
+  } catch (_) {
+    // Firebase not configured yet — app runs in local-only mode.
+    // Replace lib/firebase_options.dart by running: flutterfire configure
+  }
+
   await PersistenceService.init();
 
   final ids = PlannerService.defaultActivities.map((a) => a.id).toList();
@@ -32,39 +45,7 @@ class LifeShuffleApp extends StatelessWidget {
       title: 'Life Shuffle',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: _RootRouter(appState: appState),
-    );
-  }
-}
-
-class _RootRouter extends StatefulWidget {
-  const _RootRouter({required this.appState});
-
-  final AppState appState;
-
-  @override
-  State<_RootRouter> createState() => _RootRouterState();
-}
-
-class _RootRouterState extends State<_RootRouter> {
-  bool _onboardingDone = false;
-
-  @override
-  void dispose() {
-    widget.appState.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_onboardingDone) {
-      return OnboardingScreen(
-        onComplete: () => setState(() => _onboardingDone = true),
-      );
-    }
-    return AppStateScope(
-      state: widget.appState,
-      child: const BottomNavShell(),
+      home: AuthGate(appState: appState),
     );
   }
 }
