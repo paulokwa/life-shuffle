@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(flutter doctor -v 2>&1)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\\", \"$env:LOCALAPPDATA\", \"$env:USERPROFILE\" -Filter \"flutter\" -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 10 FullName)",
+      "Read(//c//**)",
+      "PowerShell(winget install Google.Flutter --accept-source-agreements --accept-package-agreements 2>&1)",
+      "PowerShell(winget search flutter 2>&1)",
+      "PowerShell(winget install pingbird.Puro --accept-source-agreements --accept-package-agreements 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); puro upgrade-self 2>&1; puro create stable 2>&1)",
+      "PowerShell(Get-Date; $env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); puro ls 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); puro create stable 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); $releases = Invoke-RestMethod \"https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json\"; $latest = $releases.releases | Where-Object { $_.channel -eq \"stable\" } | Select-Object -First 1; Write-Host \"Latest stable: $\\($latest.version\\)\"; Write-Host \"URL: $\\($releases.base_url\\)/$\\($latest.archive\\)\")",
+      "PowerShell($dest = \"$env:USERPROFILE\\\\flutter_sdk.zip\"; $url = \"https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.44.2-stable.zip\"; Write-Host \"Downloading Flutter 3.44.2 to $dest...\"; Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing; Write-Host \"Download complete. Size: $\\(\\(Get-Item $dest\\).Length / 1MB\\) MB\")",
+      "PowerShell(Get-Item \"$env:USERPROFILE\\\\flutter_sdk.zip\" -ErrorAction SilentlyContinue | Select-Object Length, LastWriteTime)"
+    ]
+  }
+}

@@ -44,6 +44,7 @@ class AppState extends ChangeNotifier {
     final local = _currentSavedState();
     if (remote != null && remote.updatedAtMillis > local.updatedAtMillis) {
       _applySavedState(remote);
+      FirestoreSyncService.saveState(uid, remote);
       notifyListeners();
       return;
     }

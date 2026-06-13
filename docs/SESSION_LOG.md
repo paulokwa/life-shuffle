@@ -95,3 +95,23 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Shared editing — allow Kwame and Laura to point to the same calendar document or implement a sharing mechanism.
 - **Open questions**:
   - Should we implement a "Pull to Refresh" or real-time Firestore listeners for better multi-device experience?
+
+---
+
+## 2026-06-13 - Shared calendar foundation
+
+- **Goal**: Add the smallest Firestore calendar document foundation needed for later Kwame/Laura shared editing without changing the current one-calendar user experience.
+- **Summary**: Replaced the active Firestore write target with a top-level default calendar document at `calendars/{userId}_default`. The document now carries calendar metadata (`calendarId`, `title`, `name`, `ownerUserId`, `memberUserIds`, `createdAtMillis`, `updatedAtMillis`) alongside the existing saved planner state fields. First signed-in sync loads that default calendar if present, falls back to the previous `users/{userId}/calendars/default` document for safety, and creates/saves the new default calendar when remote state is missing or local state is newer.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart` - added default calendar ID/path, calendar metadata creation, top-level calendar writes, member ID preservation, and legacy read fallback.
+  - `lib/state/app_state.dart` - saves a newer loaded remote state back through the new calendar document path so legacy data can migrate naturally.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+- **Decisions made**:
+  - Keep one default calendar for now; no calendar switcher, invites, roles UI, or real-time listeners yet.
+  - Use `calendars/{userId}_default` as the temporary deterministic default calendar document ID.
+  - Keep planner state fields flat in the calendar document for now rather than introducing a larger nested schema.
+- **Tests run**: `git diff --check` passed with only Git CRLF normalization warnings. `flutter analyze` and `flutter build web` were not run because neither `flutter` nor `dart` was available on PATH.
+- **Current state**: Signed-in persistence is now shaped like a shareable calendar document while the app still behaves as a single-default-calendar planner with SharedPreferences fallback/cache.
+- **Next recommended step**: Add basic Firestore security rules for calendar owner/member access before building any invite or shared editing UI.
+- **Open questions**:
+  - Should the default calendar title stay `Kwame and Laura` until onboarding supports naming, or switch to `My Life Shuffle` for more general use?
