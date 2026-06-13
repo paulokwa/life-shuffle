@@ -1,6 +1,10 @@
 # Local MCP config (contains API keys — do not commit)
 .mcp.json
 
+# IDE
+.idea/
+*.iml
+
 # Miscellaneous
 *.class
 *.lock
