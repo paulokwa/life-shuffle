@@ -115,3 +115,24 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Add basic Firestore security rules for calendar owner/member access before building any invite or shared editing UI.
 - **Open questions**:
   - Should the default calendar title stay `Kwame and Laura` until onboarding supports naming, or switch to `My Life Shuffle` for more general use?
+
+---
+
+## 2026-06-13 - Settings Account and Calendar basics
+
+- **Goal**: Make Settings useful for the current Firebase/local app by showing basic account and default calendar information plus a working sign-out action.
+- **Summary**: Reworked Settings to show the signed-in Google display name/email when available, a local-only message when Firebase/user auth is unavailable, and a Sign out action for signed-in users. Added a Calendar section showing the current default calendar title, owner, member IDs in simple text form, and a short "sharing with Laura later" note. Exposed default calendar metadata from `AppState` using the existing Firestore calendar foundation without adding sharing UI, roles, invites, a switcher, listeners, export, AI, or notifications.
+- **Files changed**:
+  - `lib/screens/settings_screen.dart` - real Account and Calendar sections using existing warm card styling.
+  - `lib/state/app_state.dart` - exposes current default calendar title, ID, owner user ID, and member user IDs.
+  - `lib/services/firestore_sync_service.dart` - adds small calendar metadata value objects and default calendar metadata parsing/loading.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+- **Decisions made**:
+  - Keep Settings display-only for calendar ownership/membership at this stage.
+  - Keep sign-out routed through the existing `AuthService.signOut()` and `AuthGate` auth listener.
+  - Continue using SharedPreferences as local planner state fallback/cache.
+- **Tests run**: `git diff --check` passed with only Git CRLF normalization warnings. `flutter analyze` and `flutter build web` were not run because `flutter` was not available on PATH.
+- **Current state**: Settings now surfaces useful account and current default calendar context while preserving local-only mode and the existing one-calendar experience.
+- **Next recommended step**: Add basic Firestore security rules for owner/member calendar access before implementing invite or shared editing UI.
+- **Open questions**:
+  - Should Settings eventually show friendly member names/emails after a user profile/display-name model exists?

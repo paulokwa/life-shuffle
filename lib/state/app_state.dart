@@ -15,6 +15,10 @@ class AppState extends ChangeNotifier {
   int _seed = 0;
   int _updatedAtMillis = 0;
   String? _userId;
+  String? _calendarId;
+  String _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
+  String? _calendarOwnerUserId;
+  List<String> _calendarMemberUserIds = const [];
 
   AppState({required this.activities, SavedState? savedState}) {
     if (savedState != null) {
@@ -26,25 +30,38 @@ class AppState extends ChangeNotifier {
 
   List<DayPlan> get weekPlan => _weekPlan;
   String? get userId => _userId;
+  String? get calendarId => _calendarId;
+  String get calendarTitle => _calendarTitle;
+  String? get calendarOwnerUserId => _calendarOwnerUserId;
+  List<String> get calendarMemberUserIds =>
+      List.unmodifiable(_calendarMemberUserIds);
 
   void setUserId(String? uid) {
     if (_userId == uid) return;
     _userId = uid;
     if (uid != null) {
+      _applyCalendarMetadata(FirestoreSyncService.defaultMetadata(uid));
       syncWithFirestore();
+    } else {
+      _clearCalendarMetadata();
     }
   }
 
   Future<void> syncWithFirestore() async {
     final uid = _userId;
     if (uid == null) return;
-    final remote = await FirestoreSyncService.loadState(uid);
+    final remote = await FirestoreSyncService.loadDefaultCalendar(uid);
     if (_userId != uid) return;
 
     final local = _currentSavedState();
-    if (remote != null && remote.updatedAtMillis > local.updatedAtMillis) {
-      _applySavedState(remote);
-      FirestoreSyncService.saveState(uid, remote);
+    var metadataChanged = false;
+    if (remote != null) {
+      metadataChanged = _applyCalendarMetadata(remote.metadata);
+    }
+    if (remote != null &&
+        remote.state.updatedAtMillis > local.updatedAtMillis) {
+      _applySavedState(remote.state);
+      FirestoreSyncService.saveState(uid, remote.state);
       notifyListeners();
       return;
     }
@@ -59,6 +76,9 @@ class AppState extends ChangeNotifier {
       _persistLocal(stateToSave);
     }
     FirestoreSyncService.saveState(uid, stateToSave);
+    if (metadataChanged) {
+      notifyListeners();
+    }
   }
 
   // ─── Activities ───────────────────────────────────────────────────────────
@@ -129,6 +149,26 @@ class AppState extends ChangeNotifier {
     for (final entry in state.lockedMap.entries) {
       PersistenceService.saveLocked(entry.key, entry.value);
     }
+  }
+
+  bool _applyCalendarMetadata(CalendarMetadata metadata) {
+    final changed = _calendarId != metadata.calendarId ||
+        _calendarTitle != metadata.title ||
+        _calendarOwnerUserId != metadata.ownerUserId ||
+        _calendarMemberUserIds.join('|') != metadata.memberUserIds.join('|');
+
+    _calendarId = metadata.calendarId;
+    _calendarTitle = metadata.title;
+    _calendarOwnerUserId = metadata.ownerUserId;
+    _calendarMemberUserIds = List.unmodifiable(metadata.memberUserIds);
+    return changed;
+  }
+
+  void _clearCalendarMetadata() {
+    _calendarId = null;
+    _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
+    _calendarOwnerUserId = null;
+    _calendarMemberUserIds = const [];
   }
 
   SavedState _currentSavedState({int? updatedAtMillis}) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
@@ -10,11 +11,27 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final user = AuthService.currentUser;
+    final signedIn = user != null;
+    final displayName = user?.displayName?.trim();
+    final email = user?.email?.trim();
+    final profileInitial = _profileInitial(displayName, email);
+    final ownerLabel = state.calendarOwnerUserId == null
+        ? 'Local only'
+        : state.calendarOwnerUserId == user?.uid
+            ? 'You'
+            : _shortId(state.calendarOwnerUserId!);
+    final memberLabel = _memberLabel(state.calendarMemberUserIds, user?.uid);
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const LifeShuffleHeader(),
+          LifeShuffleHeader(
+            calendarName: state.calendarTitle,
+            profileInitial: profileInitial,
+          ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 128),
@@ -31,79 +48,120 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  if (AuthService.isReady) ...[
-                    _SectionLabel(label: 'ACCOUNT'),
-                    const SizedBox(height: 10),
-                    _SettingsGroup(
+                  _SectionLabel(label: 'ACCOUNT'),
+                  const SizedBox(height: 10),
+                  LsCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _SettingsRow(
-                          icon: Icons.logout_rounded,
-                          label: 'Sign out',
-                          value: '',
-                          hasChevron: false,
-                          onTap: () => AuthService.signOut(),
+                        Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: warmBeige,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                profileInitial,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: primaryTerracotta,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    signedIn
+                                        ? (displayName?.isNotEmpty == true
+                                            ? displayName!
+                                            : 'Signed in')
+                                        : 'Local-only mode',
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    signedIn
+                                        ? (email?.isNotEmpty == true
+                                            ? email!
+                                            : 'Google account')
+                                        : AuthService.isReady
+                                            ? 'Not signed in'
+                                            : 'Firebase unavailable; changes stay on this device.',
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 13,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
+                        if (signedIn) ...[
+                          const SizedBox(height: 14),
+                          _TextButtonRow(
+                            icon: Icons.logout_rounded,
+                            label: 'Sign out',
+                            onTap: () => AuthService.signOut(),
+                          ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 20),
-                  ],
-                  // Profile card
+                  ),
+                  const SizedBox(height: 20),
+                  _SectionLabel(label: 'CALENDAR'),
+                  const SizedBox(height: 10),
+                  _SettingsGroup(
+                    children: [
+                      _SettingsRow(
+                        icon: Icons.calendar_today_rounded,
+                        label: 'Current calendar',
+                        value: state.calendarTitle,
+                        hasChevron: false,
+                      ),
+                      _SettingsRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Owner',
+                        value: ownerLabel,
+                        hasChevron: false,
+                      ),
+                      _SettingsRow(
+                        icon: Icons.group_outlined,
+                        label: 'Members',
+                        value: memberLabel,
+                        hasChevron: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   LsCard(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: warmBeige,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'K',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                              color: primaryTerracotta,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Kwame',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                              Text(
-                                'Kwame and Laura · Calendar',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 13,
-                                  color: textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 14,
-                          color: textMuted,
-                        ),
-                      ],
+                    color: warmBeige,
+                    child: Text(
+                      'Sharing with Laura is coming later. For now this is your default calendar foundation.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: textMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
                   _SectionLabel(label: 'PLANNING'),
                   const SizedBox(height: 10),
                   _SettingsGroup(
-                    children: [
+                    children: const [
                       _SettingsRow(
                         icon: Icons.calendar_today_rounded,
                         label: 'Week starts on',
@@ -177,7 +235,7 @@ class SettingsScreen extends StatelessWidget {
                   _SectionLabel(label: 'SHARING'),
                   const SizedBox(height: 10),
                   _SettingsGroup(
-                    children: [
+                    children: const [
                       _SettingsRow(
                         icon: Icons.rss_feed_rounded,
                         label: 'ICS feed',
@@ -195,7 +253,7 @@ class SettingsScreen extends StatelessWidget {
                   _SectionLabel(label: 'ABOUT'),
                   const SizedBox(height: 10),
                   _SettingsGroup(
-                    children: [
+                    children: const [
                       _SettingsRow(
                         icon: Icons.info_outline_rounded,
                         label: 'Version',
@@ -217,6 +275,26 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _profileInitial(String? displayName, String? email) {
+    final source = displayName?.isNotEmpty == true ? displayName! : email;
+    if (source == null || source.isEmpty) return 'K';
+    return source.characters.first.toUpperCase();
+  }
+
+  static String _shortId(String id) {
+    if (id.length <= 8) return id;
+    return '${id.substring(0, 8)}...';
+  }
+
+  static String _memberLabel(List<String> ids, String? currentUserId) {
+    if (ids.isEmpty) return 'Local only';
+    if (ids.length == 1 && ids.first == currentUserId) return 'You';
+    final labels = ids
+        .map((id) => id == currentUserId ? 'You' : _shortId(id))
+        .join(', ');
+    return labels;
   }
 }
 
@@ -283,7 +361,6 @@ class _SettingsRow extends StatelessWidget {
     required this.value,
     this.valueColor,
     this.hasChevron = true,
-    this.onTap,
   });
 
   final IconData icon;
@@ -291,7 +368,6 @@ class _SettingsRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
   final bool hasChevron;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -310,11 +386,14 @@ class _SettingsRow extends StatelessWidget {
           ),
         ),
         if (value.isNotEmpty)
-          Text(
-            value,
-            style: GoogleFonts.dmSans(
-              fontSize: 13,
-              color: valueColor ?? textMuted,
+          Flexible(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: valueColor ?? textMuted,
+              ),
             ),
           ),
         if (hasChevron) ...[
@@ -327,10 +406,42 @@ class _SettingsRow extends StatelessWidget {
         ],
       ],
     );
-    if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: row);
-    }
     return row;
+  }
+}
+
+class _TextButtonRow extends StatelessWidget {
+  const _TextButtonRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: primaryTerracotta),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: primaryTerracotta,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
