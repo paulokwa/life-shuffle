@@ -69,4 +69,22 @@ class SavedState {
     required this.checkinMap,
     required this.lockedMap,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'seed': seed,
+      'enabledMap': enabledMap,
+      'checkinMap': checkinMap,
+      'lockedMap': lockedMap,
+    };
+  }
+
+  factory SavedState.fromMap(Map<String, dynamic> map) {
+    return SavedState(
+      seed: map['seed'] as int? ?? 0,
+      enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
+      checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
+      lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
+    );
+  }
 }

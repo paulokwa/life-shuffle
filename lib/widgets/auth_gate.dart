@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../screens/onboarding_screen.dart';
@@ -18,10 +19,22 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool _onboardingDone = false;
+  StreamSubscription<User?>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AuthService.isReady) {
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+        widget.appState.setUserId(user?.uid);
+      });
+    }
+  }
 
   @override
   void dispose() {
-    widget.appState.dispose();
+    _authSubscription?.cancel();
+    // widget.appState.dispose(); // AppState is a ChangeNotifier but not managed here
     super.dispose();
   }
 

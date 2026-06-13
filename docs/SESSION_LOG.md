@@ -74,3 +74,24 @@ Use it when a session ends or when enough context has changed that the next assi
   - Should both Kwame and Laura share one Firestore document or have separate user documents merged at display time?
 
 ---
+---
+
+## 2026-06-13 — Firestore sync foundation
+
+- **Goal**: Add minimal Firestore sync foundation while preserving local fallback.
+- **Summary**: Added `cloud_firestore` and implemented `FirestoreSyncService`. Integrated sync into `AppState` so that when a user is signed in, their state (seed, enabled activities, check-ins, locked states) is persisted to Firestore. SharedPreferences remains as a local fallback and cache. `AuthGate` was updated to notify `AppState` of user auth changes.
+- **Files changed**:
+  - `pubspec.yaml` (added `cloud_firestore`)
+  - `lib/services/persistence_service.dart` (added serialization to `SavedState`)
+  - `lib/services/firestore_sync_service.dart` (new service for Firestore operations)
+  - `lib/state/app_state.dart` (added sync logic and user ID management)
+  - `lib/widgets/auth_gate.dart` (added auth listener to trigger sync)
+- **Decisions made**:
+  - Use a single document per user at `users/{userId}/calendars/default` for MVP.
+  - `AppState` is the coordinator for both local and remote persistence.
+  - Sync is triggered on sign-in; local state is overwritten by Firestore state if available.
+- **Tests run**: `flutter test`, `flutter analyze`, `flutter build web`.
+- **Current state**: Firestore sync foundation is in place. App correctly handles signed-in vs local-only modes.
+- **Next recommended step**: Shared editing — allow Kwame and Laura to point to the same calendar document or implement a sharing mechanism.
+- **Open questions**:
+  - Should we implement a "Pull to Refresh" or real-time Firestore listeners for better multi-device experience?
