@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -22,14 +23,34 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       await AuthService.signInWithGoogle();
       // AuthGate rebuilds automatically via authStateChanges stream.
-    } catch (_) {
+    } on FirebaseAuthException catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Sign-in failed. Make sure Firebase is configured and try again.';
+          _error = _friendlyAuthError(e);
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Sign-in failed: $e';
           _loading = false;
         });
       }
     }
+  }
+
+  String _friendlyAuthError(FirebaseAuthException e) {
+    return switch (e.code) {
+      'unauthorized-domain' =>
+        'Sign-in failed: this app domain is not authorized in Firebase Auth. Add this host under Authentication > Settings > Authorized domains.',
+      'popup-blocked' =>
+        'Sign-in failed: the browser blocked the Google sign-in popup.',
+      'popup-closed-by-user' => 'Sign-in was cancelled before Google finished.',
+      'operation-not-allowed' =>
+        'Sign-in failed: enable Google as a sign-in provider in Firebase Authentication.',
+      _ => 'Sign-in failed (${e.code}): ${e.message ?? 'Try again.'}',
+    };
   }
 
   @override

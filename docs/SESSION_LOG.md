@@ -136,3 +136,71 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Add basic Firestore security rules for owner/member calendar access before implementing invite or shared editing UI.
 - **Open questions**:
   - Should Settings eventually show friendly member names/emails after a user profile/display-name model exists?
+
+---
+
+## 2026-06-15 - Basic Firestore calendar security rules
+
+- **Goal**: Add basic Firestore security rules for top-level calendar documents at `calendars/{calendarId}`.
+- **Summary**: Created `firestore.rules` with MVP owner/member access for calendar documents and wired it into `firebase.json`. Reads are limited to the calendar owner or listed members. Creates require a signed-in owner who includes themselves in `memberUserIds` and writes a matching `calendarId`. Updates require an existing owner/member and preserve `ownerUserId` and `calendarId`. No sharing UI, invite flow, roles, listeners, or app UI changes were added.
+- **Files changed**:
+  - `firestore.rules` - new Firestore rules file for `calendars/{calendarId}`.
+  - `firebase.json` - added Firestore rules path while preserving Flutter config.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+  - `docs/TROUBLESHOOTING_LOG.md` - noted Firebase CLI dry-run side effects.
+- **Decisions made**:
+  - Keep all non-calendar collections denied by default.
+  - Do not allow deletes yet; calendar lifecycle rules can be added with delete/leave/feed revocation work.
+  - Keep rules as simple owner/member access, not final invite or role logic.
+- **Tests run**: `firebase deploy --only firestore:rules --dry-run --project life-shuffle-8d3bd` compiled `firestore.rules` successfully. `git diff --check` passed with only a Git CRLF normalization warning for `firebase.json`. `flutter analyze` and `flutter build web` were not run because no Dart/UI code changed.
+- **Current state**: Firestore rules are locally configured and validated by Firebase CLI dry-run. The dry-run also enabled the Firestore API and created the default Firestore database for project `life-shuffle-8d3bd` because it did not already exist.
+- **Next recommended step**: Add focused rules tests or emulator assertions before expanding sharing behavior, then build the smallest member/invite path when ready.
+- **Open questions**:
+  - Should member updates eventually be restricted to owners only once roles/invites are introduced?
+
+---
+
+## 2026-06-15 - Add and edit activity form
+
+- **Goal**: Allow users to add and edit activities locally from the existing Activities screen.
+- **Summary**: Added a working Add button and warm bottom-sheet activity form with title, category, duration minutes, preferred time, and enabled toggle. Existing activity cards now open the same form for editing, while their toggle still enables/disables the activity. Custom activities are stored in `AppState`, included in future regeneration when enabled, excluded when disabled, and saved through the existing local/Firestore `SavedState` path as an `activities` list.
+- **Files changed**:
+  - `lib/models/activity.dart` - added editable fields, duration minutes, category/preferred-time options, copy, and map serialization.
+  - `lib/screens/activities_screen.dart` - added Add/Edit bottom sheet and card edit behavior.
+  - `lib/state/app_state.dart` - added add/update activity methods and persisted activities in saved state.
+  - `lib/services/persistence_service.dart` - saves/loads the activity list in SharedPreferences.
+  - `lib/services/firestore_sync_service.dart` - reads older remote documents with starter activities as fallback.
+  - `lib/services/planner_service.dart` - moved starter activities to duration-minute model values.
+  - `lib/main.dart` - starts AppState from persisted activities.
+  - `lib/theme/app_colors.dart` - added soft chip colors for the new category options.
+  - `test/widget_test.dart` - added focused AppState add/edit/disable/regenerate/persistence test.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+  - `docs/TROUBLESHOOTING_LOG.md` - recorded browser smoke-check tooling blockers.
+- **Decisions made**:
+  - Keep activities embedded in the current calendar saved state for now, not a new Firestore subcollection.
+  - Keep the form simple: no complex rules, no difficulty/energy/social fields, no icon/image picker.
+  - Keep regeneration behavior explicit; add/edit does not immediately rewrite the current week, but enabled activities are part of the next regeneration pool.
+- **Tests run**: `dart format` on touched Dart files. `flutter test` passed. `flutter build web` passed. `flutter analyze` ran but exits nonzero because of 39 pre-existing info-level lints in older files (`withOpacity` and `prefer_const`); no new activity-form files are listed. Manual browser smoke was attempted against both Flutter web-server and a static build, but the Activities screen could not be reached because Playwright was blocked at the Google sign-in auth gate.
+- **Current state**: Activity creation and editing are implemented and covered by a focused AppState test. Custom activities persist locally and are included in the Firestore calendar document through the existing sync path.
+- **Next recommended step**: Wire the Today screen "Add activity" quick action to the same form or continue with the starter activity picker.
+- **Open questions**:
+  - Should custom activities eventually live in a calendar subcollection once the Firestore schema grows beyond the current flat calendar document?
+
+---
+
+## 2026-06-15 - Manual test access and auth error clarity
+
+- **Goal**: Let Kwame manually test the app after Google sign-in blocked local access.
+- **Summary**: Added a dev-only `LS_LOCAL_ONLY` dart define in `main.dart` so local/manual web builds can skip Firebase Auth and go straight into the app. Updated the sign-in screen to show specific Firebase Auth errors instead of the generic "Firebase is configured" message, so future auth failures identify issues such as unauthorized domains or disabled Google provider.
+- **Files changed**:
+  - `lib/main.dart` - added `bool.fromEnvironment('LS_LOCAL_ONLY')` guard around Firebase initialization.
+  - `lib/screens/sign_in_screen.dart` - maps Firebase Auth exception codes to clearer user-facing messages.
+  - `docs/SESSION_LOG.md` - recorded this follow-up.
+- **Decisions made**:
+  - Keep the local-only path behind an explicit build-time flag, not a production UI switch.
+  - Do not change the production auth gate behavior.
+- **Tests run**: `flutter build web --dart-define=LS_LOCAL_ONLY=true` passed and was served locally on `http://127.0.0.1:8767/` for manual testing. `flutter build web` also passed after the auth-message change. `flutter analyze` still exits nonzero because of the existing info-level lint set in older files.
+- **Current state**: Kwame can test the app locally using a local-only build without being blocked by Google sign-in.
+- **Next recommended step**: Fix Firebase Auth settings separately for normal signed-in testing, likely authorized domain or Google provider setup depending on the exact Firebase Auth error.
+- **Open questions**:
+  - Should there be a documented npm/PowerShell script for starting the local-only manual test build?
