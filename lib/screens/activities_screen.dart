@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/activity.dart';
+import '../services/starter_activity_library.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/category_chip.dart';
@@ -74,53 +75,57 @@ class ActivitiesScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  LsCard(
-                    color: const Color(0xFFFFF8F5),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: primaryTerracotta.withValues(alpha: 0.12),
+                  GestureDetector(
+                    onTap: () => _showStarterPicker(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: LsCard(
+                      color: const Color(0xFFFFF8F5),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: primaryTerracotta.withValues(alpha: 0.12),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 16,
+                              color: primaryTerracotta,
+                            ),
                           ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            size: 16,
-                            color: primaryTerracotta,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Browse starter activities',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: textPrimary,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Browse starter activities',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: textPrimary,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                'Pick from a built-in library to get started quickly',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 12,
-                                  color: textMuted,
+                                Text(
+                                  'Pick from a built-in library to get started quickly',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    color: textMuted,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 14,
-                          color: textMuted,
-                        ),
-                      ],
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: textMuted,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -205,6 +210,266 @@ class ActivitiesScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _showStarterPicker(BuildContext context) {
+    final appState = AppStateScope.of(context);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _StarterPickerSheet(appState: appState);
+      },
+    );
+  }
+}
+
+class _StarterPickerSheet extends StatefulWidget {
+  const _StarterPickerSheet({required this.appState});
+
+  final AppState appState;
+
+  @override
+  State<_StarterPickerSheet> createState() => _StarterPickerSheetState();
+}
+
+class _StarterPickerSheetState extends State<_StarterPickerSheet> {
+  final Set<String> _expandedCategories = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.86;
+
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      decoration: const BoxDecoration(
+        color: backgroundCream,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: borderWarmStrong,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Starter library',
+                  style: GoogleFonts.lora(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w500,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add a few useful options now. You can edit every starter later.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              itemCount: StarterActivityLibrary.groups.length,
+              itemBuilder: (context, index) {
+                final group = StarterActivityLibrary.groups[index];
+                final expanded = _expandedCategories.contains(group.category);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _StarterCategorySection(
+                    group: group,
+                    expanded: expanded,
+                    appState: widget.appState,
+                    onToggleExpanded: () {
+                      setState(() {
+                        if (expanded) {
+                          _expandedCategories.remove(group.category);
+                        } else {
+                          _expandedCategories.add(group.category);
+                        }
+                      });
+                    },
+                    onChanged: () => setState(() {}),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StarterCategorySection extends StatelessWidget {
+  const _StarterCategorySection({
+    required this.group,
+    required this.expanded,
+    required this.appState,
+    required this.onToggleExpanded,
+    required this.onChanged,
+  });
+
+  final StarterActivityGroup group;
+  final bool expanded;
+  final AppState appState;
+  final VoidCallback onToggleExpanded;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleActivities =
+        expanded ? group.activities : group.activities.take(2).toList();
+    final hiddenCount = group.activities.length - visibleActivities.length;
+
+    return LsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CategoryChip(category: group.category),
+              const Spacer(),
+              if (group.activities.length > 2)
+                GestureDetector(
+                  onTap: onToggleExpanded,
+                  child: Text(
+                    expanded ? 'Show less' : 'See more',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: primaryTerracotta,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...visibleActivities.map(
+            (activity) => _StarterActivityRow(
+              activity: activity,
+              isAdded: appState.hasActivityTitle(activity.title),
+              onAdd: () {
+                appState.addStarterActivity(activity);
+                onChanged();
+              },
+            ),
+          ),
+          if (!expanded && hiddenCount > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$hiddenCount more in ${group.category}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StarterActivityRow extends StatelessWidget {
+  const _StarterActivityRow({
+    required this.activity,
+    required this.isAdded,
+    required this.onAdd,
+  });
+
+  final Activity activity;
+  final bool isAdded;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  activity.title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${activity.duration} / ${_preferredTimeLabel(activity.preferredTime)} / Max ${activity.maxPerWeek}/week',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: isAdded ? null : onAdd,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: isAdded ? warmBeige : primaryTerracotta,
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(
+                  color: isAdded ? borderWarmStrong : primaryTerracotta,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                isAdded ? 'Added' : 'Add',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isAdded ? textMuted : Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _preferredTimeLabel(String value) {
+    return switch (value) {
+      'morning' => 'Morning',
+      'afternoon' => 'Afternoon',
+      'evening' => 'Evening',
+      _ => 'Anytime',
+    };
   }
 }
 

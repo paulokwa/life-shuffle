@@ -227,3 +227,25 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Add a small user-facing empty/soft-failure note when strict rules leave a week lighter than expected.
 - **Open questions**:
   - Should the next planner milestone add preview/undo for regeneration before adding more rule types?
+
+---
+
+## 2026-06-15 - Starter activity picker and library polish
+
+- **Goal**: Make it easy to add useful starter activities from the Activities screen without manually creating every activity.
+- **Summary**: Added a built-in starter activity library grouped by the planned MVP categories and wired the existing "Browse starter activities" card to a warm bottom-sheet picker. Each category shows two activities first with a `See more` pattern for the rest. Starter rows show duration, preferred time, and max-per-week, and can be added directly into the user's activity bank. Added state-level duplicate prevention so a starter title can only be added once, with the picker switching to an `Added` state after insertion. Starter activities use the existing activity fields and persist/sync through the same `SavedState.activities` path as custom activities.
+- **Files changed**:
+  - `lib/services/starter_activity_library.dart` - new static starter library with grouped starter activities and default rule fields.
+  - `lib/screens/activities_screen.dart` - opens the starter picker sheet and shows grouped starter rows with `Add`/`Added` state.
+  - `lib/state/app_state.dart` - added duplicate title detection and duplicate-safe starter insertion.
+  - `test/widget_test.dart` - added coverage for adding a starter once, preserving rule fields, persistence, and regeneration eligibility.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+- **Decisions made**:
+  - Keep the starter library hardcoded/static for V1, with no AI, web discovery, public lists, sharing, roles, or recommendation logic.
+  - Treat duplicate prevention as a normalized title check so custom and starter activities cannot silently duplicate the same visible option.
+  - Keep starter activities embedded in the existing activity serialization path rather than introducing a separate starter/source field or Firestore collection.
+- **Tests run**: `dart format` on touched Dart files. `flutter test` passed. `flutter build web` passed. `flutter analyze` still exits nonzero because of the existing 39 info-level lints in older files (`withOpacity` and `prefer_const`), with no new errors from this milestone.
+- **Current state**: Activities now supports both custom add/edit and fast starter-library insertion. Added starters are normal editable activities, can be disabled, included in future regeneration when enabled, and persist locally/sync remotely through the current saved-state document.
+- **Next recommended step**: Wire the onboarding starter-picking step to the same starter library or add a small visible count/empty-state prompt on Activities when the bank is still sparse.
+- **Open questions**:
+  - Should duplicate prevention eventually use an explicit immutable starter source ID if users commonly rename starter activities?

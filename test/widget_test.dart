@@ -4,6 +4,7 @@ import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
+import 'package:life_shuffle/services/starter_activity_library.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -132,5 +133,41 @@ void main() {
     for (var i = 1; i < days.length; i++) {
       expect(days[i] - days[i - 1], greaterThan(1));
     }
+  });
+
+  test('AppState adds starter activities once and persists their rules',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+    final starter = StarterActivityLibrary.groups
+        .firstWhere((group) => group.category == 'Outside')
+        .activities
+        .firstWhere((activity) => activity.title == 'Walk waterfront');
+
+    expect(appState.addStarterActivity(starter), isTrue);
+    expect(appState.addStarterActivity(starter), isFalse);
+    expect(appState.activities, hasLength(1));
+    expect(appState.activities.single.title, starter.title);
+    expect(appState.activities.single.category, starter.category);
+    expect(appState.activities.single.durationMinutes, starter.durationMinutes);
+    expect(appState.activities.single.preferredTime, starter.preferredTime);
+    expect(appState.activities.single.maxPerWeek, starter.maxPerWeek);
+    expect(appState.activities.single.allowedWeekdays, starter.allowedWeekdays);
+    expect(
+      appState.activities.single.noConsecutiveDays,
+      starter.noConsecutiveDays,
+    );
+
+    appState.regenerate();
+    expect(
+      appState.weekPlan.expand((day) => day.activities),
+      anyElement((planned) => planned.activity.title == starter.title),
+    );
+
+    final saved = PersistenceService.load(const []);
+    expect(saved.activities, hasLength(1));
+    expect(saved.activities.single.title, starter.title);
+    expect(saved.activities.single.maxPerWeek, starter.maxPerWeek);
   });
 }

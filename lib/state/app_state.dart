@@ -119,6 +119,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool hasActivityTitle(String title) {
+    final normalized = _normalizeActivityTitle(title);
+    return activities.any(
+      (activity) => _normalizeActivityTitle(activity.title) == normalized,
+    );
+  }
+
+  bool addStarterActivity(Activity starter) {
+    if (hasActivityTitle(starter.title)) return false;
+    activities.add(
+      Activity(
+        id: '${starter.id}_${DateTime.now().microsecondsSinceEpoch}',
+        title: starter.title,
+        category: starter.category,
+        durationMinutes: starter.durationMinutes,
+        preferredTime: starter.preferredTime,
+        maxPerWeek: starter.maxPerWeek,
+        allowedWeekdays: starter.allowedWeekdays,
+        noConsecutiveDays: starter.noConsecutiveDays,
+        enabled: starter.enabled,
+      ),
+    );
+    _persist();
+    notifyListeners();
+    return true;
+  }
+
   void updateActivity(
     String id, {
     required String title,
@@ -313,6 +340,10 @@ class AppState extends ChangeNotifier {
         if (locked != null) pa.locked = locked;
       }
     }
+  }
+
+  static String _normalizeActivityTitle(String title) {
+    return title.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
   }
 }
 
