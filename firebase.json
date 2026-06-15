@@ -1,1 +1,17 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"life-shuffle-8d3bd","configurations":{"web":"1:461306833305:web:d942b45b46e816ff110b08"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "life-shuffle-8d3bd",
+          "configurations": {
+            "web": "1:461306833305:web:d942b45b46e816ff110b08"
+          }
+        }
+      }
+    }
+  }
+}
