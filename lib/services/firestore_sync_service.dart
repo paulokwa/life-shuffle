@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'persistence_service.dart';
+import 'planner_service.dart';
 
 class FirestoreSyncService {
   FirestoreSyncService._();
@@ -87,7 +88,10 @@ class FirestoreSyncService {
       final data = doc.data();
       if (data == null) return null;
       return FirestoreCalendar(
-        state: SavedState.fromMap(data),
+        state: SavedState.fromMap(
+          data,
+          fallbackActivities: PlannerService.defaultActivities,
+        ),
         metadata: CalendarMetadata.fromMap(
           data,
           fallback: defaultMetadata(userId),

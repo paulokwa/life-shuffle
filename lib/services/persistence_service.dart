@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/activity.dart';
 
 /// Lightweight local storage for in-session state.
 /// Wraps SharedPreferences (localStorage on web).
@@ -8,40 +12,41 @@ class PersistenceService {
 
   static late SharedPreferences _prefs;
 
-  // ─── Key prefixes ─────────────────────────────────────────────────────────
-  static const _keySeed    = 'ls_seed';
+  static const _keyActivities = 'ls_activities';
+  static const _keySeed = 'ls_seed';
   static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
-  static const _pfxLocked  = 'ls_lk_';
-
-  // ─── Init ─────────────────────────────────────────────────────────────────
+  static const _pfxLocked = 'ls_lk_';
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
 
-  // ─── Load (synchronous after init) ───────────────────────────────────────
-
-  static SavedState load(List<String> activityIds) {
+  static SavedState load(List<Activity> defaultActivities) {
+    final activities = _loadActivities(defaultActivities);
     final seed = _prefs.getInt(_keySeed) ?? 0;
     final updatedAtMillis = _prefs.getInt(_keyUpdatedAtMillis) ?? 0;
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
-    final lockedMap  = <String, bool>{};
+    final lockedMap = <String, bool>{};
 
-    for (final id in activityIds) {
-      final e = _prefs.getBool('$_pfxEnabled$id');
-      if (e != null) enabledMap[id] = e;
+    for (final activity in activities) {
+      final enabled = _prefs.getBool('$_pfxEnabled${activity.id}');
+      if (enabled != null) {
+        enabledMap[activity.id] = enabled;
+        activity.enabled = enabled;
+      }
 
-      final c = _prefs.getInt('$_pfxCheckin$id');
-      if (c != null) checkinMap[id] = c;
+      final checkin = _prefs.getInt('$_pfxCheckin${activity.id}');
+      if (checkin != null) checkinMap[activity.id] = checkin;
 
-      final l = _prefs.getBool('$_pfxLocked$id');
-      if (l != null) lockedMap[id] = l;
+      final locked = _prefs.getBool('$_pfxLocked${activity.id}');
+      if (locked != null) lockedMap[activity.id] = locked;
     }
 
     return SavedState(
+      activities: activities,
       seed: seed,
       updatedAtMillis: updatedAtMillis,
       enabledMap: enabledMap,
@@ -50,25 +55,51 @@ class PersistenceService {
     );
   }
 
-  // ─── Save (fire-and-forget; synchronous on web localStorage) ─────────────
+  static void saveActivities(List<Activity> activities) => _prefs.setString(
+        _keyActivities,
+        jsonEncode(activities.map((activity) => activity.toMap()).toList()),
+      );
 
-  static void saveSeed(int seed)               => _prefs.setInt(_keySeed, seed);
-  static void saveUpdatedAtMillis(int value)   => _prefs.setInt(_keyUpdatedAtMillis, value);
-  static void saveEnabled(String id, bool v)   => _prefs.setBool('$_pfxEnabled$id', v);
-  static void saveCheckin(String id, int v)    => _prefs.setInt('$_pfxCheckin$id', v);
-  static void saveLocked(String id, bool v)    => _prefs.setBool('$_pfxLocked$id', v);
+  static void saveSeed(int seed) => _prefs.setInt(_keySeed, seed);
+
+  static void saveUpdatedAtMillis(int value) =>
+      _prefs.setInt(_keyUpdatedAtMillis, value);
+
+  static void saveEnabled(String id, bool value) =>
+      _prefs.setBool('$_pfxEnabled$id', value);
+
+  static void saveCheckin(String id, int value) =>
+      _prefs.setInt('$_pfxCheckin$id', value);
+
+  static void saveLocked(String id, bool value) =>
+      _prefs.setBool('$_pfxLocked$id', value);
+
+  static List<Activity> _loadActivities(List<Activity> defaultActivities) {
+    final raw = _prefs.getString(_keyActivities);
+    if (raw == null || raw.isEmpty) {
+      return defaultActivities.map((activity) => activity.copy()).toList();
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final activities = decoded
+            .whereType<Map>()
+            .map((map) => Activity.fromMap(Map<String, dynamic>.from(map)))
+            .toList();
+        if (activities.isNotEmpty) return activities;
+      }
+    } catch (_) {
+      // Fall through to starter activities if local activity JSON is invalid.
+    }
+
+    return defaultActivities.map((activity) => activity.copy()).toList();
+  }
 }
 
-// ─── Persisted snapshot ───────────────────────────────────────────────────────
-
 class SavedState {
-  final int seed;
-  final int updatedAtMillis;
-  final Map<String, bool> enabledMap; // activityId → enabled
-  final Map<String, int>  checkinMap; // activityId → CheckStatus.index
-  final Map<String, bool> lockedMap;  // activityId → locked
-
   const SavedState({
+    required this.activities,
     required this.seed,
     required this.updatedAtMillis,
     required this.enabledMap,
@@ -76,8 +107,16 @@ class SavedState {
     required this.lockedMap,
   });
 
+  final List<Activity> activities;
+  final int seed;
+  final int updatedAtMillis;
+  final Map<String, bool> enabledMap;
+  final Map<String, int> checkinMap;
+  final Map<String, bool> lockedMap;
+
   Map<String, dynamic> toMap() {
     return {
+      'activities': activities.map((activity) => activity.toMap()).toList(),
       'seed': seed,
       'updatedAtMillis': updatedAtMillis,
       'enabledMap': enabledMap,
@@ -86,8 +125,12 @@ class SavedState {
     };
   }
 
-  factory SavedState.fromMap(Map<String, dynamic> map) {
+  factory SavedState.fromMap(
+    Map<String, dynamic> map, {
+    List<Activity> fallbackActivities = const [],
+  }) {
     return SavedState(
+      activities: _readActivities(map['activities'], fallbackActivities),
       seed: _readInt(map['seed']),
       updatedAtMillis: _readInt(map['updatedAtMillis']),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
@@ -100,5 +143,19 @@ class SavedState {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return 0;
+  }
+
+  static List<Activity> _readActivities(
+    Object? value,
+    List<Activity> fallbackActivities,
+  ) {
+    if (value is Iterable) {
+      final activities = value
+          .whereType<Map>()
+          .map((map) => Activity.fromMap(Map<String, dynamic>.from(map)))
+          .toList();
+      if (activities.isNotEmpty) return activities;
+    }
+    return fallbackActivities.map((activity) => activity.copy()).toList();
   }
 }

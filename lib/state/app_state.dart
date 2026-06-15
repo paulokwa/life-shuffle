@@ -20,7 +20,8 @@ class AppState extends ChangeNotifier {
   String? _calendarOwnerUserId;
   List<String> _calendarMemberUserIds = const [];
 
-  AppState({required this.activities, SavedState? savedState}) {
+  AppState({required List<Activity> activities, SavedState? savedState})
+      : activities = activities.map((activity) => activity.copy()).toList() {
     if (savedState != null) {
       _applySavedState(savedState, persistLocal: false);
     } else {
@@ -91,6 +92,48 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addActivity({
+    required String title,
+    required String category,
+    required int durationMinutes,
+    required String preferredTime,
+    required bool enabled,
+  }) {
+    activities.add(
+      Activity(
+        id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
+        title: title,
+        category: category,
+        durationMinutes: durationMinutes,
+        preferredTime: preferredTime,
+        enabled: enabled,
+      ),
+    );
+    _persist();
+    notifyListeners();
+  }
+
+  void updateActivity(
+    String id, {
+    required String title,
+    required String category,
+    required int durationMinutes,
+    required String preferredTime,
+    required bool enabled,
+  }) {
+    final idx = activities.indexWhere((a) => a.id == id);
+    if (idx < 0) return;
+    final activity = activities[idx];
+    activity
+      ..title = title
+      ..category = category
+      ..durationMinutes = durationMinutes
+      ..preferredTime = preferredTime
+      ..enabled = enabled;
+    _persist();
+    notifyListeners();
+  }
+
   // ─── Plan ─────────────────────────────────────────────────────────────────
 
   void regenerate() {
@@ -114,6 +157,9 @@ class AppState extends ChangeNotifier {
   // ─── Private ─────────────────────────────────────────────────────────────
 
   void _applySavedState(SavedState saved, {bool persistLocal = true}) {
+    activities
+      ..clear()
+      ..addAll(saved.activities.map((activity) => activity.copy()));
     _seed = saved.seed;
     _updatedAtMillis = saved.updatedAtMillis;
     for (final entry in saved.enabledMap.entries) {
@@ -138,6 +184,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _persistLocal(SavedState state) {
+    PersistenceService.saveActivities(state.activities);
     PersistenceService.saveSeed(state.seed);
     PersistenceService.saveUpdatedAtMillis(state.updatedAtMillis);
     for (final entry in state.enabledMap.entries) {
@@ -187,6 +234,7 @@ class AppState extends ChangeNotifier {
     }
 
     return SavedState(
+      activities: activities.map((activity) => activity.copy()).toList(),
       seed: _seed,
       updatedAtMillis: updatedAtMillis ?? _updatedAtMillis,
       enabledMap: enabledMap,
@@ -211,10 +259,7 @@ class AppState extends ChangeNotifier {
 
     final lockedIds = lockedItems == null
         ? <String>{}
-        : lockedItems.values
-            .expand((l) => l)
-            .map((a) => a.activity.id)
-            .toSet();
+        : lockedItems.values.expand((l) => l).map((a) => a.activity.id).toSet();
 
     final pool = activities
         .where((a) => a.enabled && !lockedIds.contains(a.id))
@@ -232,9 +277,9 @@ class AppState extends ChangeNotifier {
         if (dayLocked.isNotEmpty) {
           plan[i].activities.addAll(dayLocked);
           plan[i].activities.sort(
-            (a, b) => PlannerService.timeRank(a.timeSlot)
-                .compareTo(PlannerService.timeRank(b.timeSlot)),
-          );
+                (a, b) => PlannerService.timeRank(a.timeSlot)
+                    .compareTo(PlannerService.timeRank(b.timeSlot)),
+              );
         }
       }
     }

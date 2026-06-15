@@ -31,6 +31,14 @@ Color categoryChipBg(String category) {
       return const Color(0xFFFDF5EC);
     case 'Rest':
       return const Color(0xFFF2F0F8);
+    case 'Health / movement':
+      return const Color(0xFFEEF4FA);
+    case 'Food':
+      return const Color(0xFFFFF3E8);
+    case 'Chores / life admin':
+      return const Color(0xFFF1EFE8);
+    case 'Low-energy ideas':
+      return const Color(0xFFF3F5EC);
     default:
       return const Color(0xFFF4F2EE);
   }
@@ -50,6 +58,14 @@ Color categoryChipText(String category) {
       return sand;
     case 'Rest':
       return const Color(0xFF9A90BE);
+    case 'Health / movement':
+      return dustySky;
+    case 'Food':
+      return const Color(0xFFD27A3D);
+    case 'Chores / life admin':
+      return const Color(0xFF8F8677);
+    case 'Low-energy ideas':
+      return const Color(0xFF82945F);
     default:
       return const Color(0xFF9E9888);
   }

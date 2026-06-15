@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/persistence_service.dart';
@@ -11,23 +12,25 @@ import 'widgets/auth_gate.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    AuthService.markReady();
-  } catch (_) {
-    // Firebase not configured yet — app runs in local-only mode.
-    // Replace lib/firebase_options.dart by running: flutterfire configure
+  const localOnly = bool.fromEnvironment('LS_LOCAL_ONLY');
+  if (!localOnly) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      AuthService.markReady();
+    } catch (_) {
+      // Firebase not configured yet. The app runs in local-only mode.
+      // Replace lib/firebase_options.dart by running: flutterfire configure.
+    }
   }
 
   await PersistenceService.init();
 
-  final ids = PlannerService.defaultActivities.map((a) => a.id).toList();
-  final saved = PersistenceService.load(ids);
+  final saved = PersistenceService.load(PlannerService.defaultActivities);
 
   final appState = AppState(
-    activities: PlannerService.defaultActivities,
+    activities: saved.activities,
     savedState: saved,
   );
 
