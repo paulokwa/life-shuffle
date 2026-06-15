@@ -76,7 +76,8 @@ class PlannerService {
     required int seed,
   }) {
     final rng = Random(seed);
-    final shuffled = List<Activity>.from(pool)..shuffle(rng);
+    final activitiesPool = pool.where((activity) => activity.enabled).toList()
+      ..shuffle(rng);
 
     // Template: 7 slots across 7 days. Shuffling the template moves rest days
     // around each week/regeneration.
@@ -84,17 +85,27 @@ class PlannerService {
     template.shuffle(rng);
 
     final plans = <DayPlan>[];
-    var idx = 0;
+    final scheduledCounts = <String, int>{};
+    final scheduledDays = <String, List<int>>{};
 
     for (var i = 0; i < 7; i++) {
       final date = weekStart.add(Duration(days: i));
-      final count = idx < shuffled.length
-          ? template[i].clamp(0, shuffled.length - idx)
-          : 0;
-
+      final targetCount = template[i];
       final activities = <PlannedActivity>[];
-      for (var j = 0; j < count && idx < shuffled.length; j++) {
-        final act = shuffled[idx++];
+
+      for (var j = 0; j < targetCount; j++) {
+        final act = _pickActivity(
+          pool: activitiesPool,
+          weekday: date.weekday,
+          dayIndex: i,
+          scheduledCounts: scheduledCounts,
+          scheduledDays: scheduledDays,
+          rng: rng,
+        );
+        if (act == null) break;
+
+        scheduledCounts[act.id] = (scheduledCounts[act.id] ?? 0) + 1;
+        scheduledDays.putIfAbsent(act.id, () => <int>[]).add(i);
         activities.add(
           PlannedActivity(
             activity: act,
@@ -110,6 +121,69 @@ class PlannerService {
     }
 
     return plans;
+  }
+
+  static Activity? _pickActivity({
+    required List<Activity> pool,
+    required int weekday,
+    required int dayIndex,
+    required Map<String, int> scheduledCounts,
+    required Map<String, List<int>> scheduledDays,
+    required Random rng,
+  }) {
+    final strictCandidates = _eligibleActivities(
+      pool: pool,
+      weekday: weekday,
+      dayIndex: dayIndex,
+      scheduledCounts: scheduledCounts,
+      scheduledDays: scheduledDays,
+      enforceNoConsecutive: true,
+    );
+    if (strictCandidates.isEmpty) return null;
+    return _chooseLeastUsed(strictCandidates, scheduledCounts, rng);
+  }
+
+  static List<Activity> _eligibleActivities({
+    required List<Activity> pool,
+    required int weekday,
+    required int dayIndex,
+    required Map<String, int> scheduledCounts,
+    required Map<String, List<int>> scheduledDays,
+    required bool enforceNoConsecutive,
+  }) {
+    return pool.where((activity) {
+      if (!activity.enabled) return false;
+      if (!activity.allowedWeekdays.contains(weekday)) return false;
+      final daysForActivity = scheduledDays[activity.id] ?? const [];
+      if (daysForActivity.contains(dayIndex)) return false;
+      if ((scheduledCounts[activity.id] ?? 0) >= activity.maxPerWeek) {
+        return false;
+      }
+      if (enforceNoConsecutive &&
+          activity.noConsecutiveDays &&
+          _hasAdjacentDay(daysForActivity, dayIndex)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  static bool _hasAdjacentDay(List<int> days, int dayIndex) {
+    return days.any((day) => (day - dayIndex).abs() == 1);
+  }
+
+  static Activity _chooseLeastUsed(
+    List<Activity> candidates,
+    Map<String, int> scheduledCounts,
+    Random rng,
+  ) {
+    final shuffled = List<Activity>.from(candidates)..shuffle(rng);
+    shuffled.sort(
+      (a, b) => (scheduledCounts[a.id] ?? 0).compareTo(
+        scheduledCounts[b.id] ?? 0,
+      ),
+    );
+    return shuffled.first;
   }
 
   static int timeRank(String slot) {

@@ -97,6 +97,9 @@ class AppState extends ChangeNotifier {
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    required int maxPerWeek,
+    required List<int> allowedWeekdays,
+    required bool noConsecutiveDays,
     required bool enabled,
   }) {
     activities.add(
@@ -106,6 +109,9 @@ class AppState extends ChangeNotifier {
         category: category,
         durationMinutes: durationMinutes,
         preferredTime: preferredTime,
+        maxPerWeek: maxPerWeek,
+        allowedWeekdays: allowedWeekdays,
+        noConsecutiveDays: noConsecutiveDays,
         enabled: enabled,
       ),
     );
@@ -119,6 +125,9 @@ class AppState extends ChangeNotifier {
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    required int maxPerWeek,
+    required List<int> allowedWeekdays,
+    required bool noConsecutiveDays,
     required bool enabled,
   }) {
     final idx = activities.indexWhere((a) => a.id == id);
@@ -129,6 +138,9 @@ class AppState extends ChangeNotifier {
       ..category = category
       ..durationMinutes = durationMinutes
       ..preferredTime = preferredTime
+      ..maxPerWeek = maxPerWeek
+      ..allowedWeekdays = List<int>.from(allowedWeekdays)
+      ..noConsecutiveDays = noConsecutiveDays
       ..enabled = enabled;
     _persist();
     notifyListeners();

@@ -4,6 +4,10 @@ class Activity {
   String category;
   int durationMinutes;
   String preferredTime; // 'morning' | 'afternoon' | 'evening' | 'anytime'
+  int maxPerWeek;
+  List<int>
+      allowedWeekdays; // DateTime.weekday values: Monday 1 through Sunday 7
+  bool noConsecutiveDays;
   bool enabled;
 
   static const categories = [
@@ -26,14 +30,20 @@ class Activity {
     'evening',
   ];
 
+  static const allWeekdays = [1, 2, 3, 4, 5, 6, 7];
+
   Activity({
     required this.id,
     required this.title,
     required this.category,
     required this.durationMinutes,
     this.preferredTime = 'anytime',
+    int? maxPerWeek,
+    List<int>? allowedWeekdays,
+    this.noConsecutiveDays = false,
     this.enabled = true,
-  });
+  })  : maxPerWeek = _normalizeMaxPerWeek(maxPerWeek),
+        allowedWeekdays = _normalizeAllowedWeekdays(allowedWeekdays);
 
   String get duration {
     if (durationMinutes < 60) return '$durationMinutes min';
@@ -50,6 +60,9 @@ class Activity {
       category: category,
       durationMinutes: durationMinutes,
       preferredTime: preferredTime,
+      maxPerWeek: maxPerWeek,
+      allowedWeekdays: List<int>.from(allowedWeekdays),
+      noConsecutiveDays: noConsecutiveDays,
       enabled: enabled,
     );
   }
@@ -61,6 +74,9 @@ class Activity {
       'category': category,
       'durationMinutes': durationMinutes,
       'preferredTime': preferredTime,
+      'maxPerWeek': maxPerWeek,
+      'allowedWeekdays': allowedWeekdays,
+      'noConsecutiveDays': noConsecutiveDays,
       'enabled': enabled,
     };
   }
@@ -78,6 +94,11 @@ class Activity {
         map['durationMinutes'] ?? map['duration'],
       ),
       preferredTime: _readPreferredTime(map['preferredTime']),
+      maxPerWeek: _readMaxPerWeek(map['maxPerWeek']),
+      allowedWeekdays: _readAllowedWeekdays(map['allowedWeekdays']),
+      noConsecutiveDays: map['noConsecutiveDays'] is bool
+          ? map['noConsecutiveDays'] as bool
+          : false,
       enabled: map['enabled'] is bool ? map['enabled'] as bool : true,
     );
   }
@@ -114,5 +135,33 @@ class Activity {
       }
     }
     return 45;
+  }
+
+  static int _readMaxPerWeek(Object? value) {
+    if (value is int && value > 0) return _normalizeMaxPerWeek(value);
+    if (value is num && value > 0) return _normalizeMaxPerWeek(value.toInt());
+    return 1;
+  }
+
+  static List<int> _readAllowedWeekdays(Object? value) {
+    if (value is Iterable) {
+      return _normalizeAllowedWeekdays(
+          value.whereType<num>().map((v) => v.toInt()));
+    }
+    return List<int>.from(allWeekdays);
+  }
+
+  static int _normalizeMaxPerWeek(int? value) {
+    if (value == null || value < 1) return 1;
+    return value.clamp(1, 7).toInt();
+  }
+
+  static List<int> _normalizeAllowedWeekdays(Iterable<int>? value) {
+    final weekdays = (value ?? allWeekdays)
+        .where((day) => day >= 1 && day <= 7)
+        .toSet()
+        .toList()
+      ..sort();
+    return weekdays.isEmpty ? List<int>.from(allWeekdays) : weekdays;
   }
 }

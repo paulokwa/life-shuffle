@@ -171,6 +171,9 @@ class ActivitiesScreen extends StatelessWidget {
             required String category,
             required int durationMinutes,
             required String preferredTime,
+            required int maxPerWeek,
+            required List<int> allowedWeekdays,
+            required bool noConsecutiveDays,
             required bool enabled,
           }) {
             if (activity == null) {
@@ -179,6 +182,9 @@ class ActivitiesScreen extends StatelessWidget {
                 category: category,
                 durationMinutes: durationMinutes,
                 preferredTime: preferredTime,
+                maxPerWeek: maxPerWeek,
+                allowedWeekdays: allowedWeekdays,
+                noConsecutiveDays: noConsecutiveDays,
                 enabled: enabled,
               );
             } else {
@@ -188,6 +194,9 @@ class ActivitiesScreen extends StatelessWidget {
                 category: category,
                 durationMinutes: durationMinutes,
                 preferredTime: preferredTime,
+                maxPerWeek: maxPerWeek,
+                allowedWeekdays: allowedWeekdays,
+                noConsecutiveDays: noConsecutiveDays,
                 enabled: enabled,
               );
             }
@@ -254,6 +263,13 @@ class _ActivityCard extends StatelessWidget {
                             color: textMuted,
                           ),
                         ),
+                        Text(
+                          _ruleSummary(activity),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: textMuted,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -298,6 +314,14 @@ class _ActivityCard extends StatelessWidget {
       _ => 'Anytime',
     };
   }
+
+  static String _ruleSummary(Activity activity) {
+    final days = activity.allowedWeekdays.length == 7
+        ? 'any day'
+        : '${activity.allowedWeekdays.length} days';
+    final consecutive = activity.noConsecutiveDays ? ', no back-to-back' : '';
+    return 'Max ${activity.maxPerWeek}/week, $days$consecutive';
+  }
 }
 
 class _ActivityFormSheet extends StatefulWidget {
@@ -312,6 +336,9 @@ class _ActivityFormSheet extends StatefulWidget {
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    required int maxPerWeek,
+    required List<int> allowedWeekdays,
+    required bool noConsecutiveDays,
     required bool enabled,
   }) onSave;
 
@@ -323,8 +350,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
   late final TextEditingController _durationController;
+  late final TextEditingController _maxPerWeekController;
   late String _category;
   late String _preferredTime;
+  late Set<int> _allowedWeekdays;
+  late bool _noConsecutiveDays;
   late bool _enabled;
 
   @override
@@ -335,8 +365,15 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     _durationController = TextEditingController(
       text: '${activity?.durationMinutes ?? 45}',
     );
+    _maxPerWeekController = TextEditingController(
+      text: '${activity?.maxPerWeek ?? 1}',
+    );
     _category = activity?.category ?? 'Outside';
     _preferredTime = activity?.preferredTime ?? 'anytime';
+    _allowedWeekdays = Set<int>.from(
+      activity?.allowedWeekdays ?? Activity.allWeekdays,
+    );
+    _noConsecutiveDays = activity?.noConsecutiveDays ?? false;
     _enabled = activity?.enabled ?? true;
   }
 
@@ -344,6 +381,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
   void dispose() {
     _titleController.dispose();
     _durationController.dispose();
+    _maxPerWeekController.dispose();
     super.dispose();
   }
 
@@ -447,6 +485,71 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                   },
                 ),
                 const SizedBox(height: 12),
+                TextFormField(
+                  controller: _maxPerWeekController,
+                  keyboardType: TextInputType.number,
+                  decoration: _inputDecoration('Max per week'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) return null;
+                    final parsed = int.tryParse(value.trim());
+                    if (parsed == null || parsed <= 0) {
+                      return 'Use a number from 1 to 7';
+                    }
+                    if (parsed > 7) return 'Keep it to 7 or fewer';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                _WeekdaySelector(
+                  selectedWeekdays: _allowedWeekdays,
+                  onChanged: (weekday) {
+                    setState(() {
+                      if (_allowedWeekdays.contains(weekday)) {
+                        if (_allowedWeekdays.length > 1) {
+                          _allowedWeekdays.remove(weekday);
+                        }
+                      } else {
+                        _allowedWeekdays.add(weekday);
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: surfaceWhite,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: borderWarm),
+                  ),
+                  child: SwitchListTile.adaptive(
+                    value: _noConsecutiveDays,
+                    activeThumbColor: accentSage,
+                    activeTrackColor: accentSage.withValues(alpha: 0.28),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 2,
+                    ),
+                    title: Text(
+                      'Avoid back-to-back days',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'The planner avoids adjacent days when it has another option.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: textMuted,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _noConsecutiveDays = value);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Container(
                   decoration: BoxDecoration(
                     color: surfaceWhite,
@@ -538,11 +641,15 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final duration = int.tryParse(_durationController.text.trim()) ?? 45;
+    final maxPerWeek = int.tryParse(_maxPerWeekController.text.trim()) ?? 1;
     widget.onSave(
       title: _titleController.text.trim(),
       category: _category,
       durationMinutes: duration.clamp(5, 720).toInt(),
       preferredTime: _preferredTime,
+      maxPerWeek: maxPerWeek.clamp(1, 7).toInt(),
+      allowedWeekdays: _allowedWeekdays.toList()..sort(),
+      noConsecutiveDays: _noConsecutiveDays,
       enabled: _enabled,
     );
   }
@@ -554,6 +661,87 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
       'evening' => 'Evening',
       _ => 'Anytime',
     };
+  }
+}
+
+class _WeekdaySelector extends StatelessWidget {
+  const _WeekdaySelector({
+    required this.selectedWeekdays,
+    required this.onChanged,
+  });
+
+  final Set<int> selectedWeekdays;
+  final ValueChanged<int> onChanged;
+
+  static const _labels = {
+    1: 'M',
+    2: 'T',
+    3: 'W',
+    4: 'T',
+    5: 'F',
+    6: 'S',
+    7: 'S',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: surfaceWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderWarm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Allowed days',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: Activity.allWeekdays.map((weekday) {
+              final selected = selectedWeekdays.contains(weekday);
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: weekday == Activity.allWeekdays.last ? 0 : 6,
+                  ),
+                  child: GestureDetector(
+                    onTap: () => onChanged(weekday),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: selected ? primaryTerracotta : backgroundCream,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(
+                          color: selected ? primaryTerracotta : borderWarm,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _labels[weekday]!,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? Colors.white : textMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
   }
 }
 

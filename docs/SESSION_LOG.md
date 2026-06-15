@@ -204,3 +204,26 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Fix Firebase Auth settings separately for normal signed-in testing, likely authorized domain or Google provider setup depending on the exact Firebase Auth error.
 - **Open questions**:
   - Should there be a documented npm/PowerShell script for starting the local-only manual test build?
+
+---
+
+## 2026-06-15 - Basic activity generation rules
+
+- **Goal**: Add simple user-editable generation rules to activities and make the local planner respect them.
+- **Summary**: Extended activities with `maxPerWeek`, `allowedWeekdays`, and `noConsecutiveDays`. Added compact rule controls to the existing Add/Edit Activity bottom sheet: max-per-week number input, weekday chips, and an avoid-back-to-back-days toggle. Activity cards now show a short rule summary. The planner still uses the existing weekly template and preferred time/category time slots, but it now filters generated activities by enabled state, allowed weekdays, per-week count, same-day duplicate prevention, and no-consecutive-days. If rules block a slot, generation leaves that slot empty rather than crashing.
+- **Files changed**:
+  - `lib/models/activity.dart` - added rule fields, defaults, normalization, serialization, and deserialization.
+  - `lib/screens/activities_screen.dart` - added rule controls and rule summary display.
+  - `lib/state/app_state.dart` - passes rule fields through add/update activity methods.
+  - `lib/services/planner_service.dart` - respects max-per-week, allowed weekdays, no-consecutive-days, and same-day duplicate prevention.
+  - `test/widget_test.dart` - added rule persistence and planner behavior coverage.
+  - `docs/SESSION_LOG.md` - recorded this milestone.
+- **Decisions made**:
+  - Keep rules embedded in serialized activity objects, so existing SharedPreferences and Firestore calendar document sync continue to work without a schema split.
+  - Default `maxPerWeek` to 1, default allowed weekdays to all days, and default `noConsecutiveDays` to false.
+  - Leave blocked slots empty rather than relaxing hard user rules or adding conflict explanation UI in this milestone.
+- **Tests run**: `flutter test` passed. `flutter build web` passed. `flutter analyze` ran but still exits nonzero because of the existing 39 info-level lints in older files (`withOpacity` and `prefer_const`), with no new errors.
+- **Current state**: Activity rules are editable, persisted/synced through existing activity serialization, and respected by local generation for future regenerations.
+- **Next recommended step**: Add a small user-facing empty/soft-failure note when strict rules leave a week lighter than expected.
+- **Open questions**:
+  - Should the next planner milestone add preview/undo for regeneration before adding more rule types?
