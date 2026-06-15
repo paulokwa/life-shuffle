@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,17 +21,21 @@ class _SignInScreenState extends State<SignInScreen> {
       _loading = true;
       _error = null;
     });
+    final String? origin = kIsWeb ? Uri.base.origin : null;
+    debugPrint('[AuthDebug] sign-in attempt, origin: ${origin ?? 'native'}');
     try {
       await AuthService.signInWithGoogle();
       // AuthGate rebuilds automatically via authStateChanges stream.
     } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthDebug] FirebaseAuthException code=${e.code} message=${e.message} origin=${origin ?? 'native'}');
       if (mounted) {
         setState(() {
-          _error = _friendlyAuthError(e);
+          _error = _friendlyAuthError(e, origin);
           _loading = false;
         });
       }
     } catch (e) {
+      debugPrint('[AuthDebug] unexpected error: $e');
       if (mounted) {
         setState(() {
           _error = 'Sign-in failed: $e';
@@ -40,10 +45,15 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  String _friendlyAuthError(FirebaseAuthException e) {
+  String _friendlyAuthError(FirebaseAuthException e, [String? origin]) {
+    // Dynamic code generated when the API key HTTP-referrer restriction blocks the request.
+    if (e.code.startsWith('requests-from-referer-') && e.code.endsWith('-are-blocked')) {
+      return 'Sign-in failed: API key blocks requests from origin "${origin ?? '?'}". '
+          'Add this referrer under Google Cloud Console → APIs & Services → Credentials → [API key] → HTTP referrers.';
+    }
     return switch (e.code) {
       'unauthorized-domain' =>
-        'Sign-in failed: this app domain is not authorized in Firebase Auth. Add this host under Authentication > Settings > Authorized domains.',
+        'Sign-in failed [${e.code}]: origin="${origin ?? '?'}" — add this host under Firebase Auth > Settings > Authorized domains.',
       'popup-blocked' =>
         'Sign-in failed: the browser blocked the Google sign-in popup.',
       'popup-closed-by-user' => 'Sign-in was cancelled before Google finished.',

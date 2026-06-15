@@ -33,7 +33,7 @@ class DefaultFirebaseOptions {
   // Replace all REPLACE_ME values by running: flutterfire configure
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDpB3IANRhHvoyxsq0JBF6vuTReR65Yhm8',
+    apiKey: 'AIzaSyC1Hs2yzu00BCF0W17NMHyL6VG73W9RVZ8',
     appId: '1:461306833305:web:d942b45b46e816ff110b08',
     messagingSenderId: '461306833305',
     projectId: 'life-shuffle-8d3bd',

@@ -249,3 +249,20 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Wire the onboarding starter-picking step to the same starter library or add a small visible count/empty-state prompt on Activities when the bank is still sparse.
 - **Open questions**:
   - Should duplicate prevention eventually use an explicit immutable starter source ID if users commonly rename starter activities?
+
+---
+
+## 2026-06-15 - Firebase Google sign-in fix + API key rotation remediation
+
+- **Goal**: Fix Google sign-in after GitHub reported a leaked API key. Confirm the new key is wired correctly and that authorized-domain settings are in order.
+- **Summary**: Diagnosed a two-layer sign-in failure. The first layer was a Google Cloud API key HTTP referrer restriction blocking `http://127.0.0.1:8080` (the port used for local testing in this session). The second layer, revealed after switching back to port 8769, was Firebase Auth's own authorized-domains list missing `127.0.0.1`. Added debug logging to `sign_in_screen.dart` so future auth failures surface the exact `error.code`, `error.message`, and current browser origin in both the Flutter/browser console and the in-app error message. Sign-in now works on `http://127.0.0.1:8769/`.
+- **Files changed**:
+  - `lib/screens/sign_in_screen.dart` — added `kIsWeb`/`Uri.base.origin` debug logging, improved `_friendlyAuthError` to show origin for `unauthorized-domain` and a readable message for the dynamic `requests-from-referer-*-are-blocked` API key error code.
+- **Decisions made**:
+  - Keep the new API key (`AIzaSyC1Hs2yzu00BCF0W17NMHyL6VG73W9RVZ8`) in `firebase_options.dart`. Do not move config to env files.
+  - Do not revoke the old leaked key until sign-in was confirmed working with the new key (now confirmed).
+- **Tests run**: `flutter test` passed. `flutter build web` passed. Sign-in manually verified working in Chrome on `http://127.0.0.1:8769/`.
+- **Current state**: Google sign-in is working. `firebase_options.dart` uses the new API key. Firebase Auth authorized domains include `127.0.0.1`, `localhost`, `life-shuffle.netlify.app`, and the two default Firebase domains.
+- **Next recommended step**: Revoke the old leaked API key in Google Cloud Console now that the new key is confirmed working.
+- **Open questions**:
+  - None for this fix. Old key revocation is the only remaining remediation step.
