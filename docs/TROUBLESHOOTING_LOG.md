@@ -115,3 +115,46 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Always distribute the key securely (password manager, 1Password, LastPass, team chat with autodeleting messages) rather than in any file. The env-var approach means each machine must fetch the key once and set it locally; this is intentional — it prevents accidental commits.
 
 ---
+
+## 2026-06-16 — Sign-in broken after rotating to a new API key (referrer restrictions not set)
+
+- **Context**: After rotating the Firebase web API key and setting the new key in the Netlify env var and local env var, both local and Netlify sign-in stopped working.
+- **Symptoms**:
+  - Local: "Sign-in failed (requests-from-referer-http://127.0.0.1:8769-are-blocked.): Error" on the sign-in page.
+  - Netlify: Spinning wheel on the "Continue with Google" button, never resolves.
+- **Cause**: A brand new API key has no HTTP referrer restrictions configured. The old key had them set up; the new key starts blank (or blocks everything by default). Google Cloud Console's key referrer restrictions and Firebase Auth authorized domains are independent — rotating the key loses all the referrer config on the old key.
+- **Fix**: Go to **Google Cloud Console → APIs & Services → Credentials → [new key] → Application restrictions → HTTP referrers** and add:
+  ```
+  *.firebaseapp.com
+  *.firebaseapp.com/*
+  127.0.0.1:*
+  127.0.0.1:8769
+  127.0.0.1:8769/*
+  life-shuffle-8d3bd.firebaseapp.com/*
+  life-shuffle.netlify.app
+  life-shuffle.netlify.app/*
+  localhost:*
+  localhost:8769
+  ```
+  Wait 2-3 minutes for propagation. Netlify recovers without a rebuild; local just needs a browser refresh.
+- **Files affected**: None — this is a Google Cloud Console configuration task.
+- **Prevention / future note**: Every time you rotate to a new API key, immediately go to Google Cloud Console and copy the referrer restrictions from the old key to the new one before testing sign-in. Keep a copy of the required referrer list somewhere handy (e.g. this file) so you're not rebuilding it from scratch each time.
+
+---
+
+## 2026-06-16 — `flutter run` fails with "Failed to bind web development server" on port 8769
+
+- **Context**: Tried to restart the local dev server by running `./tool/local_run.ps1` after the previous server process went stale/silent.
+- **Symptoms**: `SocketException: Failed to create server socket ... port = 8769` — Flutter refuses to start because the port is already occupied by a zombie process from the previous session.
+- **Cause**: The old `flutter run` process didn't exit cleanly, leaving port 8769 bound even though it was no longer serving the app correctly.
+- **Fix**: Kill the process holding the port, then re-run the script:
+  ```powershell
+  # In PowerShell (VS Code terminal)
+  $p = (Get-NetTCPConnection -LocalPort 8769 -ErrorAction SilentlyContinue).OwningProcess
+  if ($p) { Stop-Process -Id $p -Force }
+  ./tool/local_run.ps1
+  ```
+- **Files affected**: None.
+- **Prevention / future note**: If `./tool/local_run.ps1` gives a port binding error, always run the kill command above first. Do not use `$pid` as a variable name in PowerShell — it is a reserved read-only variable; use `$p` or similar instead.
+
+---
