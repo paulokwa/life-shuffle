@@ -259,10 +259,35 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Files changed**:
   - `lib/screens/sign_in_screen.dart` — added `kIsWeb`/`Uri.base.origin` debug logging, improved `_friendlyAuthError` to show origin for `unauthorized-domain` and a readable message for the dynamic `requests-from-referer-*-are-blocked` API key error code.
 - **Decisions made**:
-  - Keep the new API key (`AIzaSyC1Hs2yzu00BCF0W17NMHyL6VG73W9RVZ8`) in `firebase_options.dart`. Do not move config to env files.
+  - Keep the new API key in `firebase_options.dart` for now. (Reversed on 2026-06-16 — see the env-injection milestone below; the key was moved out of source entirely.)
   - Do not revoke the old leaked key until sign-in was confirmed working with the new key (now confirmed).
 - **Tests run**: `flutter test` passed. `flutter build web` passed. Sign-in manually verified working in Chrome on `http://127.0.0.1:8769/`.
 - **Current state**: Google sign-in is working. `firebase_options.dart` uses the new API key. Firebase Auth authorized domains include `127.0.0.1`, `localhost`, `life-shuffle.netlify.app`, and the two default Firebase domains.
 - **Next recommended step**: Revoke the old leaked API key in Google Cloud Console now that the new key is confirmed working.
 - **Open questions**:
   - None for this fix. Old key revocation is the only remaining remediation step.
+
+---
+
+## 2026-06-16 - Stop committing Firebase API keys: build-time env injection
+
+- **Goal**: Stop the repeating GitHub secret-scanning loop by removing the committed Firebase web API key entirely instead of rotating it again.
+- **Summary**: `lib/firebase_options.dart` no longer contains a literal API key. The web `apiKey` is now `String.fromEnvironment('FIREBASE_WEB_API_KEY')`, so it must be supplied at build time via `--dart-define`. `lib/main.dart` checks for an empty key before attempting `Firebase.initializeApp` and falls back to local-only mode with a clear debug log instead of relying solely on a try/catch. `netlify.toml`'s build command now passes `--dart-define=FIREBASE_WEB_API_KEY=$FIREBASE_WEB_API_KEY`, sourced from a Netlify dashboard environment variable. Added `tool/local_run.ps1.example` (committed, no real key) and gitignored `.env.local` and `tool/local_run.ps1` for local use. Redacted the literal key that had been pasted into the 2026-06-15 session log entry above.
+- **Files changed**:
+  - `lib/firebase_options.dart` — apiKey now read from `String.fromEnvironment('FIREBASE_WEB_API_KEY')`; non-secret identifiers (appId, messagingSenderId, projectId, authDomain, storageBucket) unchanged.
+  - `lib/main.dart` — explicit empty-key check before Firebase init, with a debug-log fallback message.
+  - `netlify.toml` — build command passes `--dart-define=FIREBASE_WEB_API_KEY=$FIREBASE_WEB_API_KEY`.
+  - `.gitignore` — added `.env.local` and `tool/local_run.ps1`.
+  - `tool/local_run.ps1.example` — new committed template (placeholder key only).
+  - `README.md` — added local dev setup and Netlify env var notes.
+  - `docs/SESSION_LOG.md` — this entry; redacted the literal key from the 2026-06-15 entry.
+  - `docs/TROUBLESHOOTING_LOG.md` — recorded why key rotation alone kept getting re-flagged.
+- **Decisions made**:
+  - Stop storing any real Firebase web API key in committed source or docs, even though it is a restricted client-side key rather than a server secret — GitHub's scanner doesn't distinguish, so rotation alone just resets the clock on the same alert.
+  - Keep non-secret Firebase identifiers (appId, projectId, etc.) in source since they aren't flagged and `flutterfire configure` regenerates them anyway.
+  - Local-only mode (no sign-in) remains the default whenever the key isn't supplied, matching existing `LS_LOCAL_ONLY` behavior.
+- **Tests run**: `flutter test` passed. `flutter build web --dart-define=FIREBASE_WEB_API_KEY=<redacted>` passed using the real local key (not committed). Repo search for `AIza` confirmed no matches remain in tracked files. `flutter run -d chrome --web-port 8769` launched successfully on localhost with environment variable injection; sign-in screen appears, confirming Firebase initialization with the injected key.
+- **Current state**: No real API key exists in any committed file. Local and Netlify builds require `FIREBASE_WEB_API_KEY` to be supplied externally to enable sign-in; omitting it runs the app in local-only mode. Dev server spins up automatically via `flutter run` when `FIREBASE_WEB_API_KEY` is set as a system environment variable. Sign-in is functional on localhost.
+- **Next recommended step**: (1) Add `FIREBASE_WEB_API_KEY` to the Netlify dashboard environment variables (Site settings → Environment variables) using the current valid key, then trigger a Netlify rebuild and confirm sign-in works on the deployed site. (2) Document setup for other machines (see TROUBLESHOOTING_LOG.md for multi-machine setup guide).
+- **Open questions**:
+  - Should the previously-leaked key history in git (older commits) be scrubbed via history rewrite, or is forward-only remediation (current state has no key) sufficient given GitHub only re-flags on new pushes containing the pattern?

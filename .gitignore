@@ -1,6 +1,10 @@
 # Local MCP config (contains API keys — do not commit)
 .mcp.json
 
+# Local env/secrets — never commit real Firebase/Google API keys
+.env.local
+tool/local_run.ps1
+
 # IDE
 .idea/
 .vscode/

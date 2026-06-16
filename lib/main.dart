@@ -13,7 +13,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const localOnly = bool.fromEnvironment('LS_LOCAL_ONLY');
-  if (!localOnly) {
+  if (!localOnly && DefaultFirebaseOptions.webApiKey.isEmpty) {
+    debugPrint(
+      'FIREBASE_WEB_API_KEY was not provided at build time. '
+      'Falling back to local-only mode. Pass '
+      '--dart-define=FIREBASE_WEB_API_KEY=your-key to enable sign-in.',
+    );
+  } else if (!localOnly) {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,

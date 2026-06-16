@@ -1,17 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// STUB — replace this file by running:
+// Firebase project identifiers for life-shuffle-8d3bd.
 //
-//   dart pub global activate flutterfire_cli
-//   flutterfire configure
+// The web API key is NOT stored here. GitHub secret scanning flags Google API
+// keys committed to source, so it is injected at build time instead:
 //
-// Steps before running that command:
-//   1. Go to console.firebase.google.com and create a project.
-//   2. Add a Web app inside the project.
-//   3. Under Authentication > Sign-in method, enable Google.
-//   4. Run `flutterfire configure` — it will overwrite this file with real values.
+//   flutter run -d chrome --dart-define=FIREBASE_WEB_API_KEY=your-key-here
+//   flutter build web --dart-define=FIREBASE_WEB_API_KEY=your-key-here
 //
-// Until the real file is in place, the app runs in local-only mode
-// (no sign-in prompt; the full local planner loop still works).
+// See README.md for local setup and netlify.toml for the Netlify build, which
+// reads FIREBASE_WEB_API_KEY from a Netlify environment variable.
+//
+// If FIREBASE_WEB_API_KEY is not supplied, apiKey is empty and main.dart
+// skips Firebase init, falling back to local-only mode.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
@@ -30,10 +30,12 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // Replace all REPLACE_ME values by running: flutterfire configure
+  static const String webApiKey = String.fromEnvironment(
+    'FIREBASE_WEB_API_KEY',
+  );
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyC1Hs2yzu00BCF0W17NMHyL6VG73W9RVZ8',
+    apiKey: webApiKey,
     appId: '1:461306833305:web:d942b45b46e816ff110b08',
     messagingSenderId: '461306833305',
     projectId: 'life-shuffle-8d3bd',
