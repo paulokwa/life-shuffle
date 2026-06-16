@@ -3,6 +3,8 @@ import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 
+enum PlanStyle { gentle, balanced, push }
+
 /// Pure stateless planner. All mutable state lives in AppState.
 class PlannerService {
   PlannerService._();
@@ -74,14 +76,19 @@ class PlannerService {
     required DateTime weekStart,
     required List<Activity> pool,
     required int seed,
+    PlanStyle planStyle = PlanStyle.balanced,
   }) {
     final rng = Random(seed);
     final activitiesPool = pool.where((activity) => activity.enabled).toList()
       ..shuffle(rng);
 
-    // Template: 7 slots across 7 days. Shuffling the template moves rest days
-    // around each week/regeneration.
-    final template = [1, 2, 0, 1, 1, 2, 0];
+    // Template: activity counts per day. Shuffled each regeneration so rest
+    // days move around. Totals: gentle ~3, balanced ~5, push ~7.
+    final template = switch (planStyle) {
+      PlanStyle.gentle   => [0, 1, 0, 1, 0, 0, 1],
+      PlanStyle.balanced => [1, 0, 1, 1, 0, 1, 1],
+      PlanStyle.push     => [1, 2, 0, 1, 1, 2, 0],
+    };
     template.shuffle(rng);
 
     final plans = <DayPlan>[];

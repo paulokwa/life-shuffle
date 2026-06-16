@@ -139,18 +139,44 @@ class ActivitiesScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  ...activities.map(
-                    (activity) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _ActivityCard(
-                        activity: activity,
-                        onEdit: () => _showActivityForm(
-                          context,
+                  if (activities.isEmpty)
+                    LsCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No activities yet',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Browse the starter library above to get started quickly, or tap + Add to create your own.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: textMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ...activities.map(
+                      (activity) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _ActivityCard(
                           activity: activity,
+                          onEdit: () => _showActivityForm(
+                            context,
+                            activity: activity,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

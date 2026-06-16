@@ -57,18 +57,45 @@ class PlanScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   _DayStrip(plans: plans),
                   const SizedBox(height: 16),
-                  ...activeDays.map(
-                    (d) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _DayBlock(plan: d),
+                  if (activeDays.isEmpty)
+                    LsCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No plan yet',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Add some activities then tap Regenerate below to build your week.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: textMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    ...activeDays.map(
+                      (d) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _DayBlock(plan: d),
+                      ),
                     ),
-                  ),
-                  if (restCount > 0) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '$restCount rest ${restCount == 1 ? "day" : "days"} this week',
-                      style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
-                    ),
+                    if (restCount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '$restCount rest ${restCount == 1 ? "day" : "days"} this week',
+                        style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 20),
                   GestureDetector(

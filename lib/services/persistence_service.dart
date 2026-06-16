@@ -15,6 +15,7 @@ class PersistenceService {
   static const _keyActivities = 'ls_activities';
   static const _keySeed = 'ls_seed';
   static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
+  static const _keyPlanStyle = 'ls_plan_style';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -45,10 +46,13 @@ class PersistenceService {
       if (locked != null) lockedMap[activity.id] = locked;
     }
 
+    final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
+
     return SavedState(
       activities: activities,
       seed: seed,
       updatedAtMillis: updatedAtMillis,
+      planStyle: planStyle,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -61,6 +65,9 @@ class PersistenceService {
       );
 
   static void saveSeed(int seed) => _prefs.setInt(_keySeed, seed);
+
+  static void savePlanStyle(String value) =>
+      _prefs.setString(_keyPlanStyle, value);
 
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
@@ -105,11 +112,13 @@ class SavedState {
     required this.enabledMap,
     required this.checkinMap,
     required this.lockedMap,
+    this.planStyle = 'balanced',
   });
 
   final List<Activity> activities;
   final int seed;
   final int updatedAtMillis;
+  final String planStyle;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -119,6 +128,7 @@ class SavedState {
       'activities': activities.map((activity) => activity.toMap()).toList(),
       'seed': seed,
       'updatedAtMillis': updatedAtMillis,
+      'planStyle': planStyle,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -133,6 +143,7 @@ class SavedState {
       activities: _readActivities(map['activities'], fallbackActivities),
       seed: _readInt(map['seed']),
       updatedAtMillis: _readInt(map['updatedAtMillis']),
+      planStyle: (map['planStyle'] as String?) ?? 'balanced',
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),

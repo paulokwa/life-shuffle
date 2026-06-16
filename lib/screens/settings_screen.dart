@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
+import '../services/planner_service.dart' show PlanStyle;
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
@@ -160,25 +161,7 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   _SectionLabel(label: 'PLANNING'),
                   const SizedBox(height: 10),
-                  _SettingsGroup(
-                    children: const [
-                      _SettingsRow(
-                        icon: Icons.calendar_today_rounded,
-                        label: 'Week starts on',
-                        value: 'Monday',
-                      ),
-                      _SettingsRow(
-                        icon: Icons.bolt_rounded,
-                        label: 'Auto-generate plan',
-                        value: 'On Sundays',
-                      ),
-                      _SettingsRow(
-                        icon: Icons.lock_open_rounded,
-                        label: 'Locked activities',
-                        value: '1 this week',
-                      ),
-                    ],
-                  ),
+                  _PlanStyleCard(state: state),
                   const SizedBox(height: 16),
                   _SectionLabel(label: 'CATEGORIES'),
                   const SizedBox(height: 10),
@@ -441,6 +424,102 @@ class _TextButtonRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PlanStyleCard extends StatelessWidget {
+  const _PlanStyleCard({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Plan style',
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Controls how many activities the planner targets each week.',
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+          ),
+          const SizedBox(height: 12),
+          _PlanStylePicker(
+            current: state.planStyle,
+            onChanged: state.setPlanStyle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanStylePicker extends StatelessWidget {
+  const _PlanStylePicker({required this.current, required this.onChanged});
+
+  final PlanStyle current;
+  final ValueChanged<PlanStyle> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [
+      (PlanStyle.gentle, 'Gentle', '~3/week'),
+      (PlanStyle.balanced, 'Balanced', '~5/week'),
+      (PlanStyle.push, 'Push me', '~7/week'),
+    ];
+    return Row(
+      children: options.indexed.map(((int, (PlanStyle, String, String)) pair) {
+        final i = pair.$1;
+        final (style, label, hint) = pair.$2;
+        final selected = current == style;
+        final isLast = i == options.length - 1;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => onChanged(style),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: EdgeInsets.only(right: isLast ? 0 : 8),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: selected ? primaryTerracotta : warmBeige,
+                borderRadius: BorderRadius.circular(100),
+              ),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : textPrimary,
+                    ),
+                  ),
+                  Text(
+                    hint,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: selected
+                          ? Colors.white.withValues(alpha: 0.8)
+                          : textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

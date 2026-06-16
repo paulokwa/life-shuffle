@@ -4,7 +4,7 @@ import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../services/firestore_sync_service.dart';
 import '../services/persistence_service.dart';
-import '../services/planner_service.dart';
+import '../services/planner_service.dart' show PlannerService, PlanStyle;
 
 /// Holds all mutable in-session state: activity pool, current week plan.
 /// Persists changes to [PersistenceService] and [FirestoreSyncService] (if signed in) on every mutation.
@@ -14,6 +14,7 @@ class AppState extends ChangeNotifier {
   late List<DayPlan> _weekPlan;
   int _seed = 0;
   int _updatedAtMillis = 0;
+  PlanStyle _planStyle = PlanStyle.balanced;
   String? _userId;
   String? _calendarId;
   String _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
@@ -30,6 +31,7 @@ class AppState extends ChangeNotifier {
   }
 
   List<DayPlan> get weekPlan => _weekPlan;
+  PlanStyle get planStyle => _planStyle;
   String? get userId => _userId;
   String? get calendarId => _calendarId;
   String get calendarTitle => _calendarTitle;
@@ -182,6 +184,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setPlanStyle(PlanStyle style) {
+    if (_planStyle == style) return;
+    _planStyle = style;
+    _weekPlan = _buildPlan(lockedItems: _collectLocked());
+    _persist();
+    notifyListeners();
+  }
+
   void toggleLock(PlannedActivity activity) {
     activity.locked = !activity.locked;
     _persist();
@@ -201,6 +211,7 @@ class AppState extends ChangeNotifier {
       ..addAll(saved.activities.map((activity) => activity.copy()));
     _seed = saved.seed;
     _updatedAtMillis = saved.updatedAtMillis;
+    _planStyle = _parsePlanStyle(saved.planStyle);
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -226,6 +237,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveActivities(state.activities);
     PersistenceService.saveSeed(state.seed);
     PersistenceService.saveUpdatedAtMillis(state.updatedAtMillis);
+    PersistenceService.savePlanStyle(state.planStyle);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -276,6 +288,7 @@ class AppState extends ChangeNotifier {
       activities: activities.map((activity) => activity.copy()).toList(),
       seed: _seed,
       updatedAtMillis: updatedAtMillis ?? _updatedAtMillis,
+      planStyle: _planStyle.name,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -308,6 +321,7 @@ class AppState extends ChangeNotifier {
       weekStart: weekStart,
       pool: pool,
       seed: seed,
+      planStyle: _planStyle,
     );
 
     if (lockedItems != null) {
@@ -344,6 +358,13 @@ class AppState extends ChangeNotifier {
 
   static String _normalizeActivityTitle(String title) {
     return title.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  static PlanStyle _parsePlanStyle(String value) {
+    return PlanStyle.values.firstWhere(
+      (s) => s.name == value,
+      orElse: () => PlanStyle.balanced,
+    );
   }
 }
 
