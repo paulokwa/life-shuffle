@@ -291,3 +291,50 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: (1) Add `FIREBASE_WEB_API_KEY` to the Netlify dashboard environment variables (Site settings → Environment variables) using the current valid key, then trigger a Netlify rebuild and confirm sign-in works on the deployed site. (2) Document setup for other machines (see TROUBLESHOOTING_LOG.md for multi-machine setup guide).
 - **Open questions**:
   - Should the previously-leaked key history in git (older commits) be scrubbed via history rewrite, or is forward-only remediation (current state has no key) sufficient given GitHub only re-flags on new pushes containing the pattern?
+
+---
+
+## 2026-06-16 — Plan style choice, empty states, skippable check-in prompt, roadmap ticked
+
+- **Goal**: Add two easy V1 features (plan style choice + empty states), add one more (skippable check-in prompt), and bring ROADMAP.md up to date with all completed work.
+- **Summary**: Three features added. (1) Plan style choice — a `PlanStyle` enum (gentle/balanced/push) was added to `PlannerService`, wired through `SavedState`, `PersistenceService`, and `AppState`, and exposed as a live 3-button picker in Settings > Planning. Switching style immediately regenerates with a different activity target (~3, ~5, or ~7/week). Persists locally and syncs to Firestore via the existing `SavedState` path. (2) Empty states — "No activities yet" card added to the Activities screen when the bank is empty; "No plan yet" card added to the Plan screen when no days have activities. (3) Skippable check-in prompt — the hardcoded check-in card on the Today screen is now conditional: it only appears when past days have unchecked activities, and both "Check in" and "Later" dismiss it for the rest of the session (session-only flag in `AppState`, resets on next app open). Also created `.claude/skills/run/SKILL.md` so future "spin up locally" requests skip the port/env-var discovery and run `flutter run -d chrome --web-port 8769 --web-hostname 127.0.0.1` directly (the `--web-hostname 127.0.0.1` flag is required because the Google Cloud API key blocks `localhost:*` referrers). ROADMAP.md updated: current status rewritten, all completed V1 build tasks ticked.
+- **Files changed**:
+  - `lib/services/planner_service.dart` — added `PlanStyle` enum; `generate()` accepts `planStyle` param with template variants.
+  - `lib/services/persistence_service.dart` — added `_keyPlanStyle`, `savePlanStyle()`, `planStyle` field on `SavedState`, updated `load()`, `toMap()`, `fromMap()`.
+  - `lib/state/app_state.dart` — added `_planStyle`, `_checkInPromptDismissed`, getters, `setPlanStyle()`, `dismissCheckInPrompt()`, `_parsePlanStyle()`; wired into `_buildPlan()`, `_applySavedState()`, `_currentSavedState()`, `_persistLocal()`.
+  - `lib/screens/settings_screen.dart` — replaced static PLANNING rows with live `_PlanStyleCard` + `_PlanStylePicker` widgets.
+  - `lib/screens/activities_screen.dart` — added "No activities yet" empty state card.
+  - `lib/screens/plan_screen.dart` — added "No plan yet" empty state card.
+  - `lib/screens/today_screen.dart` — `_CheckInCard` now requires `onDismiss` callback; only rendered when `hasPastUnchecked && !checkInPromptDismissed`; `_PillButton` gained optional `onTap`.
+  - `.claude/skills/run/SKILL.md` — new project skill for launching the app locally.
+  - `docs/ROADMAP.md` — current status rewritten; all completed V1 tasks ticked.
+- **Decisions made**:
+  - Plan style is persisted in `SavedState` (string name of enum) so it syncs to Firestore automatically without a schema change.
+  - Check-in prompt dismissed state is session-only (not persisted) so it re-appears each app open if past items are still unchecked.
+  - Local dev server must use `--web-hostname 127.0.0.1` and port 8769; `localhost:*` is blocked by the Google Cloud API key HTTP referrer restrictions.
+- **Tests run**: `flutter analyze --no-fatal-infos` — 0 errors, 0 warnings, 38 pre-existing info-level lints unchanged. `flutter build web` passed.
+- **Current state**: Plan style picker is live in Settings. Empty states show on Activities and Plan screens. Check-in prompt on Today is now data-driven and dismissible. App runs at `http://127.0.0.1:8769` with sign-in working.
+- **Next recommended step**: Confirm/edit display name after Google sign-in, or add the planning dimensions (difficulty/energy/social) to the activity model and settings.
+- **Open questions**:
+  - Should "Check in" on the Today prompt navigate directly to the Plan tab to start checking in, or is dismiss-only acceptable for now? (Answered in the next session — scroll to plan section is the interim fix.)
+
+---
+
+## 2026-06-16 (continued) — Rest day labels, Next Up time filter, Check-in scroll
+
+- **Goal**: Three UX improvements found during manual testing, plus local-run tooling fixes.
+- **Summary**: (1) Added rest day counts to each plan style button in Settings > Planning so the tradeoff is visible at a glance (Gentle: 4 rest days, Balanced: 2 rest days, Push me: 2 rest days). (2) Fixed "Next Up" card showing stale past activities — added `_isUpcoming()` with a 1-hour grace period that parses the `timeSlot` string so only truly upcoming activities appear. (3) Made "Check in" on the today prompt useful — converted `TodayScreen` to a `StatefulWidget`, added a `GlobalKey` on `_TodaysPlanSection`, and wired `Scrollable.ensureVisible` so tapping "Check in" smoothly scrolls to TODAY'S PLAN and dismisses. "Later" only dismisses. (4) Updated `tool/local_run.ps1.example` and `.claude/skills/run/SKILL.md` to include `--web-hostname 127.0.0.1` so the local-run skill works out of the box without triggering the API key referrer block.
+- **Files changed**:
+  - `lib/screens/settings_screen.dart` — plan style buttons show 3 lines: label, ~X/week, Y rest days.
+  - `lib/screens/today_screen.dart` — `TodayScreen` → `StatefulWidget`; `_isUpcoming()` time filter on Next Up; `_CheckInCard` split into `onCheckIn` (scroll + dismiss) and `onDismiss` (Later, dismiss only); `_TodaysPlanSection` accepts `super.key`.
+  - `lib/state/app_state.dart` — plan style + check-in prompt dismissed state (also part of earlier session, not yet committed).
+  - `.claude/skills/run/SKILL.md` — documents `--web-hostname 127.0.0.1` requirement, hot reload via `r` in terminal, why not browser F5, and port-conflict diagnostics.
+  - `tool/local_run.ps1.example` — added `--web-hostname 127.0.0.1` flag.
+- **Decisions made**:
+  - "Check in" does dismiss + scroll; "Later" does dismiss only. Full catch-up check-in view is still a future ROADMAP item.
+  - `_isUpcoming()` grace period is 1 hour (e.g., a 3 PM slot still shows as Next Up at 3:45 PM but not at 7:37 PM).
+  - "Push me" labels 2 rest days because the `[1,2,0,1,1,2,0]` template leaves 0-activity slots on only 2 of 7 days.
+- **Tests run**: Manual hot reload + visual check in Chrome on `http://127.0.0.1:8769`. `flutter analyze --no-fatal-infos` — 0 errors, 0 warnings.
+- **Current state**: Today screen shows only upcoming activities as Next Up; "Check in" scrolls to the plan section; plan style buttons show rest day counts. All uncommitted work from this date's two sessions is committed together.
+- **Next recommended step**: Confirm/edit display name after Google sign-in, or add planning dimensions (difficulty/energy/social) to the activity model and settings.
+- **Open questions**: None.

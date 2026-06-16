@@ -472,16 +472,19 @@ class _PlanStylePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const options = [
-      (PlanStyle.gentle, 'Gentle', '~3/week'),
-      (PlanStyle.balanced, 'Balanced', '~5/week'),
-      (PlanStyle.push, 'Push me', '~7/week'),
+      (PlanStyle.gentle, 'Gentle', '~3/week', '4 rest days'),
+      (PlanStyle.balanced, 'Balanced', '~5/week', '2 rest days'),
+      (PlanStyle.push, 'Push me', '~7/week', '2 rest days'),
     ];
     return Row(
-      children: options.indexed.map(((int, (PlanStyle, String, String)) pair) {
+      children: options.indexed.map(((int, (PlanStyle, String, String, String)) pair) {
         final i = pair.$1;
-        final (style, label, hint) = pair.$2;
+        final (style, label, activities, restDays) = pair.$2;
         final selected = current == style;
         final isLast = i == options.length - 1;
+        final mutedColor = selected
+            ? Colors.white.withValues(alpha: 0.75)
+            : textMuted;
         return Expanded(
           child: GestureDetector(
             onTap: () => onChanged(style),
@@ -506,12 +509,17 @@ class _PlanStylePicker extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    hint,
+                    activities,
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: selected
-                          ? Colors.white.withValues(alpha: 0.8)
-                          : textMuted,
+                      color: mutedColor,
+                    ),
+                  ),
+                  Text(
+                    restDays,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: mutedColor,
                     ),
                   ),
                 ],

@@ -8,20 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-- Repository created
-- Flutter chosen as the main technology direction
-- Planning docs created
-- Firebase + Google sign-in moved into MVP 1 for shared editing
-- Calendar publishing and print/export moved into MVP 1
-- Optional planning dimensions added to MVP 1: difficulty, energy, and social level
-- Check-ins and basic progress tracking added to MVP 1
-- Multiple named calendars added to MVP 1
-- Onboarding and starter activity library added to MVP 1
-- V1 foundations and safety UX added: Today/Home, empty states, regeneration preview/undo, activity enable/disable, conflict messages, calendar-level plan settings, privacy/feed explanation, and calendar lifecycle basics
-- Structured Settings area added to MVP 1
-- Navigation and responsive layout direction added to MVP 1
-- Subtle onboarding transitions added to MVP 1
-- No app code yet
+App is runnable. Core planner loop, Firebase auth, Firestore sync, activity creation/editing, plan generation with rules, lock/unlock, check-ins, and basic progress are all working. Settings shows account and calendar info. Starter activity library and plan style choice are live.
+
+Still to build for MVP 1: display name confirmation, multiple calendars + switcher, onboarding calendar naming, planning dimensions (difficulty/energy/social), regeneration preview/undo, conflict messages, check-in views, ICS publishing, print/export, and remaining Settings sections (activity defaults, publishing, export/print, privacy/help).
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -29,90 +18,90 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 
 ### Build tasks
 
-- [ ] Create Flutter project structure
-- [ ] Add mobile-first app shell
+- [x] Create Flutter project structure
+- [x] Add mobile-first app shell
 - [ ] Add responsive layout system: phone first, wider screens adapt
-- [ ] Add bottom navigation on mobile: Today, Plan, Activities, Progress, Settings
+- [x] Add bottom navigation on mobile: Today, Plan, Activities, Progress, Settings
 - [ ] Add sidebar navigation on tablet/desktop using the same sections
-- [ ] Add consistent top/header area with selected calendar name and calendar switcher
-- [ ] Keep Export, Publish, Check-in, Calendar switcher, and AI out of the main bottom nav
+- [x] Add consistent top/header area with selected calendar name and calendar switcher
+- [x] Keep Export, Publish, Check-in, Calendar switcher, and AI out of the main bottom nav
 - [ ] Add one clear primary action per main screen
-- [ ] Add Firebase project setup
-- [ ] Add Google sign-in
-- [ ] Add basic auth gate
-- [ ] Add short onboarding/setup flow
-- [ ] Add welcome screen with brief app explanation
+- [x] Add Firebase project setup
+- [x] Add Google sign-in
+- [x] Add basic auth gate
+- [x] Add short onboarding/setup flow
+- [x] Add welcome screen with brief app explanation
 - [ ] Add subtle onboarding Next transitions: quick fade or small slide
 - [ ] Avoid dramatic, bouncy, spinning, or distracting onboarding animation
 - [ ] Respect reduced-motion accessibility settings
 - [ ] Confirm/edit display name after Google sign-in
-- [ ] Create calendar data model with title/name
+- [x] Create calendar data model with title/name
 - [ ] Support multiple named Life Shuffle calendars per user/member
 - [ ] Add onboarding/setup prompt to name the first calendar, with a sensible default
 - [ ] Add optional sharing/member setup step
 - [ ] Add calendar switcher or clear way to create/select calendars
 - [ ] Create simple Kwame/Laura membership model per calendar
 - [ ] Add calendar ownership, member leave, delete, and feed-revocation basics
-- [ ] Add structured Settings area
-- [ ] Add Settings > Account: display name and sign out
-- [ ] Add Settings > Calendar: name, switcher, create calendar, members, roles, leave, delete
-- [ ] Add Settings > Planning: week start, earliest/latest time, default plan style, default activity count
+- [x] Add structured Settings area
+- [x] Add Settings > Account: display name and sign out
+- [ ] Add Settings > Calendar: name, switcher, create calendar, members, roles, leave, delete (name/owner/members display only so far)
+- [x] Add Settings > Planning: default plan style (Gentle/Balanced/Push me) — week start and time window still static
 - [ ] Add Settings > Activity defaults: dimension toggles and defaults
 - [ ] Add Settings > Publishing: feed enable/disable, copy link, revoke/regenerate link, feed explanation
 - [ ] Add Settings > Export/print: default output details and note/status/dimension visibility
 - [ ] Add Settings > Privacy/help: privacy explanation, feed explanation, help/about
-- [ ] Add calendar-level plan settings: week start, earliest/latest time, default plan style, default activity count
+- [ ] Add calendar-level plan settings: week start, earliest/latest time, default activity count
 - [ ] Add planning-dimensions onboarding screen: Difficulty, Energy, Social
-- [ ] Create activity model scoped to a calendar
-- [ ] Create activity rule model scoped to a calendar
-- [ ] Create planned item model scoped to a calendar
-- [ ] Add check-in status model: skipped, partly done, done, unchecked
+- [x] Create activity model scoped to a calendar
+- [x] Create activity rule model scoped to a calendar
+- [x] Create planned item model scoped to a calendar
+- [x] Add check-in status model: skipped, partly done, done, unchecked
 - [ ] Add optional planning dimension settings
 - [ ] Add default values for enabled planning dimensions
-- [ ] Add built-in starter activity library
-- [ ] Add starter categories: At home, Outside, Health/movement, Social, Creative, Rest, Food, Chores/life admin, Couple time, Low-energy ideas
-- [ ] Add starter activity picker with limited first view and `See more` pattern
-- [ ] Add ability to create custom activities from onboarding or after onboarding
-- [ ] Add sensible default metadata/rules for starter activities
+- [x] Add built-in starter activity library
+- [x] Add starter categories: At home, Outside, Health/movement, Social, Creative, Rest, Food, Chores/life admin, Couple time, Low-energy ideas
+- [x] Add starter activity picker with limited first view and `See more` pattern
+- [x] Add ability to create custom activities from onboarding or after onboarding
+- [x] Add sensible default metadata/rules for starter activities
 - [ ] Add option to use sensible default rules or review rules now
-- [ ] Add first plan style choice: Gentle, Balanced, or Push me a little
-- [ ] Build one-activity-at-a-time creation flow
-- [ ] Add category, colour, and icon support
-- [ ] Add activity enabled/disabled state
+- [x] Add first plan style choice: Gentle, Balanced, or Push me a little
+- [x] Build one-activity-at-a-time creation flow
+- [x] Add category, colour, and icon support
+- [x] Add activity enabled/disabled state
 - [ ] Add optional difficulty/resistance field, 1 to 5
 - [ ] Add optional energy level field: Low, Medium, High
 - [ ] Add optional social level field: Solo, Together, Group, Either
 - [ ] Hide disabled planning dimensions from forms, cards, planner rules, and export options
-- [ ] Add allowed day/time rules
-- [ ] Add max-per-week rule
-- [ ] Add no-consecutive-days rule
+- [x] Add allowed day/time rules
+- [x] Add max-per-week rule
+- [x] Add no-consecutive-days rule
 - [ ] Add difficulty-aware planner rules if difficulty is enabled
-- [ ] Build 7-day agenda generator
-- [ ] Build agenda-first calendar view
-- [ ] Add Today/Home screen or clear landing view
-- [ ] Add helpful empty states: no calendars, no activities, no plan, no check-ins, no stats, offline/sync problem
-- [ ] Add lock/unlock planned item behaviour
+- [x] Build 7-day agenda generator
+- [x] Build agenda-first calendar view
+- [x] Add Today/Home screen or clear landing view
+- [x] Add helpful empty states: no activities, no plan (no calendars, no check-ins, no stats, offline still to do)
+- [x] Add lock/unlock planned item behaviour
 - [ ] Add regeneration preview or undo for last regeneration
-- [ ] Add regenerate-unlocked-only behaviour
+- [x] Add regenerate-unlocked-only behaviour
 - [ ] Add clear generation conflict/failure messages
 - [ ] Add basic shared-edit/sync conflict messages
 - [ ] Add first-run hints for lock and shuffle in agenda/week view
-- [ ] Add skippable check-in prompt on app open/login when past unchecked items exist
+- [x] Add skippable check-in prompt on app open/login when past unchecked items exist
 - [ ] Add quick catch-up check-in view
 - [ ] Add one-by-one check-in review
 - [ ] Add week review check-in view
 - [ ] Add day sheet check-in from agenda/calendar
 - [ ] Add optional note action for check-ins, hidden by default
-- [ ] Add basic progress/stats page scoped to selected calendar
+- [x] Add basic progress/stats page scoped to selected calendar
 - [ ] Add past 7 days and past 30 days summaries
-- [ ] Add planned vs done/partly/skipped counts
-- [ ] Add category breakdown
+- [x] Add planned vs done/partly/skipped counts
+- [x] Add category breakdown
 - [ ] Add difficulty summary if difficulty is enabled
 - [ ] Add simple streaks or trends
 - [ ] Add looking-ahead summary for upcoming planned items
 - [ ] Add plain-language privacy/feed explanation
-- [ ] Save calendars, activities, generated plans, and check-in statuses in Firestore
-- [ ] Add Firestore security rules for shared calendar access
+- [x] Save calendars, activities, generated plans, and check-in statuses in Firestore
+- [x] Add Firestore security rules for shared calendar access
 - [ ] Generate read-only ICS/iCalendar feed for each published calendar
 - [ ] Add private/unguessable calendar feed URL per published calendar
 - [ ] Add ability to revoke/regenerate calendar feed URL

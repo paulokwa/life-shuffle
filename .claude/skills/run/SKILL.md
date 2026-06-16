@@ -6,18 +6,24 @@ description: Launch the Life Shuffle Flutter web app locally in Chrome for manua
 
 ## How to launch
 
+Run directly in the VS Code terminal (keeps the process attached so you can press `r` to hot reload):
+
 ```powershell
-cd "c:\Coding\New folder\life-shuffle"
-Start-Process -NoNewWindow -FilePath "flutter" -ArgumentList "run", "-d", "chrome", "--web-port", "8769", "--web-hostname", "127.0.0.1", "--dart-define=FIREBASE_WEB_API_KEY=$env:FIREBASE_WEB_API_KEY"
+./tool/local_run.ps1
 ```
 
-Then verify the server came up:
+Or manually:
 
 ```powershell
-netstat -ano | findstr ":8769 "
+cd "c:\Coding\New folder\life-shuffle"
+flutter run -d chrome --web-port 8769 --web-hostname 127.0.0.1 --dart-define=FIREBASE_WEB_API_KEY=$env:FIREBASE_WEB_API_KEY
 ```
 
 Chrome opens automatically at **http://127.0.0.1:8769**. Google sign-in works at this URL.
+
+## Hot reload
+
+With the terminal attached, press **`r`** to hot reload (picks up code changes instantly) or **`R`** for a full restart. Do **not** use browser F5 — that drops the Dart VM connection and causes a blank page.
 
 ## Why 127.0.0.1 and not localhost
 

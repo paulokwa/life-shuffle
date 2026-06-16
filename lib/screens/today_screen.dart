@@ -9,8 +9,33 @@ import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/activity_plan_card.dart';
 
-class TodayScreen extends StatelessWidget {
+class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
+
+  @override
+  State<TodayScreen> createState() => _TodayScreenState();
+}
+
+class _TodayScreenState extends State<TodayScreen> {
+  final _planSectionKey = GlobalKey();
+
+  // Returns true if the time slot is still upcoming or within a 1-hour grace
+  // period, so an activity planned at 3 PM still shows as Next Up at 3:45 PM
+  // but not at 7:37 PM.
+  static bool _isUpcoming(String timeSlot) {
+    final parts = timeSlot.split(' ');
+    if (parts.length != 2) return true;
+    final timeParts = parts[0].split(':');
+    if (timeParts.length != 2) return true;
+    int hour = int.tryParse(timeParts[0]) ?? 0;
+    final minute = int.tryParse(timeParts[1]) ?? 0;
+    final isPm = parts[1].toUpperCase() == 'PM';
+    if (isPm && hour != 12) hour += 12;
+    if (!isPm && hour == 12) hour = 0;
+    final now = DateTime.now();
+    final slot = DateTime(now.year, now.month, now.day, hour, minute);
+    return now.isBefore(slot.add(const Duration(hours: 1)));
+  }
 
   static String _formattedDate() {
     final now = DateTime.now();
@@ -23,6 +48,17 @@ class TodayScreen extends StatelessWidget {
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
+  }
+
+  void _scrollToPlanSection() {
+    final ctx = _planSectionKey.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -43,8 +79,17 @@ class TodayScreen extends StatelessWidget {
     final partly  = allActivities.where((a) => a.status == CheckStatus.partly).length;
 
     final todayActivities = today?.activities ?? [];
-    final pending = todayActivities.where((a) => a.status == CheckStatus.none).toList();
-    final nextUp  = pending.isEmpty ? null : pending.first;
+    final pending = todayActivities
+        .where((a) => a.status == CheckStatus.none && _isUpcoming(a.timeSlot))
+        .toList();
+    final nextUp = pending.isEmpty ? null : pending.first;
+
+    final now = DateTime.now();
+    final hasPastUnchecked = week.any((d) =>
+        d.date.isBefore(DateTime(now.year, now.month, now.day)) &&
+        d.activities.any((a) => a.status == CheckStatus.none));
+    final showCheckInPrompt =
+        hasPastUnchecked && !state.checkInPromptDismissed;
 
     return SafeArea(
       child: Column(
@@ -60,14 +105,25 @@ class TodayScreen extends StatelessWidget {
                   _GreetingBlock(dateLabel: _formattedDate()),
                   const SizedBox(height: 16),
                   _NextUpCard(nextUp: nextUp),
-                  const SizedBox(height: 12),
-                  _CheckInCard(),
+                  if (showCheckInPrompt) ...[
+                    const SizedBox(height: 12),
+                    _CheckInCard(
+                      onCheckIn: () {
+                        state.dismissCheckInPrompt();
+                        _scrollToPlanSection();
+                      },
+                      onDismiss: state.dismissCheckInPrompt,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _ThisWeekCard(planned: planned, done: done, partly: partly),
                   const SizedBox(height: 16),
                   const _QuickActionsSection(),
                   const SizedBox(height: 16),
-                  _TodaysPlanSection(activities: todayActivities),
+                  _TodaysPlanSection(
+                    key: _planSectionKey,
+                    activities: todayActivities,
+                  ),
                 ],
               ),
             ),
@@ -223,6 +279,11 @@ class _NextUpCard extends StatelessWidget {
 // ─── Quick check-in card ──────────────────────────────────────────────────────
 
 class _CheckInCard extends StatelessWidget {
+  const _CheckInCard({required this.onCheckIn, required this.onDismiss});
+
+  final VoidCallback onCheckIn;
+  final VoidCallback onDismiss;
+
   @override
   Widget build(BuildContext context) {
     return LsCard(
@@ -276,6 +337,7 @@ class _CheckInCard extends StatelessWidget {
                   label: 'Check in',
                   background: accentSage,
                   textColor: Colors.white,
+                  onTap: onCheckIn,
                 ),
               ),
               const SizedBox(width: 8),
@@ -285,6 +347,7 @@ class _CheckInCard extends StatelessWidget {
                   background: Colors.transparent,
                   textColor: textMuted,
                   hasBorder: true,
+                  onTap: onDismiss,
                 ),
               ),
             ],
@@ -301,29 +364,34 @@ class _PillButton extends StatelessWidget {
     required this.background,
     required this.textColor,
     this.hasBorder = false,
+    this.onTap,
   });
 
   final String label;
   final Color background;
   final Color textColor;
   final bool hasBorder;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(100),
-        border: hasBorder ? Border.all(color: borderWarmStrong) : null,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: GoogleFonts.dmSans(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: textColor,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 42,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(100),
+          border: hasBorder ? Border.all(color: borderWarmStrong) : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
         ),
       ),
     );
@@ -512,7 +580,7 @@ class _QuickActionsSection extends StatelessWidget {
 // ─── Today's plan ─────────────────────────────────────────────────────────────
 
 class _TodaysPlanSection extends StatelessWidget {
-  const _TodaysPlanSection({required this.activities});
+  const _TodaysPlanSection({super.key, required this.activities});
 
   final List<PlannedActivity> activities;
 

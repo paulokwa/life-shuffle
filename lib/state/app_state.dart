@@ -15,6 +15,7 @@ class AppState extends ChangeNotifier {
   int _seed = 0;
   int _updatedAtMillis = 0;
   PlanStyle _planStyle = PlanStyle.balanced;
+  bool _checkInPromptDismissed = false;
   String? _userId;
   String? _calendarId;
   String _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
 
   List<DayPlan> get weekPlan => _weekPlan;
   PlanStyle get planStyle => _planStyle;
+  bool get checkInPromptDismissed => _checkInPromptDismissed;
   String? get userId => _userId;
   String? get calendarId => _calendarId;
   String get calendarTitle => _calendarTitle;
@@ -181,6 +183,12 @@ class AppState extends ChangeNotifier {
     _seed++;
     _weekPlan = _buildPlan(lockedItems: _collectLocked());
     _persist();
+    notifyListeners();
+  }
+
+  void dismissCheckInPrompt() {
+    if (_checkInPromptDismissed) return;
+    _checkInPromptDismissed = true;
     notifyListeners();
   }
 
