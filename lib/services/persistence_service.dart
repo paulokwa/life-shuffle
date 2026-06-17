@@ -18,6 +18,8 @@ class PersistenceService {
   static const _keyPlanStyle = 'ls_plan_style';
   static const _keyDisplayName = 'ls_display_name';
   static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
+  static const _keyCalendarTitle = 'ls_calendar_title';
+  static const _keyCalendarNameConfirmed = 'ls_calendar_name_confirmed';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -33,6 +35,9 @@ class PersistenceService {
     final displayName = _prefs.getString(_keyDisplayName);
     final displayNameConfirmed =
         _prefs.getBool(_keyDisplayNameConfirmed) ?? false;
+    final calendarTitle = _prefs.getString(_keyCalendarTitle);
+    final calendarNameConfirmed =
+        _prefs.getBool(_keyCalendarNameConfirmed) ?? false;
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
@@ -60,6 +65,8 @@ class PersistenceService {
       planStyle: planStyle,
       displayName: displayName,
       displayNameConfirmed: displayNameConfirmed,
+      calendarTitle: calendarTitle,
+      calendarNameConfirmed: calendarNameConfirmed,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -86,6 +93,17 @@ class PersistenceService {
 
   static void saveDisplayNameConfirmed(bool value) =>
       _prefs.setBool(_keyDisplayNameConfirmed, value);
+
+  static void saveCalendarTitle(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      _prefs.remove(_keyCalendarTitle);
+      return;
+    }
+    _prefs.setString(_keyCalendarTitle, value.trim());
+  }
+
+  static void saveCalendarNameConfirmed(bool value) =>
+      _prefs.setBool(_keyCalendarNameConfirmed, value);
 
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
@@ -133,6 +151,8 @@ class SavedState {
     this.planStyle = 'balanced',
     this.displayName,
     this.displayNameConfirmed = false,
+    this.calendarTitle,
+    this.calendarNameConfirmed = false,
   });
 
   final List<Activity> activities;
@@ -141,6 +161,8 @@ class SavedState {
   final String planStyle;
   final String? displayName;
   final bool displayNameConfirmed;
+  final String? calendarTitle;
+  final bool calendarNameConfirmed;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -153,6 +175,8 @@ class SavedState {
       'planStyle': planStyle,
       'displayName': displayName,
       'displayNameConfirmed': displayNameConfirmed,
+      'calendarTitle': calendarTitle,
+      'calendarNameConfirmed': calendarNameConfirmed,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -169,9 +193,9 @@ class SavedState {
       updatedAtMillis: _readInt(map['updatedAtMillis']),
       planStyle: (map['planStyle'] as String?) ?? 'balanced',
       displayName: _readNullableString(map['displayName']),
-      displayNameConfirmed: map['displayNameConfirmed'] is bool
-          ? map['displayNameConfirmed'] as bool
-          : false,
+      displayNameConfirmed: _readBool(map['displayNameConfirmed']),
+      calendarTitle: _readNullableString(map['calendarTitle']),
+      calendarNameConfirmed: _readBool(map['calendarNameConfirmed']),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
@@ -189,6 +213,8 @@ class SavedState {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
   }
+
+  static bool _readBool(Object? value) => value is bool ? value : false;
 
   static List<Activity> _readActivities(
     Object? value,

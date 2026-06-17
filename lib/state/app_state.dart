@@ -20,6 +20,7 @@ class AppState extends ChangeNotifier {
   String? _plannerConflictMessage;
   String? _displayName;
   bool _displayNameConfirmed = false;
+  bool _calendarNameConfirmed = false;
   bool _checkInPromptDismissed = false;
   String? _userId;
   String? _calendarId;
@@ -46,6 +47,7 @@ class AppState extends ChangeNotifier {
   String? get userId => _userId;
   String? get calendarId => _calendarId;
   String get calendarTitle => _calendarTitle;
+  bool get calendarNameConfirmed => _calendarNameConfirmed;
   String? get calendarOwnerUserId => _calendarOwnerUserId;
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
@@ -198,6 +200,16 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  bool confirmCalendarTitle(String value) {
+    final trimmed = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (trimmed.isEmpty) return false;
+    _calendarTitle = trimmed;
+    _calendarNameConfirmed = true;
+    _persist();
+    notifyListeners();
+    return true;
+  }
+
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
@@ -253,6 +265,12 @@ class AppState extends ChangeNotifier {
     _displayName = saved.displayName;
     _displayNameConfirmed =
         saved.displayNameConfirmed && saved.displayName != null;
+    final savedCalendarTitle = saved.calendarTitle;
+    if (savedCalendarTitle != null) {
+      _calendarTitle = savedCalendarTitle;
+    }
+    _calendarNameConfirmed = saved.calendarNameConfirmed &&
+        (savedCalendarTitle != null || _calendarTitle.trim().isNotEmpty);
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -281,6 +299,8 @@ class AppState extends ChangeNotifier {
     PersistenceService.savePlanStyle(state.planStyle);
     PersistenceService.saveDisplayName(state.displayName);
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
+    PersistenceService.saveCalendarTitle(state.calendarTitle);
+    PersistenceService.saveCalendarNameConfirmed(state.calendarNameConfirmed);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -293,13 +313,18 @@ class AppState extends ChangeNotifier {
   }
 
   bool _applyCalendarMetadata(CalendarMetadata metadata) {
+    final nextTitle = _calendarNameConfirmed &&
+            _calendarTitle.trim().isNotEmpty &&
+            metadata.title == FirestoreSyncService.defaultCalendarTitle
+        ? _calendarTitle
+        : metadata.title;
     final changed = _calendarId != metadata.calendarId ||
-        _calendarTitle != metadata.title ||
+        _calendarTitle != nextTitle ||
         _calendarOwnerUserId != metadata.ownerUserId ||
         _calendarMemberUserIds.join('|') != metadata.memberUserIds.join('|');
 
     _calendarId = metadata.calendarId;
-    _calendarTitle = metadata.title;
+    _calendarTitle = nextTitle;
     _calendarOwnerUserId = metadata.ownerUserId;
     _calendarMemberUserIds = List.unmodifiable(metadata.memberUserIds);
     return changed;
@@ -307,7 +332,9 @@ class AppState extends ChangeNotifier {
 
   void _clearCalendarMetadata() {
     _calendarId = null;
-    _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
+    if (!_calendarNameConfirmed) {
+      _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
+    }
     _calendarOwnerUserId = null;
     _calendarMemberUserIds = const [];
   }
@@ -334,6 +361,8 @@ class AppState extends ChangeNotifier {
       planStyle: _planStyle.name,
       displayName: _displayName,
       displayNameConfirmed: _displayNameConfirmed,
+      calendarTitle: _calendarTitle,
+      calendarNameConfirmed: _calendarNameConfirmed,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,

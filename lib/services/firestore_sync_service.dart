@@ -52,13 +52,19 @@ class FirestoreSyncService {
         'calendarId': calendarDoc.id,
         'updatedAtMillis': now,
       };
+      final stateTitle = state.calendarTitle?.trim();
+      final calendarTitle = stateTitle == null || stateTitle.isEmpty
+          ? defaultCalendarTitle
+          : stateTitle;
 
       if (existing.exists) {
+        data['title'] = calendarTitle;
+        data['name'] = calendarTitle;
         data['memberUserIds'] = FieldValue.arrayUnion([userId]);
       } else {
         data.addAll({
-          'title': defaultCalendarTitle,
-          'name': defaultCalendarTitle,
+          'title': calendarTitle,
+          'name': calendarTitle,
           'ownerUserId': userId,
           'memberUserIds': [userId],
           'createdAtMillis': now,

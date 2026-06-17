@@ -447,3 +447,32 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Continue with onboarding calendar naming or multiple-calendar switcher work, since the display-name account step is now complete.
 - **Open questions**:
   - Should local-only default to `Kwame`, `My name`, or an empty field before broader onboarding naming is added?
+
+---
+
+## 2026-06-17 - First calendar naming prompt
+
+- **Goal**: Add the onboarding step where the user names the first Life Shuffle calendar after confirming their display name.
+- **Summary**: Added a warm `CalendarNameScreen` with `Kwame and Laura` as the default. Routed `AuthGate` so signed-in and local-only users confirm a non-empty calendar name before the existing onboarding flow. Added `calendarTitle` and `calendarNameConfirmed` to `SavedState`, SharedPreferences, and the existing Firestore state map, and kept Firestore calendar `title`/`name` metadata in sync with the saved title. Updated the shared header to read the current calendar title from `AppState` when no explicit title is passed, so Today/Plan/Activities/Progress headers reflect the chosen name. Settings > Calendar already reads `state.calendarTitle`, so it now shows the confirmed name. No multiple-calendar switcher, invite/member UI, roles/permissions UI, or public profiles were added.
+- **Files changed**:
+  - `lib/screens/calendar_name_screen.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `lib/widgets/life_shuffle_header.dart`
+  - `lib/state/app_state.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/services/firestore_sync_service.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Store the first calendar title in the existing `SavedState` path so local-only storage and signed-in Firestore sync stay aligned.
+  - Keep the current default calendar document as the only calendar for now; this is a naming step, not multiple-calendar support.
+  - Mirror the saved calendar title into Firestore metadata fields `title` and `name` for compatibility with the existing calendar metadata model.
+- **Tests run**:
+  - `dart format lib/screens/calendar_name_screen.dart lib/services/persistence_service.dart lib/services/firestore_sync_service.dart lib/state/app_state.dart lib/widgets/auth_gate.dart lib/widgets/life_shuffle_header.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 32 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: New users confirm display name, then name the first calendar, then continue into the existing onboarding/planner flow. The chosen calendar title persists locally, syncs through Firestore when signed in, and appears in the app header plus Settings > Calendar.
+- **Next recommended step**: Continue with multiple-calendar switcher support or planning dimensions, depending on whether the next priority is calendar management or richer activity rules.
+- **Open questions**: None.

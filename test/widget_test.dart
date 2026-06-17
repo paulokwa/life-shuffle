@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
+import 'package:life_shuffle/widgets/life_shuffle_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -73,6 +75,61 @@ void main() {
     expect(saved.displayNameConfirmed, isTrue);
   });
 
+  testWidgets('Calendar name prompt uses provided default name',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarNameScreen(
+          initialName: 'Kwame and Laura',
+          onConfirm: (_) => true,
+        ),
+      ),
+    );
+
+    expect(find.text('Name your first calendar'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Kwame and Laura'), findsOneWidget);
+  });
+
+  testWidgets('Calendar name prompt allows editing a non-empty name',
+      (WidgetTester tester) async {
+    String? savedName;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarNameScreen(
+          initialName: 'Kwame and Laura',
+          onConfirm: (calendarName) {
+            savedName = calendarName.trim();
+            return savedName!.isNotEmpty;
+          },
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '  Weekend ideas  ');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(savedName, 'Weekend ideas');
+  });
+
+  test('AppState confirms, validates, and persists calendar name', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.calendarNameConfirmed, isFalse);
+    expect(appState.confirmCalendarTitle('   '), isFalse);
+    expect(appState.calendarNameConfirmed, isFalse);
+
+    expect(appState.confirmCalendarTitle('  Weekend   ideas  '), isTrue);
+    expect(appState.calendarTitle, 'Weekend ideas');
+    expect(appState.calendarNameConfirmed, isTrue);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.calendarTitle, 'Weekend ideas');
+    expect(saved.calendarNameConfirmed, isTrue);
+  });
+
   testWidgets('Settings displays confirmed display name',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -93,6 +150,47 @@ void main() {
     expect(find.text('Local-only mode'), findsNothing);
   });
 
+  testWidgets('Settings displays confirmed calendar name',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmDisplayName('Kwame');
+    appState.confirmCalendarTitle('Weekend ideas');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Weekend ideas'), findsWidgets);
+    expect(find.text('Kwame and Laura'), findsNothing);
+  });
+
+  testWidgets('Header displays confirmed calendar name',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmDisplayName('Laura');
+    appState.confirmCalendarTitle('Solo getting out');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: LifeShuffleHeader()),
+        ),
+      ),
+    );
+
+    expect(find.text('Solo getting out'), findsOneWidget);
+  });
+
   testWidgets('Local-only app confirms display name before onboarding',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -107,6 +205,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(appState.displayName, 'Kwame');
+    expect(find.text('Name your first calendar'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Weekend ideas');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(appState.calendarTitle, 'Weekend ideas');
     expect(find.text('Your calm\nplanning partner'), findsOneWidget);
   });
 

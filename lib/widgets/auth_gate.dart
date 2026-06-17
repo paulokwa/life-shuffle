@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../screens/calendar_name_screen.dart';
 import '../screens/display_name_screen.dart';
 import '../screens/onboarding_screen.dart';
 import '../screens/sign_in_screen.dart';
@@ -53,11 +54,23 @@ class _AuthGateState extends State<AuthGate> {
                 return saved;
               },
             )
-          : _onboardingDone
-              ? const BottomNavShell()
-              : OnboardingScreen(
-                  onComplete: () => setState(() => _onboardingDone = true),
-                ),
+          : !widget.appState.calendarNameConfirmed
+              ? CalendarNameScreen(
+                  initialName: _defaultCalendarName(),
+                  onConfirm: (calendarName) {
+                    final saved =
+                        widget.appState.confirmCalendarTitle(calendarName);
+                    if (saved) {
+                      setState(() {});
+                    }
+                    return saved;
+                  },
+                )
+              : _onboardingDone
+                  ? const BottomNavShell()
+                  : OnboardingScreen(
+                      onComplete: () => setState(() => _onboardingDone = true),
+                    ),
     );
   }
 
@@ -74,6 +87,12 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     return 'Kwame';
+  }
+
+  String _defaultCalendarName() {
+    final saved = widget.appState.calendarTitle.trim();
+    if (saved.isNotEmpty) return saved;
+    return 'Kwame and Laura';
   }
 
   @override

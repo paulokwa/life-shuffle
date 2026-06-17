@@ -1,29 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/firestore_sync_service.dart';
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 
 class LifeShuffleHeader extends StatelessWidget {
   const LifeShuffleHeader({
     super.key,
-    this.calendarName = 'Kwame and Laura',
-    this.profileInitial = 'K',
+    this.calendarName,
+    this.profileInitial,
   });
 
-  final String calendarName;
-  final String profileInitial;
+  final String? calendarName;
+  final String? profileInitial;
 
   @override
   Widget build(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<AppStateScope>();
+    final state = scope?.notifier;
+    final resolvedCalendarName = _nonEmpty(calendarName) ??
+        _nonEmpty(state?.calendarTitle) ??
+        FirestoreSyncService.defaultCalendarTitle;
+    final resolvedProfileInitial = _nonEmpty(profileInitial) ??
+        _initialFrom(_nonEmpty(state?.displayName)) ??
+        'K';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _CalendarPill(calendarName: calendarName),
-          _ProfileCircle(initial: profileInitial),
+          _CalendarPill(calendarName: resolvedCalendarName),
+          _ProfileCircle(initial: resolvedProfileInitial),
         ],
       ),
     );
+  }
+
+  static String? _nonEmpty(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
+  static String? _initialFrom(String? value) {
+    if (value == null || value.isEmpty) return null;
+    return value.characters.first.toUpperCase();
   }
 }
 
