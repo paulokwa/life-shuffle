@@ -338,3 +338,86 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Today screen shows only upcoming activities as Next Up; "Check in" scrolls to the plan section; plan style buttons show rest day counts. All uncommitted work from this date's two sessions is committed together.
 - **Next recommended step**: Confirm/edit display name after Google sign-in, or add planning dimensions (difficulty/energy/social) to the activity model and settings.
 - **Open questions**: None.
+
+---
+
+## 2026-06-17 - MVP-safe regeneration undo
+
+- **Goal**: Add the smallest useful undo flow for week regeneration so users can safely revert the most recent regeneration.
+- **Summary**: Added an in-memory `SavedState` snapshot in `AppState` immediately before `regenerate()` changes the week. Added `undoLastRegeneration()` to restore that snapshot, clear the undo option after use, and persist/sync the restored state through the existing SharedPreferences/Firestore `SavedState` path. Added a warm Plan-screen undo card shown after regeneration. Locked-item regeneration behavior still uses the existing locked-item preservation path. Added focused tests for snapshot availability, undo restoration with locks/check-ins, single-use undo, and locked-item protection. Also fixed an existing flaky weekday-rule test by searching deterministic seeds until the planner produces a Monday placement before asserting the Monday-only rule.
+- **Files changed**:
+  - `lib/state/app_state.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Undo is single-use and in-memory for the most recent regeneration only.
+  - No full diff/preview UI, undo history, new Firestore schema fields, AI, notifications, sharing UI, or listener changes were added.
+- **Tests run**:
+  - `dart format lib/state/app_state.dart lib/screens/plan_screen.dart test/widget_test.dart`
+  - `flutter analyze --no-fatal-infos` passed with 32 info-level lints.
+  - `flutter test` passed.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` passed with only CRLF normalization warnings.
+- **Current state**: Regenerating the Plan screen now exposes an Undo card. Undo restores the previous generated plan, including currently represented locked states and check-in statuses, then disappears. The restored state persists locally and syncs through the existing Firestore save path when signed in.
+- **Next recommended step**: Add clear generation conflict/failure messages for strict rules or locked-item conflicts before building larger preview/diff behavior.
+- **Open questions**:
+  - Should a future preview flow replace or sit alongside this single-use undo once conflict messages exist?
+
+---
+
+## 2026-06-17 - Planner soft-failure messages
+
+- **Goal**: Show a clear, plain-language Plan-screen message when strict activity rules leave expected planner slots unfilled.
+- **Summary**: Added `PlannerGenerationResult` and `PlannerService.generateWithDiagnostics()` while keeping the existing `generate()` API intact. `AppState` now calculates a transient `plannerConflictMessage` whenever it rebuilds the week. The Plan screen shows a small warm notice when enabled activities exist but the generated week could not fill all target activity slots. The message suggests relaxing weekdays, increasing max per week, turning off no-consecutive-days, or choosing a lighter plan style. No AI, preview diff, notifications, sharing/member UI, Firestore schema changes, or complex diagnostics UI were added.
+- **Files changed**:
+  - `lib/services/planner_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat soft-failure messaging as transient UI state derived from generation output, not persisted planner data.
+  - Keep the message intentionally broad for MVP instead of listing per-activity/per-day diagnostics.
+- **Tests run**:
+  - `dart format lib/services/planner_service.dart lib/state/app_state.dart lib/screens/plan_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 32 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` passed with only CRLF normalization warnings.
+  - `git diff --check` passed with only CRLF normalization warnings.
+- **Current state**: Regeneration and plan rebuilds now detect unfilled target activity slots caused by strict rules and surface a helpful Plan-screen message. Existing lock preservation and undo behavior remain intact.
+- **Next recommended step**: Build the quick catch-up check-in view or continue with shared-edit/sync conflict messaging, depending on whether the next priority is check-in flow or collaboration safety.
+- **Open questions**:
+  - Should future diagnostics identify the specific activity that was blocked, or is the broad guidance enough until a preview/diff flow exists?
+
+---
+
+## 2026-06-17 - Display name confirmation after sign-in
+
+- **Goal**: Add the MVP onboarding/account step where the user confirms or edits a display name before entering the planner.
+- **Summary**: Added a warm `DisplayNameScreen` that takes the Google display name as the default when available, falls back to email/local default, and requires a non-empty edited name. Routed `AuthGate` so signed-in and local-only users confirm a display name before the existing onboarding/planner flow. Added `displayName` and `displayNameConfirmed` to `SavedState`, SharedPreferences, and the existing Firestore state map. Updated Settings > Account to show the confirmed app display name first. No public profiles, avatars, custom account system, invite/member UI, or new account collection were added.
+- **Files changed**:
+  - `lib/screens/display_name_screen.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `lib/state/app_state.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Store the confirmed display name in the existing `SavedState` path so local storage and Firestore calendar sync remain the persistence mechanism.
+  - Treat a non-empty confirmed display name as the completion flag for this onboarding/account step.
+  - Keep the display name account-scoped in current app state, not a public profile or member directory.
+- **Tests run**:
+  - `dart format lib/services/persistence_service.dart lib/state/app_state.dart lib/screens/display_name_screen.dart lib/widgets/auth_gate.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 32 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: After sign-in, or in local-only mode, the app asks the user to confirm a display name before showing the existing onboarding flow. The confirmed name persists locally, syncs through the existing Firestore state document when signed in, and appears in Settings > Account.
+- **Next recommended step**: Continue with onboarding calendar naming or multiple-calendar switcher work, since the display-name account step is now complete.
+- **Open questions**:
+  - Should local-only default to `Kwame`, `My name`, or an empty field before broader onboarding naming is added?

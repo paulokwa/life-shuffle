@@ -16,6 +16,8 @@ class PersistenceService {
   static const _keySeed = 'ls_seed';
   static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
   static const _keyPlanStyle = 'ls_plan_style';
+  static const _keyDisplayName = 'ls_display_name';
+  static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -28,6 +30,9 @@ class PersistenceService {
     final activities = _loadActivities(defaultActivities);
     final seed = _prefs.getInt(_keySeed) ?? 0;
     final updatedAtMillis = _prefs.getInt(_keyUpdatedAtMillis) ?? 0;
+    final displayName = _prefs.getString(_keyDisplayName);
+    final displayNameConfirmed =
+        _prefs.getBool(_keyDisplayNameConfirmed) ?? false;
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
@@ -53,6 +58,8 @@ class PersistenceService {
       seed: seed,
       updatedAtMillis: updatedAtMillis,
       planStyle: planStyle,
+      displayName: displayName,
+      displayNameConfirmed: displayNameConfirmed,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -68,6 +75,17 @@ class PersistenceService {
 
   static void savePlanStyle(String value) =>
       _prefs.setString(_keyPlanStyle, value);
+
+  static void saveDisplayName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      _prefs.remove(_keyDisplayName);
+      return;
+    }
+    _prefs.setString(_keyDisplayName, value.trim());
+  }
+
+  static void saveDisplayNameConfirmed(bool value) =>
+      _prefs.setBool(_keyDisplayNameConfirmed, value);
 
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
@@ -113,12 +131,16 @@ class SavedState {
     required this.checkinMap,
     required this.lockedMap,
     this.planStyle = 'balanced',
+    this.displayName,
+    this.displayNameConfirmed = false,
   });
 
   final List<Activity> activities;
   final int seed;
   final int updatedAtMillis;
   final String planStyle;
+  final String? displayName;
+  final bool displayNameConfirmed;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -129,6 +151,8 @@ class SavedState {
       'seed': seed,
       'updatedAtMillis': updatedAtMillis,
       'planStyle': planStyle,
+      'displayName': displayName,
+      'displayNameConfirmed': displayNameConfirmed,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -144,6 +168,10 @@ class SavedState {
       seed: _readInt(map['seed']),
       updatedAtMillis: _readInt(map['updatedAtMillis']),
       planStyle: (map['planStyle'] as String?) ?? 'balanced',
+      displayName: _readNullableString(map['displayName']),
+      displayNameConfirmed: map['displayNameConfirmed'] is bool
+          ? map['displayNameConfirmed'] as bool
+          : false,
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
@@ -154,6 +182,12 @@ class SavedState {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return 0;
+  }
+
+  static String? _readNullableString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   static List<Activity> _readActivities(

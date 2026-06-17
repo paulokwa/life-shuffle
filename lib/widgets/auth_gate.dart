@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../screens/display_name_screen.dart';
 import '../screens/onboarding_screen.dart';
 import '../screens/sign_in_screen.dart';
 import '../services/auth_service.dart';
@@ -25,7 +26,8 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     if (AuthService.isReady) {
-      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      _authSubscription =
+          FirebaseAuth.instance.authStateChanges().listen((user) {
         widget.appState.setUserId(user?.uid);
       });
     }
@@ -37,15 +39,41 @@ class _AuthGateState extends State<AuthGate> {
     super.dispose();
   }
 
-  Widget _mainApp() {
+  Widget _mainApp({User? user}) {
     return AppStateScope(
       state: widget.appState,
-      child: _onboardingDone
-          ? const BottomNavShell()
-          : OnboardingScreen(
-              onComplete: () => setState(() => _onboardingDone = true),
-            ),
+      child: !widget.appState.displayNameConfirmed
+          ? DisplayNameScreen(
+              initialName: _defaultDisplayName(user),
+              onConfirm: (displayName) {
+                final saved = widget.appState.confirmDisplayName(displayName);
+                if (saved) {
+                  setState(() {});
+                }
+                return saved;
+              },
+            )
+          : _onboardingDone
+              ? const BottomNavShell()
+              : OnboardingScreen(
+                  onComplete: () => setState(() => _onboardingDone = true),
+                ),
     );
+  }
+
+  String _defaultDisplayName(User? user) {
+    final saved = widget.appState.displayName?.trim();
+    if (saved != null && saved.isNotEmpty) return saved;
+
+    final googleName = user?.displayName?.trim();
+    if (googleName != null && googleName.isNotEmpty) return googleName;
+
+    final email = user?.email?.trim();
+    if (email != null && email.isNotEmpty) {
+      return email.split('@').first;
+    }
+
+    return 'Kwame';
   }
 
   @override
@@ -62,7 +90,7 @@ class _AuthGateState extends State<AuthGate> {
           return const _SplashScreen();
         }
         if (snapshot.hasData) {
-          return _mainApp();
+          return _mainApp(user: snapshot.data);
         }
         return const SignInScreen();
       },

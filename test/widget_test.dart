@@ -1,6 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
+import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/screens/display_name_screen.dart';
+import 'package:life_shuffle/screens/settings_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
@@ -12,6 +16,98 @@ void main() {
     final appState = AppState(activities: PlannerService.defaultActivities);
     await tester.pumpWidget(LifeShuffleApp(appState: appState));
     expect(find.byType(LifeShuffleApp), findsOneWidget);
+  });
+
+  testWidgets('Display name confirmation uses provided default name',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DisplayNameScreen(
+          initialName: 'Kwame Google',
+          onConfirm: (_) => true,
+        ),
+      ),
+    );
+
+    expect(find.text('Confirm your name'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Kwame Google'), findsOneWidget);
+  });
+
+  testWidgets('Display name confirmation allows editing a non-empty name',
+      (WidgetTester tester) async {
+    String? savedName;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DisplayNameScreen(
+          initialName: 'Kwame Google',
+          onConfirm: (displayName) {
+            savedName = displayName.trim();
+            return savedName!.isNotEmpty;
+          },
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '  Kwame O  ');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(savedName, 'Kwame O');
+  });
+
+  test('AppState confirms, validates, and persists display name', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.displayNameConfirmed, isFalse);
+    expect(appState.confirmDisplayName('   '), isFalse);
+    expect(appState.displayNameConfirmed, isFalse);
+
+    expect(appState.confirmDisplayName('  Kwame   O  '), isTrue);
+    expect(appState.displayName, 'Kwame O');
+    expect(appState.displayNameConfirmed, isTrue);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.displayName, 'Kwame O');
+    expect(saved.displayNameConfirmed, isTrue);
+  });
+
+  testWidgets('Settings displays confirmed display name',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmDisplayName('Laura');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Laura'), findsOneWidget);
+    expect(find.text('Local-only mode'), findsNothing);
+  });
+
+  testWidgets('Local-only app confirms display name before onboarding',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(LifeShuffleApp(appState: appState));
+    expect(find.text('Confirm your name'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Kwame');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(appState.displayName, 'Kwame');
+    expect(find.text('Your calm\nplanning partner'), findsOneWidget);
   });
 
   test('AppState adds, edits, disables, regenerates, and persists activities',
@@ -81,10 +177,15 @@ void main() {
       allowedWeekdays: [1],
     );
 
-    final plan = PlannerService.generate(
-      weekStart: weekStart,
-      pool: [activity],
-      seed: 1,
+    final plan = List.generate(
+      20,
+      (seed) => PlannerService.generate(
+        weekStart: weekStart,
+        pool: [activity],
+        seed: seed,
+      ),
+    ).firstWhere(
+      (candidate) => candidate.any((day) => day.activities.isNotEmpty),
     );
     final planned = plan.expand((day) => day.activities).toList();
 
@@ -135,6 +236,58 @@ void main() {
     }
   });
 
+  test('Planner diagnostics reports blocked activity slots', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'strict-1',
+      title: 'Strict walk',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final result = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 3,
+      planStyle: PlanStyle.balanced,
+    );
+
+    expect(result.enabledActivityCount, 1);
+    expect(result.targetActivityCount, 5);
+    expect(result.scheduledActivityCount, 1);
+    expect(result.unfilledActivityCount, 4);
+    expect(result.hasBlockedActivitySlots, isTrue);
+  });
+
+  test('AppState exposes planner conflict message with simple fixes', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'strict-2',
+          title: 'Strict walk',
+          category: 'Outside',
+          durationMinutes: 30,
+          maxPerWeek: 1,
+          allowedWeekdays: Activity.allWeekdays,
+        ),
+      ],
+    );
+
+    appState.regenerate();
+
+    final message = appState.plannerConflictMessage;
+    expect(message, isNotNull);
+    expect(message, contains('lighter than expected'));
+    expect(message, contains('relaxing weekdays'));
+    expect(message, contains('increasing max per week'));
+    expect(message, contains('turning off no-consecutive-days'));
+    expect(message, contains('choosing a lighter plan style'));
+  });
+
   test('AppState adds starter activities once and persists their rules',
       () async {
     SharedPreferences.setMockInitialValues({});
@@ -170,4 +323,87 @@ void main() {
     expect(saved.activities.single.title, starter.title);
     expect(saved.activities.single.maxPerWeek, starter.maxPerWeek);
   });
+
+  test('Regenerate stores previous plan and undo restores it', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final firstPlanned = appState.weekPlan
+        .expand((day) => day.activities)
+        .firstWhere((planned) => planned.activity.id.isNotEmpty);
+
+    appState.toggleLock(firstPlanned);
+    firstPlanned.status = CheckStatus.done;
+    appState.notifyCheckIn(firstPlanned);
+
+    final beforeRegenerate = _planSignature(appState);
+    expect(appState.canUndoLastRegeneration, isFalse);
+
+    appState.regenerate();
+
+    expect(appState.canUndoLastRegeneration, isTrue);
+
+    appState.undoLastRegeneration();
+
+    expect(_planSignature(appState), beforeRegenerate);
+    expect(appState.canUndoLastRegeneration, isFalse);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.seed, 0);
+    expect(saved.lockedMap[firstPlanned.activity.id], isTrue);
+    expect(saved.checkinMap[firstPlanned.activity.id], CheckStatus.done.index);
+  });
+
+  test('Undo is unavailable after it is used', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final original = _planSignature(appState);
+
+    appState.regenerate();
+    expect(appState.canUndoLastRegeneration, isTrue);
+
+    appState.undoLastRegeneration();
+    expect(appState.canUndoLastRegeneration, isFalse);
+
+    appState.undoLastRegeneration();
+    expect(_planSignature(appState), original);
+    expect(appState.canUndoLastRegeneration, isFalse);
+  });
+
+  test('Locked items remain protected during regeneration', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final lockedDayIndex = appState.weekPlan.indexWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final lockedItem = appState.weekPlan[lockedDayIndex].activities.first;
+    final lockedId = lockedItem.activity.id;
+    final lockedTime = lockedItem.timeSlot;
+
+    appState.toggleLock(lockedItem);
+    appState.regenerate();
+
+    final regeneratedLockedItem = appState.weekPlan[lockedDayIndex].activities
+        .firstWhere((planned) => planned.activity.id == lockedId);
+
+    expect(regeneratedLockedItem.timeSlot, lockedTime);
+    expect(regeneratedLockedItem.locked, isTrue);
+    expect(appState.canUndoLastRegeneration, isTrue);
+  });
+}
+
+List<String> _planSignature(AppState appState) {
+  final result = <String>[];
+  for (var dayIndex = 0; dayIndex < appState.weekPlan.length; dayIndex++) {
+    final day = appState.weekPlan[dayIndex];
+    for (final planned in day.activities) {
+      result.add(
+        '$dayIndex:${planned.activity.id}:${planned.timeSlot}:'
+        '${planned.status.name}:${planned.locked}',
+      );
+    }
+  }
+  return result;
 }

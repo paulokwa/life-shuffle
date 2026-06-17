@@ -15,9 +15,17 @@ class SettingsScreen extends StatelessWidget {
     final state = AppStateScope.of(context);
     final user = AuthService.currentUser;
     final signedIn = user != null;
-    final displayName = user?.displayName?.trim();
+    final displayName = state.displayName?.trim();
+    final googleDisplayName = user?.displayName?.trim();
     final email = user?.email?.trim();
-    final profileInitial = _profileInitial(displayName, email);
+    final accountName = displayName?.isNotEmpty == true
+        ? displayName!
+        : googleDisplayName?.isNotEmpty == true
+            ? googleDisplayName!
+            : signedIn
+                ? 'Signed in'
+                : 'Local-only mode';
+    final profileInitial = _profileInitial(accountName, email);
     final ownerLabel = state.calendarOwnerUserId == null
         ? 'Local only'
         : state.calendarOwnerUserId == user?.uid
@@ -80,11 +88,7 @@ class SettingsScreen extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    signedIn
-                                        ? (displayName?.isNotEmpty == true
-                                            ? displayName!
-                                            : 'Signed in')
-                                        : 'Local-only mode',
+                                    accountName,
                                     style: GoogleFonts.dmSans(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
@@ -274,9 +278,8 @@ class SettingsScreen extends StatelessWidget {
   static String _memberLabel(List<String> ids, String? currentUserId) {
     if (ids.isEmpty) return 'Local only';
     if (ids.length == 1 && ids.first == currentUserId) return 'You';
-    final labels = ids
-        .map((id) => id == currentUserId ? 'You' : _shortId(id))
-        .join(', ');
+    final labels =
+        ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
   }
 }
@@ -477,14 +480,14 @@ class _PlanStylePicker extends StatelessWidget {
       (PlanStyle.push, 'Push me', '~7/week', '2 rest days'),
     ];
     return Row(
-      children: options.indexed.map(((int, (PlanStyle, String, String, String)) pair) {
+      children: options.indexed
+          .map(((int, (PlanStyle, String, String, String)) pair) {
         final i = pair.$1;
         final (style, label, activities, restDays) = pair.$2;
         final selected = current == style;
         final isLast = i == options.length - 1;
-        final mutedColor = selected
-            ? Colors.white.withValues(alpha: 0.75)
-            : textMuted;
+        final mutedColor =
+            selected ? Colors.white.withValues(alpha: 0.75) : textMuted;
         return Expanded(
           child: GestureDetector(
             onTap: () => onChanged(style),

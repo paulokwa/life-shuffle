@@ -4,7 +4,8 @@ import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../services/firestore_sync_service.dart';
 import '../services/persistence_service.dart';
-import '../services/planner_service.dart' show PlannerService, PlanStyle;
+import '../services/planner_service.dart'
+    show PlannerGenerationResult, PlannerService, PlanStyle;
 
 /// Holds all mutable in-session state: activity pool, current week plan.
 /// Persists changes to [PersistenceService] and [FirestoreSyncService] (if signed in) on every mutation.
@@ -15,6 +16,10 @@ class AppState extends ChangeNotifier {
   int _seed = 0;
   int _updatedAtMillis = 0;
   PlanStyle _planStyle = PlanStyle.balanced;
+  SavedState? _lastRegenerationSnapshot;
+  String? _plannerConflictMessage;
+  String? _displayName;
+  bool _displayNameConfirmed = false;
   bool _checkInPromptDismissed = false;
   String? _userId;
   String? _calendarId;
@@ -33,6 +38,10 @@ class AppState extends ChangeNotifier {
 
   List<DayPlan> get weekPlan => _weekPlan;
   PlanStyle get planStyle => _planStyle;
+  bool get canUndoLastRegeneration => _lastRegenerationSnapshot != null;
+  String? get plannerConflictMessage => _plannerConflictMessage;
+  String? get displayName => _displayName;
+  bool get displayNameConfirmed => _displayNameConfirmed;
   bool get checkInPromptDismissed => _checkInPromptDismissed;
   String? get userId => _userId;
   String? get calendarId => _calendarId;
@@ -179,9 +188,29 @@ class AppState extends ChangeNotifier {
 
   // ─── Plan ─────────────────────────────────────────────────────────────────
 
+  bool confirmDisplayName(String value) {
+    final trimmed = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (trimmed.isEmpty) return false;
+    _displayName = trimmed;
+    _displayNameConfirmed = true;
+    _persist();
+    notifyListeners();
+    return true;
+  }
+
   void regenerate() {
+    _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
     _weekPlan = _buildPlan(lockedItems: _collectLocked());
+    _persist();
+    notifyListeners();
+  }
+
+  void undoLastRegeneration() {
+    final snapshot = _lastRegenerationSnapshot;
+    if (snapshot == null) return;
+    _lastRegenerationSnapshot = null;
+    _applySavedState(snapshot, persistLocal: false);
     _persist();
     notifyListeners();
   }
@@ -214,12 +243,16 @@ class AppState extends ChangeNotifier {
   // ─── Private ─────────────────────────────────────────────────────────────
 
   void _applySavedState(SavedState saved, {bool persistLocal = true}) {
+    _lastRegenerationSnapshot = null;
     activities
       ..clear()
       ..addAll(saved.activities.map((activity) => activity.copy()));
     _seed = saved.seed;
     _updatedAtMillis = saved.updatedAtMillis;
     _planStyle = _parsePlanStyle(saved.planStyle);
+    _displayName = saved.displayName;
+    _displayNameConfirmed =
+        saved.displayNameConfirmed && saved.displayName != null;
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -246,6 +279,8 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveSeed(state.seed);
     PersistenceService.saveUpdatedAtMillis(state.updatedAtMillis);
     PersistenceService.savePlanStyle(state.planStyle);
+    PersistenceService.saveDisplayName(state.displayName);
+    PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -297,6 +332,8 @@ class AppState extends ChangeNotifier {
       seed: _seed,
       updatedAtMillis: updatedAtMillis ?? _updatedAtMillis,
       planStyle: _planStyle.name,
+      displayName: _displayName,
+      displayNameConfirmed: _displayNameConfirmed,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -325,12 +362,14 @@ class AppState extends ChangeNotifier {
         .where((a) => a.enabled && !lockedIds.contains(a.id))
         .toList();
 
-    final plan = PlannerService.generate(
+    final generation = PlannerService.generateWithDiagnostics(
       weekStart: weekStart,
       pool: pool,
       seed: seed,
       planStyle: _planStyle,
     );
+    _plannerConflictMessage = _buildPlannerConflictMessage(generation);
+    final plan = generation.plan;
 
     if (lockedItems != null) {
       for (var i = 0; i < plan.length; i++) {
@@ -346,6 +385,16 @@ class AppState extends ChangeNotifier {
     }
 
     return plan;
+  }
+
+  String? _buildPlannerConflictMessage(PlannerGenerationResult generation) {
+    if (!generation.hasBlockedActivitySlots) return null;
+    final count = generation.unfilledActivityCount;
+    final slotLabel = count == 1 ? 'slot was' : 'slots were';
+    return 'This week is lighter than expected because $count activity '
+        '$slotLabel blocked by rules. Try relaxing weekdays, increasing max '
+        'per week, turning off no-consecutive-days, or choosing a lighter '
+        'plan style.';
   }
 
   void _applyOverlays(SavedState saved) {

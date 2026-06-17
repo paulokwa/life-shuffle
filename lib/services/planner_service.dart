@@ -78,6 +78,20 @@ class PlannerService {
     required int seed,
     PlanStyle planStyle = PlanStyle.balanced,
   }) {
+    return generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: pool,
+      seed: seed,
+      planStyle: planStyle,
+    ).plan;
+  }
+
+  static PlannerGenerationResult generateWithDiagnostics({
+    required DateTime weekStart,
+    required List<Activity> pool,
+    required int seed,
+    PlanStyle planStyle = PlanStyle.balanced,
+  }) {
     final rng = Random(seed);
     final activitiesPool = pool.where((activity) => activity.enabled).toList()
       ..shuffle(rng);
@@ -85,19 +99,22 @@ class PlannerService {
     // Template: activity counts per day. Shuffled each regeneration so rest
     // days move around. Totals: gentle ~3, balanced ~5, push ~7.
     final template = switch (planStyle) {
-      PlanStyle.gentle   => [0, 1, 0, 1, 0, 0, 1],
+      PlanStyle.gentle => [0, 1, 0, 1, 0, 0, 1],
       PlanStyle.balanced => [1, 0, 1, 1, 0, 1, 1],
-      PlanStyle.push     => [1, 2, 0, 1, 1, 2, 0],
+      PlanStyle.push => [1, 2, 0, 1, 1, 2, 0],
     };
     template.shuffle(rng);
 
     final plans = <DayPlan>[];
     final scheduledCounts = <String, int>{};
     final scheduledDays = <String, List<int>>{};
+    var targetActivityCount = 0;
+    var scheduledActivityCount = 0;
 
     for (var i = 0; i < 7; i++) {
       final date = weekStart.add(Duration(days: i));
       final targetCount = template[i];
+      targetActivityCount += targetCount;
       final activities = <PlannedActivity>[];
 
       for (var j = 0; j < targetCount; j++) {
@@ -113,6 +130,7 @@ class PlannerService {
 
         scheduledCounts[act.id] = (scheduledCounts[act.id] ?? 0) + 1;
         scheduledDays.putIfAbsent(act.id, () => <int>[]).add(i);
+        scheduledActivityCount++;
         activities.add(
           PlannedActivity(
             activity: act,
@@ -127,7 +145,12 @@ class PlannerService {
       plans.add(DayPlan(date: date, activities: activities));
     }
 
-    return plans;
+    return PlannerGenerationResult(
+      plan: plans,
+      targetActivityCount: targetActivityCount,
+      scheduledActivityCount: scheduledActivityCount,
+      enabledActivityCount: activitiesPool.length,
+    );
   }
 
   static Activity? _pickActivity({
@@ -219,4 +242,23 @@ class PlannerService {
     if (a.preferredTime == 'afternoon') return '3:00 PM';
     return '11:00 AM';
   }
+}
+
+class PlannerGenerationResult {
+  const PlannerGenerationResult({
+    required this.plan,
+    required this.targetActivityCount,
+    required this.scheduledActivityCount,
+    required this.enabledActivityCount,
+  });
+
+  final List<DayPlan> plan;
+  final int targetActivityCount;
+  final int scheduledActivityCount;
+  final int enabledActivityCount;
+
+  int get unfilledActivityCount => targetActivityCount - scheduledActivityCount;
+
+  bool get hasBlockedActivitySlots =>
+      enabledActivityCount > 0 && unfilledActivityCount > 0;
 }

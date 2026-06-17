@@ -14,8 +14,18 @@ class PlanScreen extends StatelessWidget {
     final first = plans.first.date;
     final last = plans.last.date;
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     if (first.month == last.month) {
       return 'Week of ${first.day}–${last.day} ${months[last.month - 1]}';
@@ -57,6 +67,18 @@ class PlanScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   _DayStrip(plans: plans),
                   const SizedBox(height: 16),
+                  if (state.canUndoLastRegeneration) ...[
+                    _RegenerationUndoCard(
+                      onUndo: state.undoLastRegeneration,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (state.plannerConflictMessage != null) ...[
+                    _PlannerConflictCard(
+                      message: state.plannerConflictMessage!,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (activeDays.isEmpty)
                     LsCard(
                       child: Column(
@@ -93,7 +115,8 @@ class PlanScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         '$restCount rest ${restCount == 1 ? "day" : "days"} this week',
-                        style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                        style:
+                            GoogleFonts.dmSans(fontSize: 13, color: textMuted),
                       ),
                     ],
                   ],
@@ -129,6 +152,129 @@ class PlanScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlannerConflictCard extends StatelessWidget {
+  const _PlannerConflictCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      color: const Color(0xFFFFF7E8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x1AC8943A),
+            ),
+            child: const Icon(
+              Icons.tune_rounded,
+              size: 18,
+              color: sand,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Some activities could not fit',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RegenerationUndoCard extends StatelessWidget {
+  const _RegenerationUndoCard({required this.onUndo});
+
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      color: const Color(0xFFFFF3EC),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x1AC8603A),
+            ),
+            child: const Icon(
+              Icons.undo_rounded,
+              size: 18,
+              color: primaryTerracotta,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Week regenerated',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Undo to restore the previous week.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          TextButton(
+            onPressed: onUndo,
+            style: TextButton.styleFrom(
+              foregroundColor: primaryTerracotta,
+              textStyle: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('Undo'),
           ),
         ],
       ),
@@ -282,7 +428,8 @@ class _PlanRow extends StatelessWidget {
             child: Icon(
               activity.locked ? Icons.lock_rounded : Icons.lock_open_rounded,
               size: 16,
-              color: activity.locked ? primaryTerracotta : const Color(0xFFBBB5AC),
+              color:
+                  activity.locked ? primaryTerracotta : const Color(0xFFBBB5AC),
             ),
           ),
         ),

@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Firestore sync, activity creation/editing, plan generation with rules, lock/unlock, check-ins, and basic progress are all working. Settings shows account and calendar info. Starter activity library and plan style choice are live.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, Firestore sync, activity creation/editing, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account and calendar info. Starter activity library and plan style choice are live.
 
-Still to build for MVP 1: display name confirmation, multiple calendars + switcher, onboarding calendar naming, planning dimensions (difficulty/energy/social), regeneration preview/undo, conflict messages, check-in views, ICS publishing, print/export, and remaining Settings sections (activity defaults, publishing, export/print, privacy/help).
+Still to build for MVP 1: multiple calendars + switcher, onboarding calendar naming, planning dimensions (difficulty/energy/social), shared-edit/sync conflict messages, check-in views, ICS publishing, print/export, and remaining Settings sections (activity defaults, publishing, export/print, privacy/help).
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -34,7 +34,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [ ] Add subtle onboarding Next transitions: quick fade or small slide
 - [ ] Avoid dramatic, bouncy, spinning, or distracting onboarding animation
 - [ ] Respect reduced-motion accessibility settings
-- [ ] Confirm/edit display name after Google sign-in
+- [x] Confirm/edit display name after Google sign-in
 - [x] Create calendar data model with title/name
 - [ ] Support multiple named Life Shuffle calendars per user/member
 - [ ] Add onboarding/setup prompt to name the first calendar, with a sensible default
@@ -81,9 +81,9 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add Today/Home screen or clear landing view
 - [x] Add helpful empty states: no activities, no plan (no calendars, no check-ins, no stats, offline still to do)
 - [x] Add lock/unlock planned item behaviour
-- [ ] Add regeneration preview or undo for last regeneration
+- [x] Add regeneration preview or undo for last regeneration
 - [x] Add regenerate-unlocked-only behaviour
-- [ ] Add clear generation conflict/failure messages
+- [x] Add clear generation conflict/failure messages
 - [ ] Add basic shared-edit/sync conflict messages
 - [ ] Add first-run hints for lock and shuffle in agenda/week view
 - [x] Add skippable check-in prompt on app open/login when past unchecked items exist
