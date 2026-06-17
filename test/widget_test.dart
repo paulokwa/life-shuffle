@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
@@ -268,6 +269,228 @@ void main() {
 
     expect(appState.difficultyEnabled, isTrue);
     expect(find.text('On'), findsOneWidget);
+  });
+
+  test('Activity dimensions serialize with normalized defaults and values', () {
+    final defaulted = Activity(
+      id: 'dimension-defaults',
+      title: 'Read',
+      category: 'Creative',
+      durationMinutes: 30,
+    );
+
+    expect(defaulted.difficulty, 3);
+    expect(defaulted.energy, 'medium');
+    expect(defaulted.social, 'either');
+
+    final restored = Activity.fromMap({
+      ...defaulted.toMap(),
+      'difficulty': 9,
+      'energy': 'High',
+      'social': 'Together',
+    });
+
+    expect(restored.difficulty, 5);
+    expect(restored.energy, 'high');
+    expect(restored.social, 'together');
+    expect(restored.toMap()['difficulty'], 5);
+    expect(restored.toMap()['energy'], 'high');
+    expect(restored.toMap()['social'], 'together');
+  });
+
+  test('AppState uses dimension defaults and persists edited dimensions',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+    appState.setDefaultDifficulty(4);
+    appState.setDefaultEnergy('high');
+    appState.setDefaultSocial('group');
+
+    appState.addActivity(
+      title: 'Gallery visit',
+      category: 'Creative',
+      durationMinutes: 60,
+      preferredTime: 'afternoon',
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: false,
+      enabled: true,
+    );
+
+    final id = appState.activities.single.id;
+    expect(appState.activities.single.difficulty, 4);
+    expect(appState.activities.single.energy, 'high');
+    expect(appState.activities.single.social, 'group');
+
+    appState.updateActivity(
+      id,
+      title: 'Quiet gallery visit',
+      category: 'Creative',
+      durationMinutes: 75,
+      preferredTime: 'morning',
+      difficulty: 2,
+      energy: 'low',
+      social: 'solo',
+      maxPerWeek: 1,
+      allowedWeekdays: [6],
+      noConsecutiveDays: false,
+      enabled: true,
+    );
+
+    final saved = PersistenceService.load(const []);
+    expect(saved.activities.single.title, 'Quiet gallery visit');
+    expect(saved.activities.single.difficulty, 2);
+    expect(saved.activities.single.energy, 'low');
+    expect(saved.activities.single.social, 'solo');
+  });
+
+  testWidgets('Activity form hides dimension fields when settings are disabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Planning dimensions'), findsNothing);
+    expect(find.text('Difficulty'), findsNothing);
+    expect(find.text('Energy'), findsNothing);
+    expect(find.text('Social'), findsNothing);
+  });
+
+  testWidgets('Activity form uses enabled dimension defaults when adding',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+    appState.setDefaultDifficulty(4);
+    appState.setDefaultEnergy('high');
+    appState.setDefaultSocial('group');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Planning dimensions'), findsOneWidget);
+    expect(find.text('Difficulty'), findsOneWidget);
+    expect(find.text('Energy'), findsOneWidget);
+    expect(find.text('Social'), findsOneWidget);
+    expect(find.text('4/5'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
+    expect(find.text('Group'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, 'Gallery visit');
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(appState.activities.single.title, 'Gallery visit');
+    expect(appState.activities.single.difficulty, 4);
+    expect(appState.activities.single.energy, 'high');
+    expect(appState.activities.single.social, 'group');
+  });
+
+  testWidgets('Activity cards show enabled dimension chips',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'dimension-card',
+          title: 'Coffee with Sam',
+          category: 'Social',
+          durationMinutes: 45,
+          difficulty: 2,
+          energy: 'low',
+          social: 'together',
+        ),
+      ],
+    );
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Difficulty 2/5'), findsOneWidget);
+    expect(find.text('Low'), findsOneWidget);
+    expect(find.text('Together'), findsOneWidget);
+
+    appState.setEnergyEnabled(false);
+    await tester.pump();
+
+    expect(find.text('Difficulty 2/5'), findsOneWidget);
+    expect(find.text('Low'), findsNothing);
+    expect(find.text('Together'), findsOneWidget);
+  });
+
+  testWidgets('Edit activity form shows saved dimension values',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'dimension-edit',
+          title: 'Solo reading',
+          category: 'Creative',
+          durationMinutes: 45,
+          difficulty: 2,
+          energy: 'low',
+          social: 'solo',
+        ),
+      ],
+    );
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Solo reading'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit activity'), findsOneWidget);
+    expect(find.text('2/5'), findsOneWidget);
+    expect(find.text('Low'), findsWidgets);
+    expect(find.text('Solo'), findsWidgets);
   });
 
   testWidgets('Local-only app confirms display name before onboarding',

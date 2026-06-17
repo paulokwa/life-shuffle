@@ -126,6 +126,9 @@ class AppState extends ChangeNotifier {
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    int? difficulty,
+    String? energy,
+    String? social,
     required int maxPerWeek,
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
@@ -138,6 +141,9 @@ class AppState extends ChangeNotifier {
         category: category,
         durationMinutes: durationMinutes,
         preferredTime: preferredTime,
+        difficulty: difficulty ?? _defaultDifficulty,
+        energy: energy ?? _defaultEnergy,
+        social: social ?? _defaultSocial,
         maxPerWeek: maxPerWeek,
         allowedWeekdays: allowedWeekdays,
         noConsecutiveDays: noConsecutiveDays,
@@ -164,6 +170,9 @@ class AppState extends ChangeNotifier {
         category: starter.category,
         durationMinutes: starter.durationMinutes,
         preferredTime: starter.preferredTime,
+        difficulty: starter.difficulty,
+        energy: starter.energy,
+        social: starter.social,
         maxPerWeek: starter.maxPerWeek,
         allowedWeekdays: starter.allowedWeekdays,
         noConsecutiveDays: starter.noConsecutiveDays,
@@ -181,6 +190,9 @@ class AppState extends ChangeNotifier {
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    int? difficulty,
+    String? energy,
+    String? social,
     required int maxPerWeek,
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
@@ -194,6 +206,17 @@ class AppState extends ChangeNotifier {
       ..category = category
       ..durationMinutes = durationMinutes
       ..preferredTime = preferredTime
+      ..difficulty = (difficulty ?? activity.difficulty).clamp(1, 5).toInt()
+      ..energy = _normalizeOption(
+        energy ?? activity.energy,
+        fallback: activity.energy,
+        allowed: const ['low', 'medium', 'high'],
+      )
+      ..social = _normalizeOption(
+        social ?? activity.social,
+        fallback: activity.social,
+        allowed: const ['solo', 'together', 'group', 'either'],
+      )
       ..maxPerWeek = maxPerWeek
       ..allowedWeekdays = List<int>.from(allowedWeekdays)
       ..noConsecutiveDays = noConsecutiveDays

@@ -502,3 +502,29 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings now has an Activity defaults section where users can toggle Difficulty, Energy, and Social. The settings and defaults persist locally and sync through the existing Firestore saved-state document when signed in.
 - **Next recommended step**: Add the optional Difficulty, Energy, and Social fields to activity create/edit forms and cards, hidden when their dimensions are disabled.
 - **Open questions**: None.
+
+---
+
+## 2026-06-17 - Activity dimension fields and gated cards/forms
+
+- **Goal**: Make Difficulty, Energy, and Social usable on activities without adding planner weighting.
+- **Summary**: Added `difficulty`, `energy`, and `social` fields to `Activity` with normalization and map serialization. Updated `AppState.addActivity`, `updateActivity`, and starter-copy behavior so new custom activities use the current Activity defaults and edited activities retain or update dimension values. Updated the Add/Edit Activity bottom sheet to show only enabled dimension fields, and updated activity cards to show compact chips only for enabled dimensions. No difficulty-aware planner rules, export UI, onboarding dimensions screen, AI, or sharing UI were added.
+- **Files changed**:
+  - `lib/models/activity.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/activities_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Store dimension values directly on each serialized activity so the existing local and Firestore saved-state path syncs them without a schema split.
+  - Keep dimension fields hidden when their Settings toggles are off, including both the form and activity cards.
+  - Keep the planner behavior unchanged until the dedicated difficulty-aware planning step.
+- **Tests run**:
+  - `dart format lib/models/activity.dart lib/state/app_state.dart lib/screens/activities_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 33 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Activities can now carry difficulty, energy, and social metadata. The Add/Edit form and cards respect the enabled dimension settings, and activity serialization persists the new fields locally and through Firestore sync.
+- **Next recommended step**: Add the planning-dimensions onboarding screen or continue toward difficulty-aware planner behavior, depending on whether setup flow or generation quality is the next priority.
+- **Open questions**: None.

@@ -4,6 +4,9 @@ class Activity {
   String category;
   int durationMinutes;
   String preferredTime; // 'morning' | 'afternoon' | 'evening' | 'anytime'
+  int difficulty;
+  String energy;
+  String social;
   int maxPerWeek;
   List<int>
       allowedWeekdays; // DateTime.weekday values: Monday 1 through Sunday 7
@@ -30,6 +33,19 @@ class Activity {
     'evening',
   ];
 
+  static const energyLevels = [
+    'low',
+    'medium',
+    'high',
+  ];
+
+  static const socialLevels = [
+    'solo',
+    'together',
+    'group',
+    'either',
+  ];
+
   static const allWeekdays = [1, 2, 3, 4, 5, 6, 7];
 
   Activity({
@@ -38,11 +54,25 @@ class Activity {
     required this.category,
     required this.durationMinutes,
     this.preferredTime = 'anytime',
+    int? difficulty,
+    String? energy,
+    String? social,
     int? maxPerWeek,
     List<int>? allowedWeekdays,
     this.noConsecutiveDays = false,
     this.enabled = true,
-  })  : maxPerWeek = _normalizeMaxPerWeek(maxPerWeek),
+  })  : difficulty = _normalizeDifficulty(difficulty),
+        energy = _normalizeOption(
+          energy,
+          fallback: 'medium',
+          allowed: energyLevels,
+        ),
+        social = _normalizeOption(
+          social,
+          fallback: 'either',
+          allowed: socialLevels,
+        ),
+        maxPerWeek = _normalizeMaxPerWeek(maxPerWeek),
         allowedWeekdays = _normalizeAllowedWeekdays(allowedWeekdays);
 
   String get duration {
@@ -60,6 +90,9 @@ class Activity {
       category: category,
       durationMinutes: durationMinutes,
       preferredTime: preferredTime,
+      difficulty: difficulty,
+      energy: energy,
+      social: social,
       maxPerWeek: maxPerWeek,
       allowedWeekdays: List<int>.from(allowedWeekdays),
       noConsecutiveDays: noConsecutiveDays,
@@ -74,6 +107,9 @@ class Activity {
       'category': category,
       'durationMinutes': durationMinutes,
       'preferredTime': preferredTime,
+      'difficulty': difficulty,
+      'energy': energy,
+      'social': social,
       'maxPerWeek': maxPerWeek,
       'allowedWeekdays': allowedWeekdays,
       'noConsecutiveDays': noConsecutiveDays,
@@ -94,6 +130,9 @@ class Activity {
         map['durationMinutes'] ?? map['duration'],
       ),
       preferredTime: _readPreferredTime(map['preferredTime']),
+      difficulty: _readDifficulty(map['difficulty']),
+      energy: _readEnergy(map['energy']),
+      social: _readSocial(map['social']),
       maxPerWeek: _readMaxPerWeek(map['maxPerWeek']),
       allowedWeekdays: _readAllowedWeekdays(map['allowedWeekdays']),
       noConsecutiveDays: map['noConsecutiveDays'] is bool
@@ -143,6 +182,33 @@ class Activity {
     return 1;
   }
 
+  static int _readDifficulty(Object? value) {
+    if (value is int) return _normalizeDifficulty(value);
+    if (value is num) return _normalizeDifficulty(value.toInt());
+    return 3;
+  }
+
+  static String _readEnergy(Object? value) {
+    return _normalizeOption(
+      value is String ? value : null,
+      fallback: 'medium',
+      allowed: energyLevels,
+    );
+  }
+
+  static String _readSocial(Object? value) {
+    return _normalizeOption(
+      value is String ? value : null,
+      fallback: 'either',
+      allowed: socialLevels,
+    );
+  }
+
+  static int _normalizeDifficulty(int? value) {
+    if (value == null) return 3;
+    return value.clamp(1, 5).toInt();
+  }
+
   static List<int> _readAllowedWeekdays(Object? value) {
     if (value is Iterable) {
       return _normalizeAllowedWeekdays(
@@ -163,5 +229,20 @@ class Activity {
         .toList()
       ..sort();
     return weekdays.isEmpty ? List<int>.from(allWeekdays) : weekdays;
+  }
+
+  static String _normalizeOption(
+    String? value, {
+    required String fallback,
+    required List<String> allowed,
+  }) {
+    final normalized = value?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) return fallback;
+    return allowed.contains(normalized) ? normalized : fallback;
+  }
+
+  static String optionLabel(String value) {
+    if (value.isEmpty) return value;
+    return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 }

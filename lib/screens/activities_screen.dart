@@ -196,12 +196,16 @@ class ActivitiesScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return _ActivityFormSheet(
+          appState: appState,
           activity: activity,
           onSave: ({
             required String title,
             required String category,
             required int durationMinutes,
             required String preferredTime,
+            required int difficulty,
+            required String energy,
+            required String social,
             required int maxPerWeek,
             required List<int> allowedWeekdays,
             required bool noConsecutiveDays,
@@ -213,6 +217,9 @@ class ActivitiesScreen extends StatelessWidget {
                 category: category,
                 durationMinutes: durationMinutes,
                 preferredTime: preferredTime,
+                difficulty: difficulty,
+                energy: energy,
+                social: social,
                 maxPerWeek: maxPerWeek,
                 allowedWeekdays: allowedWeekdays,
                 noConsecutiveDays: noConsecutiveDays,
@@ -225,6 +232,9 @@ class ActivitiesScreen extends StatelessWidget {
                 category: category,
                 durationMinutes: durationMinutes,
                 preferredTime: preferredTime,
+                difficulty: difficulty,
+                energy: energy,
+                social: social,
                 maxPerWeek: maxPerWeek,
                 allowedWeekdays: allowedWeekdays,
                 noConsecutiveDays: noConsecutiveDays,
@@ -561,6 +571,18 @@ class _ActivityCard extends StatelessWidget {
                             color: textMuted,
                           ),
                         ),
+                        if (state.difficultyEnabled)
+                          _DimensionChip(
+                            label: 'Difficulty ${activity.difficulty}/5',
+                          ),
+                        if (state.energyEnabled)
+                          _DimensionChip(
+                            label: Activity.optionLabel(activity.energy),
+                          ),
+                        if (state.socialEnabled)
+                          _DimensionChip(
+                            label: Activity.optionLabel(activity.social),
+                          ),
                       ],
                     ),
                   ],
@@ -615,18 +637,153 @@ class _ActivityCard extends StatelessWidget {
   }
 }
 
+class _DimensionChip extends StatelessWidget {
+  const _DimensionChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: warmBeige,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _DimensionFields extends StatelessWidget {
+  const _DimensionFields({
+    required this.difficultyEnabled,
+    required this.energyEnabled,
+    required this.socialEnabled,
+    required this.difficulty,
+    required this.energy,
+    required this.social,
+    required this.onDifficultyChanged,
+    required this.onEnergyChanged,
+    required this.onSocialChanged,
+    required this.inputDecoration,
+  });
+
+  final bool difficultyEnabled;
+  final bool energyEnabled;
+  final bool socialEnabled;
+  final int difficulty;
+  final String energy;
+  final String social;
+  final ValueChanged<int> onDifficultyChanged;
+  final ValueChanged<String> onEnergyChanged;
+  final ValueChanged<String> onSocialChanged;
+  final InputDecoration Function(String label) inputDecoration;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: surfaceWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderWarm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Planning dimensions',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (difficultyEnabled)
+            DropdownButtonFormField<int>(
+              initialValue: difficulty,
+              decoration: inputDecoration('Difficulty'),
+              items: List.generate(
+                5,
+                (index) {
+                  final value = index + 1;
+                  return DropdownMenuItem(
+                    value: value,
+                    child: Text('$value/5'),
+                  );
+                },
+              ),
+              onChanged: (value) {
+                if (value != null) onDifficultyChanged(value);
+              },
+            ),
+          if (difficultyEnabled && (energyEnabled || socialEnabled))
+            const SizedBox(height: 10),
+          if (energyEnabled)
+            DropdownButtonFormField<String>(
+              initialValue: energy,
+              decoration: inputDecoration('Energy'),
+              items: Activity.energyLevels
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(Activity.optionLabel(value)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) onEnergyChanged(value);
+              },
+            ),
+          if (energyEnabled && socialEnabled) const SizedBox(height: 10),
+          if (socialEnabled)
+            DropdownButtonFormField<String>(
+              initialValue: social,
+              decoration: inputDecoration('Social'),
+              items: Activity.socialLevels
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(Activity.optionLabel(value)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) onSocialChanged(value);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ActivityFormSheet extends StatefulWidget {
   const _ActivityFormSheet({
+    required this.appState,
     required this.activity,
     required this.onSave,
   });
 
+  final AppState appState;
   final Activity? activity;
   final void Function({
     required String title,
     required String category,
     required int durationMinutes,
     required String preferredTime,
+    required int difficulty,
+    required String energy,
+    required String social,
     required int maxPerWeek,
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
@@ -644,6 +801,9 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
   late final TextEditingController _maxPerWeekController;
   late String _category;
   late String _preferredTime;
+  late int _difficulty;
+  late String _energy;
+  late String _social;
   late Set<int> _allowedWeekdays;
   late bool _noConsecutiveDays;
   late bool _enabled;
@@ -661,6 +821,9 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     );
     _category = activity?.category ?? 'Outside';
     _preferredTime = activity?.preferredTime ?? 'anytime';
+    _difficulty = activity?.difficulty ?? widget.appState.defaultDifficulty;
+    _energy = activity?.energy ?? widget.appState.defaultEnergy;
+    _social = activity?.social ?? widget.appState.defaultSocial;
     _allowedWeekdays = Set<int>.from(
       activity?.allowedWeekdays ?? Activity.allWeekdays,
     );
@@ -775,6 +938,27 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                     setState(() => _preferredTime = value);
                   },
                 ),
+                if (_hasEnabledDimensions) ...[
+                  const SizedBox(height: 12),
+                  _DimensionFields(
+                    difficultyEnabled: widget.appState.difficultyEnabled,
+                    energyEnabled: widget.appState.energyEnabled,
+                    socialEnabled: widget.appState.socialEnabled,
+                    difficulty: _difficulty,
+                    energy: _energy,
+                    social: _social,
+                    onDifficultyChanged: (value) {
+                      setState(() => _difficulty = value);
+                    },
+                    onEnergyChanged: (value) {
+                      setState(() => _energy = value);
+                    },
+                    onSocialChanged: (value) {
+                      setState(() => _social = value);
+                    },
+                    inputDecoration: _inputDecoration,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _maxPerWeekController,
@@ -806,11 +990,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                   },
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: surfaceWhite,
+                Material(
+                  color: surfaceWhite,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: borderWarm),
+                    side: const BorderSide(color: borderWarm),
                   ),
                   child: SwitchListTile.adaptive(
                     value: _noConsecutiveDays,
@@ -841,11 +1025,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: surfaceWhite,
+                Material(
+                  color: surfaceWhite,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: borderWarm),
+                    side: const BorderSide(color: borderWarm),
                   ),
                   child: SwitchListTile.adaptive(
                     value: _enabled,
@@ -938,12 +1122,20 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
       category: _category,
       durationMinutes: duration.clamp(5, 720).toInt(),
       preferredTime: _preferredTime,
+      difficulty: _difficulty,
+      energy: _energy,
+      social: _social,
       maxPerWeek: maxPerWeek.clamp(1, 7).toInt(),
       allowedWeekdays: _allowedWeekdays.toList()..sort(),
       noConsecutiveDays: _noConsecutiveDays,
       enabled: _enabled,
     );
   }
+
+  bool get _hasEnabledDimensions =>
+      widget.appState.difficultyEnabled ||
+      widget.appState.energyEnabled ||
+      widget.appState.socialEnabled;
 
   static String _preferredTimeLabel(String value) {
     return switch (value) {
