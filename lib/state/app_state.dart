@@ -27,6 +27,12 @@ class AppState extends ChangeNotifier {
   String _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
   String? _calendarOwnerUserId;
   List<String> _calendarMemberUserIds = const [];
+  bool _difficultyEnabled = false;
+  bool _energyEnabled = false;
+  bool _socialEnabled = false;
+  int _defaultDifficulty = 3;
+  String _defaultEnergy = 'medium';
+  String _defaultSocial = 'either';
 
   AppState({required List<Activity> activities, SavedState? savedState})
       : activities = activities.map((activity) => activity.copy()).toList() {
@@ -51,6 +57,14 @@ class AppState extends ChangeNotifier {
   String? get calendarOwnerUserId => _calendarOwnerUserId;
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
+  bool get difficultyEnabled => _difficultyEnabled;
+  bool get energyEnabled => _energyEnabled;
+  bool get socialEnabled => _socialEnabled;
+  int get defaultDifficulty => _defaultDifficulty;
+  String get defaultEnergy => _defaultEnergy;
+  String get defaultSocial => _defaultSocial;
+  String get defaultEnergyLabel => _capitalize(_defaultEnergy);
+  String get defaultSocialLabel => _capitalize(_defaultSocial);
 
   void setUserId(String? uid) {
     if (_userId == uid) return;
@@ -241,6 +255,59 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setDifficultyEnabled(bool value) {
+    if (_difficultyEnabled == value) return;
+    _difficultyEnabled = value;
+    _persist();
+    notifyListeners();
+  }
+
+  void setEnergyEnabled(bool value) {
+    if (_energyEnabled == value) return;
+    _energyEnabled = value;
+    _persist();
+    notifyListeners();
+  }
+
+  void setSocialEnabled(bool value) {
+    if (_socialEnabled == value) return;
+    _socialEnabled = value;
+    _persist();
+    notifyListeners();
+  }
+
+  void setDefaultDifficulty(int value) {
+    final normalized = value.clamp(1, 5).toInt();
+    if (_defaultDifficulty == normalized) return;
+    _defaultDifficulty = normalized;
+    _persist();
+    notifyListeners();
+  }
+
+  void setDefaultEnergy(String value) {
+    final normalized = _normalizeOption(
+      value,
+      fallback: _defaultEnergy,
+      allowed: const ['low', 'medium', 'high'],
+    );
+    if (_defaultEnergy == normalized) return;
+    _defaultEnergy = normalized;
+    _persist();
+    notifyListeners();
+  }
+
+  void setDefaultSocial(String value) {
+    final normalized = _normalizeOption(
+      value,
+      fallback: _defaultSocial,
+      allowed: const ['solo', 'together', 'group', 'either'],
+    );
+    if (_defaultSocial == normalized) return;
+    _defaultSocial = normalized;
+    _persist();
+    notifyListeners();
+  }
+
   void toggleLock(PlannedActivity activity) {
     activity.locked = !activity.locked;
     _persist();
@@ -271,6 +338,20 @@ class AppState extends ChangeNotifier {
     }
     _calendarNameConfirmed = saved.calendarNameConfirmed &&
         (savedCalendarTitle != null || _calendarTitle.trim().isNotEmpty);
+    _difficultyEnabled = saved.difficultyEnabled;
+    _energyEnabled = saved.energyEnabled;
+    _socialEnabled = saved.socialEnabled;
+    _defaultDifficulty = saved.defaultDifficulty.clamp(1, 5).toInt();
+    _defaultEnergy = _normalizeOption(
+      saved.defaultEnergy,
+      fallback: 'medium',
+      allowed: const ['low', 'medium', 'high'],
+    );
+    _defaultSocial = _normalizeOption(
+      saved.defaultSocial,
+      fallback: 'either',
+      allowed: const ['solo', 'together', 'group', 'either'],
+    );
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -301,6 +382,12 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     PersistenceService.saveCalendarTitle(state.calendarTitle);
     PersistenceService.saveCalendarNameConfirmed(state.calendarNameConfirmed);
+    PersistenceService.saveDifficultyEnabled(state.difficultyEnabled);
+    PersistenceService.saveEnergyEnabled(state.energyEnabled);
+    PersistenceService.saveSocialEnabled(state.socialEnabled);
+    PersistenceService.saveDefaultDifficulty(state.defaultDifficulty);
+    PersistenceService.saveDefaultEnergy(state.defaultEnergy);
+    PersistenceService.saveDefaultSocial(state.defaultSocial);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -363,6 +450,12 @@ class AppState extends ChangeNotifier {
       displayNameConfirmed: _displayNameConfirmed,
       calendarTitle: _calendarTitle,
       calendarNameConfirmed: _calendarNameConfirmed,
+      difficultyEnabled: _difficultyEnabled,
+      energyEnabled: _energyEnabled,
+      socialEnabled: _socialEnabled,
+      defaultDifficulty: _defaultDifficulty,
+      defaultEnergy: _defaultEnergy,
+      defaultSocial: _defaultSocial,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -451,6 +544,20 @@ class AppState extends ChangeNotifier {
       (s) => s.name == value,
       orElse: () => PlanStyle.balanced,
     );
+  }
+
+  static String _normalizeOption(
+    String value, {
+    required String fallback,
+    required List<String> allowed,
+  }) {
+    final normalized = value.trim().toLowerCase();
+    return allowed.contains(normalized) ? normalized : fallback;
+  }
+
+  static String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return '${value.characters.first.toUpperCase()}${value.substring(1)}';
   }
 }
 

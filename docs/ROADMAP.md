@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account and calendar info. Starter activity library and plan style choice are live. The Today screen's check-in prompt now opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account, calendar info, planning style, and activity-default dimension toggles. Starter activity library and plan style choice are live. The Today screen's check-in prompt now opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons.
 
-Still to build for MVP 1: multiple calendars + switcher, planning dimensions (difficulty/energy/social), shared-edit/sync conflict messages, one-by-one/week-review/day-sheet check-in views, ICS publishing, print/export, and remaining Settings sections (activity defaults, publishing, export/print, privacy/help).
+Still to build for MVP 1: multiple calendars + switcher, planning dimension fields in activities, difficulty-aware planner rules, shared-edit/sync conflict messages, one-by-one/week-review/day-sheet check-in views, ICS publishing, print/export, and remaining Settings sections (publishing, export/print, privacy/help).
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -46,7 +46,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add Settings > Account: display name and sign out
 - [ ] Add Settings > Calendar: name, switcher, create calendar, members, roles, leave, delete (name/owner/members display only; current calendar name is persisted)
 - [x] Add Settings > Planning: default plan style (Gentle/Balanced/Push me) — week start and time window still static
-- [ ] Add Settings > Activity defaults: dimension toggles and defaults
+- [x] Add Settings > Activity defaults: dimension toggles and defaults
 - [ ] Add Settings > Publishing: feed enable/disable, copy link, revoke/regenerate link, feed explanation
 - [ ] Add Settings > Export/print: default output details and note/status/dimension visibility
 - [ ] Add Settings > Privacy/help: privacy explanation, feed explanation, help/about
@@ -56,8 +56,8 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Create activity rule model scoped to a calendar
 - [x] Create planned item model scoped to a calendar
 - [x] Add check-in status model: skipped, partly done, done, unchecked
-- [ ] Add optional planning dimension settings
-- [ ] Add default values for enabled planning dimensions
+- [x] Add optional planning dimension settings
+- [x] Add default values for enabled planning dimensions
 - [x] Add built-in starter activity library
 - [x] Add starter categories: At home, Outside, Health/movement, Social, Creative, Rest, Food, Chores/life admin, Couple time, Low-energy ideas
 - [x] Add starter activity picker with limited first view and `See more` pattern

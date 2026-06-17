@@ -191,6 +191,85 @@ void main() {
     expect(find.text('Solo getting out'), findsOneWidget);
   });
 
+  test('Activity dimension settings use MVP defaults', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.difficultyEnabled, isFalse);
+    expect(appState.energyEnabled, isFalse);
+    expect(appState.socialEnabled, isFalse);
+    expect(appState.defaultDifficulty, 3);
+    expect(appState.defaultEnergy, 'medium');
+    expect(appState.defaultEnergyLabel, 'Medium');
+    expect(appState.defaultSocial, 'either');
+    expect(appState.defaultSocialLabel, 'Either');
+  });
+
+  test('Activity dimension settings toggle and persist', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+    appState.setDefaultDifficulty(5);
+    appState.setDefaultEnergy('high');
+    appState.setDefaultSocial('together');
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.difficultyEnabled, isTrue);
+    expect(saved.energyEnabled, isTrue);
+    expect(saved.socialEnabled, isTrue);
+    expect(saved.defaultDifficulty, 5);
+    expect(saved.defaultEnergy, 'high');
+    expect(saved.defaultSocial, 'together');
+
+    final restored = AppState(
+      activities: saved.activities,
+      savedState: saved,
+    );
+    expect(restored.difficultyEnabled, isTrue);
+    expect(restored.energyEnabled, isTrue);
+    expect(restored.socialEnabled, isTrue);
+    expect(restored.defaultDifficulty, 5);
+    expect(restored.defaultEnergyLabel, 'High');
+    expect(restored.defaultSocialLabel, 'Together');
+  });
+
+  testWidgets('Settings displays activity defaults and toggles dimensions',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('ACTIVITY DEFAULTS'), findsOneWidget);
+    expect(find.text('Difficulty'), findsOneWidget);
+    expect(find.text('Energy'), findsOneWidget);
+    expect(find.text('Social'), findsWidgets);
+    expect(find.text('Default 3/5'), findsOneWidget);
+    expect(find.text('Default Medium'), findsOneWidget);
+    expect(find.text('Default Either'), findsOneWidget);
+
+    await tester.ensureVisible(find.byType(Switch).first);
+    await tester.pump();
+    await tester.tap(find.byType(Switch).first);
+    await tester.pump();
+
+    expect(appState.difficultyEnabled, isTrue);
+    expect(find.text('On'), findsOneWidget);
+  });
+
   testWidgets('Local-only app confirms display name before onboarding',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});

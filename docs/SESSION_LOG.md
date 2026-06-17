@@ -476,3 +476,29 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: New users confirm display name, then name the first calendar, then continue into the existing onboarding/planner flow. The chosen calendar title persists locally, syncs through Firestore when signed in, and appears in the app header plus Settings > Calendar.
 - **Next recommended step**: Continue with multiple-calendar switcher support or planning dimensions, depending on whether the next priority is calendar management or richer activity rules.
 - **Open questions**: None.
+
+---
+
+## 2026-06-17 - Optional planning dimension settings foundation
+
+- **Goal**: Let users enable or disable Difficulty, Energy, and Social planning dimensions from Settings > Activity defaults, with stored default values.
+- **Summary**: Added `difficultyEnabled`, `energyEnabled`, `socialEnabled`, `defaultDifficulty`, `defaultEnergy`, and `defaultSocial` to `SavedState`, SharedPreferences, `AppState`, and the existing Firestore sync map. Defaults are disabled dimensions, difficulty `3/5`, energy `Medium`, and social `Either`. Added a Settings > Activity defaults card with three toggles and visible default values. This is storage and settings UI only: no planner weighting, export UI, activity-form fields, AI, or invite/member UI was added.
+- **Files changed**:
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Store dimension settings at the current calendar/app-state level through the existing flat `SavedState` map so local-only and Firestore sync remain aligned.
+  - Keep dimensions defaulted off until the user enables them, while still storing sensible default values for later activity forms and planner behavior.
+  - Do not add planner rules or force dimension fields into activity forms in this step.
+- **Tests run**:
+  - `dart format lib/services/persistence_service.dart lib/state/app_state.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 33 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Settings now has an Activity defaults section where users can toggle Difficulty, Energy, and Social. The settings and defaults persist locally and sync through the existing Firestore saved-state document when signed in.
+- **Next recommended step**: Add the optional Difficulty, Energy, and Social fields to activity create/edit forms and cards, hidden when their dimensions are disabled.
+- **Open questions**: None.

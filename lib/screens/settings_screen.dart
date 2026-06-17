@@ -167,6 +167,10 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   _PlanStyleCard(state: state),
                   const SizedBox(height: 16),
+                  _SectionLabel(label: 'ACTIVITY DEFAULTS'),
+                  const SizedBox(height: 10),
+                  _ActivityDefaultsCard(state: state),
+                  const SizedBox(height: 16),
                   _SectionLabel(label: 'CATEGORIES'),
                   const SizedBox(height: 10),
                   LsCard(
@@ -281,6 +285,167 @@ class SettingsScreen extends StatelessWidget {
     final labels =
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
+  }
+}
+
+class _ActivityDefaultsCard extends StatelessWidget {
+  const _ActivityDefaultsCard({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _DimensionToggleRow(
+            icon: Icons.speed_rounded,
+            label: 'Difficulty',
+            helper: 'How hard an activity feels to start.',
+            valueLabel: 'Default ${state.defaultDifficulty}/5',
+            enabled: state.difficultyEnabled,
+            onChanged: state.setDifficultyEnabled,
+          ),
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: borderWarm,
+            indent: 16,
+            endIndent: 16,
+          ),
+          _DimensionToggleRow(
+            icon: Icons.battery_4_bar_rounded,
+            label: 'Energy',
+            helper: 'The physical or mental load.',
+            valueLabel: 'Default ${state.defaultEnergyLabel}',
+            enabled: state.energyEnabled,
+            onChanged: state.setEnergyEnabled,
+          ),
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: borderWarm,
+            indent: 16,
+            endIndent: 16,
+          ),
+          _DimensionToggleRow(
+            icon: Icons.groups_2_rounded,
+            label: 'Social',
+            helper: 'Solo, together, group, or flexible.',
+            valueLabel: 'Default ${state.defaultSocialLabel}',
+            enabled: state.socialEnabled,
+            onChanged: state.setSocialEnabled,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DimensionToggleRow extends StatelessWidget {
+  const _DimensionToggleRow({
+    required this.icon,
+    required this.label,
+    required this.helper,
+    required this.valueLabel,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String helper;
+  final String valueLabel;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: warmBeige,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 18, color: primaryTerracotta),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: enabled ? const Color(0xFFEEF6F2) : warmBeige,
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                      child: Text(
+                        enabled ? 'On' : 'Off',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: enabled ? accentSage : textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  helper,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    height: 1.25,
+                    color: textMuted,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  valueLabel,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch.adaptive(
+            value: enabled,
+            activeThumbColor: primaryTerracotta,
+            activeTrackColor: primaryTerracotta.withValues(alpha: 0.32),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
   }
 }
 
