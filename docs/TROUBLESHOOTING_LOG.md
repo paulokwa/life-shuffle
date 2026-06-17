@@ -158,3 +158,25 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: If `./tool/local_run.ps1` gives a port binding error, always run the kill command above first. Do not use `$pid` as a variable name in PowerShell — it is a reserved read-only variable; use `$p` or similar instead.
 
 ---
+
+## 2026-06-17 — `flutter run -d chrome` fails with "SDK root directory not found: /C:/..." on Windows (unresolved upstream bug — use static build workflow instead)
+
+- **Context**: Setting up a new dev machine with puro-managed Flutter. `flutter build web` works fine but `flutter run -d chrome` (debug/hot-reload mode) always fails to compile.
+- **Symptoms**: `Error: SDK root directory not found: /C:/Users/mwake/.puro/envs/stable/flutter/bin/cache/flutter_web_sdk/.` — the path begins with `/C:/` (a POSIX-style path) instead of `C:\`, so Windows can't find the directory even though it physically exists.
+- **What was ruled out** (each tested directly, error was byte-for-byte identical every time):
+  - Flutter version: reproduced on both 3.44.2 (Dart 3.12.2) and 3.41.9 (Dart 3.11.5) after creating a fresh puro env (`puro create v3-41 3.41.9`).
+  - puro's symlinked cache: manually replaced every symlink in `bin\cache\` (`artifacts`, `dart-sdk`, `downloads`, `flutter_web_sdk`, `pkg`) with real directory copies, and ran via `puro --skip-cache-sync flutter run ...` to stop puro re-linking them. Same error.
+  - Calling `flutter.bat` directly instead of through PATH/puro's stub: same error.
+  - Note: puro's per-env `bin\flutter.bat` is itself a generated stub (`"%PURO_BIN%\puro" flutter %*`) that re-syncs (re-symlinks) the cache on every invocation unless `--skip-cache-sync` is passed — this caused early false negatives when testing the "real copy" fix.
+- **Likely real cause**: Matches upstream [flutter/flutter#184233](https://github.com/flutter/flutter/issues/184233) ("Flutter run web doesn't work with symlinks(?)", open, unfixed as of report date 2026-03-27). The `/C:/` leading-slash pattern is consistent with code that uses a `file:///C:/...` URI's `.path` property directly as a filesystem path instead of calling `.toFilePath()` — on Windows `Uri.path` legitimately returns `/C:/...` per spec, which is correct URI behavior but invalid as a raw Windows path. This points to a genuine Flutter/Dart tooling bug in the DDC/frontend_server pipeline on Windows, not anything specific to puro, symlinks, or this project's dependencies. `flutter build web` is unaffected because it uses dart2js, not DDC.
+- **Fix**: None found. This is an open upstream bug.
+- **Workaround (what we actually use)**: Static build + serve instead of `flutter run -d chrome`:
+  ```powershell
+  flutter build web --dart-define=FIREBASE_WEB_API_KEY=$env:FIREBASE_WEB_API_KEY
+  npx --yes serve build\web -p 8769
+  ```
+  Then open `http://127.0.0.1:8769` in Chrome (any normal profile — no special dev profile needed). No hot reload; each code change requires re-running `flutter build web` (~60-90s) then refreshing the browser. `serve` binds to `localhost:8769` but the address `127.0.0.1:8769` still works and satisfies the API key referrer allowlist (see the two-layer auth note below) since the allowlist check is based on the browser's address bar URL, not the bind address.
+- **Files affected**: None — this is an environment/tooling limitation, not a code fix.
+- **Prevention / future note**: Don't re-attempt fixing this without checking whether flutter/flutter#184233 has been closed upstream first. If revisiting, the next untested step would be a vanilla (non-puro) Flutter SDK install to a clean path, to confirm whether puro's installation method (not just its symlinks) is implicated at all, or whether this reproduces on any Windows Flutter install.
+
+---

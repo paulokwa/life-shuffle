@@ -8,6 +8,7 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/activity_plan_card.dart';
+import 'check_in_catchup_screen.dart';
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
@@ -17,8 +18,6 @@ class TodayScreen extends StatefulWidget {
 }
 
 class _TodayScreenState extends State<TodayScreen> {
-  final _planSectionKey = GlobalKey();
-
   // Returns true if the time slot is still upcoming or within a 1-hour grace
   // period, so an activity planned at 3 PM still shows as Next Up at 3:45 PM
   // but not at 7:37 PM.
@@ -50,15 +49,12 @@ class _TodayScreenState extends State<TodayScreen> {
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
   }
 
-  void _scrollToPlanSection() {
-    final ctx = _planSectionKey.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOut,
-      );
-    }
+  void _openCatchup(AppState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckInCatchupScreen(appState: state),
+      ),
+    );
   }
 
   @override
@@ -108,10 +104,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   if (showCheckInPrompt) ...[
                     const SizedBox(height: 12),
                     _CheckInCard(
-                      onCheckIn: () {
-                        state.dismissCheckInPrompt();
-                        _scrollToPlanSection();
-                      },
+                      onCheckIn: () => _openCatchup(state),
                       onDismiss: state.dismissCheckInPrompt,
                     ),
                   ],
@@ -120,10 +113,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   const SizedBox(height: 16),
                   const _QuickActionsSection(),
                   const SizedBox(height: 16),
-                  _TodaysPlanSection(
-                    key: _planSectionKey,
-                    activities: todayActivities,
-                  ),
+                  _TodaysPlanSection(activities: todayActivities),
                 ],
               ),
             ),
@@ -580,7 +570,7 @@ class _QuickActionsSection extends StatelessWidget {
 // ─── Today's plan ─────────────────────────────────────────────────────────────
 
 class _TodaysPlanSection extends StatelessWidget {
-  const _TodaysPlanSection({super.key, required this.activities});
+  const _TodaysPlanSection({required this.activities});
 
   final List<PlannedActivity> activities;
 
