@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
+import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
@@ -671,6 +672,130 @@ void main() {
     expect(result.hasBlockedActivitySlots, isTrue);
   });
 
+  test('Difficulty disabled keeps old planner behavior', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final pool = [
+      Activity(
+        id: 'hard-disabled-1',
+        title: 'Long hike',
+        category: 'Outside',
+        durationMinutes: 180,
+        difficulty: 5,
+        maxPerWeek: 1,
+      ),
+      Activity(
+        id: 'hard-disabled-2',
+        title: 'Deep clean',
+        category: 'Chores / life admin',
+        durationMinutes: 120,
+        difficulty: 4,
+        maxPerWeek: 1,
+      ),
+      Activity(
+        id: 'easy-disabled-1',
+        title: 'Read outside',
+        category: 'Creative',
+        durationMinutes: 45,
+        difficulty: 2,
+        maxPerWeek: 1,
+      ),
+    ];
+
+    final oldBehavior = PlannerService.generate(
+      weekStart: weekStart,
+      pool: pool,
+      seed: 8,
+      planStyle: PlanStyle.push,
+    );
+    final disabledBehavior = PlannerService.generate(
+      weekStart: weekStart,
+      pool: pool,
+      seed: 8,
+      planStyle: PlanStyle.push,
+      difficultyAware: false,
+    );
+
+    expect(_dayPlanSignature(disabledBehavior), _dayPlanSignature(oldBehavior));
+  });
+
+  test('Difficulty enabled spreads hard activities', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final pool = List.generate(
+      5,
+      (index) => Activity(
+        id: 'hard-spread-$index',
+        title: 'Hard activity $index',
+        category: 'Health / movement',
+        durationMinutes: 60,
+        difficulty: 5,
+        maxPerWeek: 1,
+      ),
+    );
+
+    final result = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: pool,
+      seed: 4,
+      planStyle: PlanStyle.push,
+      difficultyAware: true,
+    );
+    final hardDays = _hardDayIndexes(result.plan);
+
+    expect(hardDays.length, greaterThanOrEqualTo(2));
+    for (var i = 1; i < hardDays.length; i++) {
+      expect(hardDays[i] - hardDays[i - 1], greaterThan(1));
+    }
+  });
+
+  test('Difficulty-aware regeneration keeps locked items locked', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setDifficultyEnabled(true);
+
+    final lockedDayIndex = appState.weekPlan.indexWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final lockedItem = appState.weekPlan[lockedDayIndex].activities.first;
+    final lockedId = lockedItem.activity.id;
+    final lockedTime = lockedItem.timeSlot;
+
+    appState.toggleLock(lockedItem);
+    appState.regenerate();
+
+    final regeneratedLockedItem = appState.weekPlan[lockedDayIndex].activities
+        .firstWhere((planned) => planned.activity.id == lockedId);
+
+    expect(regeneratedLockedItem.timeSlot, lockedTime);
+    expect(regeneratedLockedItem.locked, isTrue);
+  });
+
+  test('Difficulty-aware impossible cases do not crash and show conflict',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'hard-impossible',
+          title: 'Very hard Monday task',
+          category: 'Chores / life admin',
+          durationMinutes: 120,
+          difficulty: 5,
+          maxPerWeek: 1,
+          allowedWeekdays: [DateTime.monday],
+          noConsecutiveDays: true,
+        ),
+      ],
+    );
+    appState.setDifficultyEnabled(true);
+
+    expect(appState.regenerate, returnsNormally);
+    expect(appState.weekPlan, hasLength(7));
+    expect(appState.plannerConflictMessage, isNotNull);
+    expect(appState.plannerConflictMessage, contains('lighter than expected'));
+  });
+
   test('AppState exposes planner conflict message with simple fixes', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -813,6 +938,28 @@ List<String> _planSignature(AppState appState) {
         '$dayIndex:${planned.activity.id}:${planned.timeSlot}:'
         '${planned.status.name}:${planned.locked}',
       );
+    }
+  }
+  return result;
+}
+
+List<String> _dayPlanSignature(List<DayPlan> plan) {
+  final result = <String>[];
+  for (var dayIndex = 0; dayIndex < plan.length; dayIndex++) {
+    for (final planned in plan[dayIndex].activities) {
+      result.add('$dayIndex:${planned.activity.id}:${planned.timeSlot}');
+    }
+  }
+  return result;
+}
+
+List<int> _hardDayIndexes(List<DayPlan> plan) {
+  final result = <int>[];
+  for (var dayIndex = 0; dayIndex < plan.length; dayIndex++) {
+    if (plan[dayIndex].activities.any(
+          (planned) => planned.activity.difficulty >= 4,
+        )) {
+      result.add(dayIndex);
     }
   }
   return result;

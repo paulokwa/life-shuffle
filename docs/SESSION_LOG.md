@@ -528,3 +528,28 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Activities can now carry difficulty, energy, and social metadata. The Add/Edit form and cards respect the enabled dimension settings, and activity serialization persists the new fields locally and through Firestore sync.
 - **Next recommended step**: Add the planning-dimensions onboarding screen or continue toward difficulty-aware planner behavior, depending on whether setup flow or generation quality is the next priority.
 - **Open questions**: None.
+
+---
+
+## 2026-06-17 - Difficulty-aware planner rules
+
+- **Goal**: Use the existing activity difficulty field to avoid unrealistic generated weeks when Difficulty is enabled.
+- **Summary**: Added a difficulty-aware planner mode that only runs when `difficultyEnabled` is true. The planner treats difficulty 4/5 and 5/5 activities as hard, avoids placing hard activities on the same or adjacent day when possible, and uses locked planned items as hard-day context without moving them. If strict rules or hard-day spacing leave target slots unfilled, the existing Plan-screen conflict message path explains that the week is lighter than expected and suggests simple fixes. No energy/social planner logic, AI, export/publishing, or scoring UI was added.
+- **Files changed**:
+  - `lib/services/planner_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep difficulty as a soft planner safety preference gated by the existing setting, not a new scoring UI.
+  - Treat difficulty 4 and 5 as "hard" for MVP spacing.
+  - Let difficult/impossible weeks become lighter and use the existing conflict messaging instead of relaxing strict user rules.
+- **Tests run**:
+  - `dart format lib/services/planner_service.dart lib/state/app_state.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 33 info-level lints.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Regeneration now respects the Difficulty setting when enabled, spreads hard activities more gently, preserves locked items, and falls back through existing soft-failure messaging when rules prevent a full week.
+- **Next recommended step**: Add the planning-dimensions onboarding screen so users can choose Difficulty/Energy/Social during setup before configuring activities.
+- **Open questions**: None.

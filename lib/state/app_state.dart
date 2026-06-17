@@ -512,6 +512,8 @@ class AppState extends ChangeNotifier {
       pool: pool,
       seed: seed,
       planStyle: _planStyle,
+      difficultyAware: _difficultyEnabled,
+      scheduledContext: lockedItems ?? const <int, List<PlannedActivity>>{},
     );
     _plannerConflictMessage = _buildPlannerConflictMessage(generation);
     final plan = generation.plan;

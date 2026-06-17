@@ -77,12 +77,17 @@ class PlannerService {
     required List<Activity> pool,
     required int seed,
     PlanStyle planStyle = PlanStyle.balanced,
+    bool difficultyAware = false,
+    Map<int, List<PlannedActivity>> scheduledContext =
+        const <int, List<PlannedActivity>>{},
   }) {
     return generateWithDiagnostics(
       weekStart: weekStart,
       pool: pool,
       seed: seed,
       planStyle: planStyle,
+      difficultyAware: difficultyAware,
+      scheduledContext: scheduledContext,
     ).plan;
   }
 
@@ -91,6 +96,9 @@ class PlannerService {
     required List<Activity> pool,
     required int seed,
     PlanStyle planStyle = PlanStyle.balanced,
+    bool difficultyAware = false,
+    Map<int, List<PlannedActivity>> scheduledContext =
+        const <int, List<PlannedActivity>>{},
   }) {
     final rng = Random(seed);
     final activitiesPool = pool.where((activity) => activity.enabled).toList()
@@ -108,6 +116,7 @@ class PlannerService {
     final plans = <DayPlan>[];
     final scheduledCounts = <String, int>{};
     final scheduledDays = <String, List<int>>{};
+    final hardDayCounts = _hardDayCountsFrom(scheduledContext);
     var targetActivityCount = 0;
     var scheduledActivityCount = 0;
 
@@ -124,12 +133,17 @@ class PlannerService {
           dayIndex: i,
           scheduledCounts: scheduledCounts,
           scheduledDays: scheduledDays,
+          hardDayCounts: hardDayCounts,
+          difficultyAware: difficultyAware,
           rng: rng,
         );
         if (act == null) break;
 
         scheduledCounts[act.id] = (scheduledCounts[act.id] ?? 0) + 1;
         scheduledDays.putIfAbsent(act.id, () => <int>[]).add(i);
+        if (_isHard(act)) {
+          hardDayCounts[i] = (hardDayCounts[i] ?? 0) + 1;
+        }
         scheduledActivityCount++;
         activities.add(
           PlannedActivity(
@@ -159,6 +173,8 @@ class PlannerService {
     required int dayIndex,
     required Map<String, int> scheduledCounts,
     required Map<String, List<int>> scheduledDays,
+    required Map<int, int> hardDayCounts,
+    required bool difficultyAware,
     required Random rng,
   }) {
     final strictCandidates = _eligibleActivities(
@@ -170,6 +186,15 @@ class PlannerService {
       enforceNoConsecutive: true,
     );
     if (strictCandidates.isEmpty) return null;
+    if (difficultyAware) {
+      return _chooseDifficultyAware(
+        strictCandidates,
+        scheduledCounts,
+        hardDayCounts,
+        dayIndex,
+        rng,
+      );
+    }
     return _chooseLeastUsed(strictCandidates, scheduledCounts, rng);
   }
 
@@ -214,6 +239,68 @@ class PlannerService {
       ),
     );
     return shuffled.first;
+  }
+
+  static Activity? _chooseDifficultyAware(
+    List<Activity> candidates,
+    Map<String, int> scheduledCounts,
+    Map<int, int> hardDayCounts,
+    int dayIndex,
+    Random rng,
+  ) {
+    final nearbyHard = _hasNearbyHardDay(hardDayCounts, dayIndex);
+    final preferred = candidates
+        .where((activity) => !_isHard(activity) || !nearbyHard)
+        .toList();
+
+    if (preferred.isEmpty) {
+      return null;
+    }
+
+    final shuffled = List<Activity>.from(preferred)..shuffle(rng);
+    shuffled.sort((a, b) {
+      final usedCompare = (scheduledCounts[a.id] ?? 0).compareTo(
+        scheduledCounts[b.id] ?? 0,
+      );
+      if (usedCompare != 0) return usedCompare;
+      return _difficultyPlacementScore(a, hardDayCounts, dayIndex).compareTo(
+        _difficultyPlacementScore(b, hardDayCounts, dayIndex),
+      );
+    });
+    return shuffled.first;
+  }
+
+  static Map<int, int> _hardDayCountsFrom(
+    Map<int, List<PlannedActivity>> scheduledContext,
+  ) {
+    final result = <int, int>{};
+    for (final entry in scheduledContext.entries) {
+      final hardCount =
+          entry.value.where((item) => _isHard(item.activity)).length;
+      if (hardCount > 0) result[entry.key] = hardCount;
+    }
+    return result;
+  }
+
+  static bool _isHard(Activity activity) => activity.difficulty >= 4;
+
+  static bool _hasNearbyHardDay(Map<int, int> hardDayCounts, int dayIndex) {
+    return hardDayCounts.entries.any(
+      (entry) => entry.value > 0 && (entry.key - dayIndex).abs() <= 1,
+    );
+  }
+
+  static int _difficultyPlacementScore(
+    Activity activity,
+    Map<int, int> hardDayCounts,
+    int dayIndex,
+  ) {
+    if (!_isHard(activity)) return 0;
+    final hardDays = hardDayCounts.keys.toList();
+    if (hardDays.isEmpty) return 1;
+    final nearestDistance =
+        hardDays.map((hardDay) => (hardDay - dayIndex).abs()).reduce(min);
+    return 10 - nearestDistance.clamp(0, 7).toInt();
   }
 
   static int timeRank(String slot) {
