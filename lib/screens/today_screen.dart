@@ -8,6 +8,7 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/activity_plan_card.dart';
+import 'check_in_catchup_screen.dart';
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
@@ -17,8 +18,6 @@ class TodayScreen extends StatefulWidget {
 }
 
 class _TodayScreenState extends State<TodayScreen> {
-  final _planSectionKey = GlobalKey();
-
   // Returns true if the time slot is still upcoming or within a 1-hour grace
   // period, so an activity planned at 3 PM still shows as Next Up at 3:45 PM
   // but not at 7:37 PM.
@@ -40,25 +39,37 @@ class _TodayScreenState extends State<TodayScreen> {
   static String _formattedDate() {
     final now = DateTime.now();
     const days = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
   }
 
-  void _scrollToPlanSection() {
-    final ctx = _planSectionKey.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOut,
-      );
-    }
+  void _openCatchup(AppState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckInCatchupScreen(appState: state),
+      ),
+    );
   }
 
   @override
@@ -70,13 +81,18 @@ class _TodayScreenState extends State<TodayScreen> {
 
     DayPlan? today;
     for (final d in week) {
-      if (d.isToday) { today = d; break; }
+      if (d.isToday) {
+        today = d;
+        break;
+      }
     }
 
     final allActivities = week.expand((d) => d.activities).toList();
     final planned = allActivities.length;
-    final done    = allActivities.where((a) => a.status == CheckStatus.done).length;
-    final partly  = allActivities.where((a) => a.status == CheckStatus.partly).length;
+    final done =
+        allActivities.where((a) => a.status == CheckStatus.done).length;
+    final partly =
+        allActivities.where((a) => a.status == CheckStatus.partly).length;
 
     final todayActivities = today?.activities ?? [];
     final pending = todayActivities
@@ -88,8 +104,7 @@ class _TodayScreenState extends State<TodayScreen> {
     final hasPastUnchecked = week.any((d) =>
         d.date.isBefore(DateTime(now.year, now.month, now.day)) &&
         d.activities.any((a) => a.status == CheckStatus.none));
-    final showCheckInPrompt =
-        hasPastUnchecked && !state.checkInPromptDismissed;
+    final showCheckInPrompt = hasPastUnchecked && !state.checkInPromptDismissed;
 
     return SafeArea(
       child: Column(
@@ -108,10 +123,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   if (showCheckInPrompt) ...[
                     const SizedBox(height: 12),
                     _CheckInCard(
-                      onCheckIn: () {
-                        state.dismissCheckInPrompt();
-                        _scrollToPlanSection();
-                      },
+                      onCheckIn: () => _openCatchup(state),
                       onDismiss: state.dismissCheckInPrompt,
                     ),
                   ],
@@ -120,10 +132,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   const SizedBox(height: 16),
                   const _QuickActionsSection(),
                   const SizedBox(height: 16),
-                  _TodaysPlanSection(
-                    key: _planSectionKey,
-                    activities: todayActivities,
-                  ),
+                  _TodaysPlanSection(activities: todayActivities),
                 ],
               ),
             ),
@@ -171,14 +180,14 @@ class _NextUpCard extends StatelessWidget {
   final PlannedActivity? nextUp;
 
   IconData _icon(String category) => switch (category) {
-    'Creative'    => Icons.menu_book_rounded,
-    'Outside'     => Icons.waves_rounded,
-    'Couple time' => Icons.restaurant_rounded,
-    'Rest'        => Icons.self_improvement_rounded,
-    'Social'      => Icons.people_rounded,
-    'At home'     => Icons.home_rounded,
-    _             => Icons.star_rounded,
-  };
+        'Creative' => Icons.menu_book_rounded,
+        'Outside' => Icons.waves_rounded,
+        'Couple time' => Icons.restaurant_rounded,
+        'Rest' => Icons.self_improvement_rounded,
+        'Social' => Icons.people_rounded,
+        'At home' => Icons.home_rounded,
+        _ => Icons.star_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +208,8 @@ class _NextUpCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.5),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.check_rounded, size: 18, color: accentSage),
+              child:
+                  const Icon(Icons.check_rounded, size: 18, color: accentSage),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -413,8 +423,7 @@ class _ThisWeekCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress =
-        planned == 0 ? 0.0 : (done + partly * 0.5) / planned;
+    final progress = planned == 0 ? 0.0 : (done + partly * 0.5) / planned;
     return LsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,9 +440,10 @@ class _ThisWeekCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _StatCell(value: '$planned', label: 'Planned', valueColor: textPrimary),
-              _StatCell(value: '$done',    label: 'Done',    valueColor: accentSage),
-              _StatCell(value: '$partly',  label: 'Partly',  valueColor: sand),
+              _StatCell(
+                  value: '$planned', label: 'Planned', valueColor: textPrimary),
+              _StatCell(value: '$done', label: 'Done', valueColor: accentSage),
+              _StatCell(value: '$partly', label: 'Partly', valueColor: sand),
             ],
           ),
           const SizedBox(height: 12),
@@ -496,11 +506,13 @@ class _ProgressBar extends StatelessWidget {
               children: [
                 Positioned.fill(child: Container(color: warmBeige)),
                 Positioned(
-                  left: 0, top: 0, bottom: 0, width: filled,
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: filled,
                   child: Container(
                     decoration: const BoxDecoration(
-                      gradient:
-                          LinearGradient(colors: [accentSage, sand]),
+                      gradient: LinearGradient(colors: [accentSage, sand]),
                     ),
                   ),
                 ),
@@ -580,7 +592,7 @@ class _QuickActionsSection extends StatelessWidget {
 // ─── Today's plan ─────────────────────────────────────────────────────────────
 
 class _TodaysPlanSection extends StatelessWidget {
-  const _TodaysPlanSection({super.key, required this.activities});
+  const _TodaysPlanSection({required this.activities});
 
   final List<PlannedActivity> activities;
 

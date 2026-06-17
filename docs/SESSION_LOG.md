@@ -341,6 +341,32 @@ Use it when a session ends or when enough context has changed that the next assi
 
 ---
 
+## 2026-06-17 - New machine setup, hot-reload investigation, quick catch-up check-in view, planner test fix
+
+- **Goal**: Get the app running on a new dev machine, then continue MVP 1 build tasks from ROADMAP.md.
+- **Summary**: Four separate threads in this session:
+  1. **New machine setup**: Confirmed `tool/local_run.ps1` launches the app. Hit a port-8769-in-use zombie process, resolved with the existing kill-process steps from TROUBLESHOOTING_LOG.md.
+  2. **Hot reload investigation (time-boxed, not resolved)**: `flutter run -d chrome` failed on this machine with `Error: SDK root directory not found: /C:/...`. Ruling out Flutter version, puro symlinked cache, and direct-vs-PATH invocation pointed to a likely Flutter/Dart Windows tooling bug matching upstream `flutter/flutter#184233`. Static build+serve remains the documented workflow until that upstream issue is fixed.
+  3. **Quick catch-up check-in view**: Added `lib/screens/check_in_catchup_screen.dart`, a full-screen view listing every past unchecked activity grouped by day. Wired the Today screen's check-in prompt to push this screen. The final interaction uses three explicit labeled buttons (Done / Partly / Skipped), not a tap-to-cycle circle, because a live list filtered by unchecked items would make multi-step cycling unreachable.
+  4. **Fixed a pre-existing failing planner test**: The weekday-rule test used a seed that left Monday with zero target slots. The remote fix changed it to `seed: 4` with an explanatory comment so the assertions actually exercise Monday placement.
+- **Files changed**:
+  - `lib/screens/check_in_catchup_screen.dart`
+  - `lib/screens/today_screen.dart`
+  - `test/widget_test.dart`
+  - `.claude/skills/run/SKILL.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Use static build (`flutter build web`) plus static serve on port 8769 as the standing local workflow until the upstream Flutter Windows hot-reload issue is fixed.
+  - Catch-up check-in uses explicit outcome buttons, not the general tap-to-cycle check-in circle.
+  - Planner test seeds are load-bearing because template shuffling can legitimately produce an empty eligible day.
+- **Tests run**: `flutter analyze --no-fatal-infos` passed with 32 info-level lints. `flutter test` passed. `flutter build web` passed. Manual browser verification confirmed the catch-up screen lists past unchecked items grouped by day and each outcome button commits and clears the item.
+- **Current state**: Today screen's check-in prompt opens a working full-screen catch-up flow. Hot reload remains broken on this machine pending an upstream Flutter fix.
+- **Next recommended step**: Regeneration preview/undo.
+- **Open questions**: None.
+
+---
+
 ## 2026-06-17 - MVP-safe regeneration undo
 
 - **Goal**: Add the smallest useful undo flow for week regeneration so users can safely revert the most recent regeneration.

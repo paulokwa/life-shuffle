@@ -177,15 +177,18 @@ void main() {
       allowedWeekdays: [1],
     );
 
-    final plan = List.generate(
-      20,
-      (seed) => PlannerService.generate(
-        weekStart: weekStart,
-        pool: [activity],
-        seed: seed,
-      ),
-    ).firstWhere(
-      (candidate) => candidate.any((day) => day.activities.isNotEmpty),
+    // seed: 4 is required, not arbitrary. PlannerService.generate() shuffles
+    // its 7-day activity-count template with the same seeded Random used for
+    // the pool, so a day's target slot count (not just weekday eligibility)
+    // depends on the seed. seed: 1 happens to shuffle Monday's slot to 0,
+    // which makes this Monday-only activity correctly schedule nowhere (the
+    // planner's intentional "leave blocked slots empty" behavior) but leaves
+    // the assertions below untested. seed: 4 reliably gives Monday a
+    // non-zero slot so the allowed-weekday/max-per-week rules are exercised.
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 4,
     );
     final planned = plan.expand((day) => day.activities).toList();
 
