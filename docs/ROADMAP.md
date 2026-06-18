@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, and local ICS/iCalendar feed-string generation are all working. Settings shows account, calendar info, planning style, activity-default dimension toggles, a Publishing placeholder, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, local ICS/iCalendar feed-string generation, and private feed token metadata are all working. Settings shows account, calendar info, planning style, activity-default dimension toggles, Publishing controls for local feed metadata, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items.
 
-Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, public ICS publishing URL/controls, print/export, and remaining Settings controls (publishing and export/print).
+Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, public ICS publishing endpoint/link copy, print/export, and remaining Settings controls (public publishing link and export/print).
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -48,7 +48,8 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add Settings > Planning: default plan style (Gentle/Balanced/Push me) — week start and time window still static
 - [x] Add Settings > Activity defaults: dimension toggles and defaults
 - [x] Add Settings > Publishing placeholder showing feed is not enabled yet but local ICS foundation exists
-- [ ] Add Settings > Publishing: feed enable/disable, copy link, revoke/regenerate link, feed explanation
+- [x] Add Settings > Publishing local metadata controls: feed enable/disable, no-endpoint copy/link placeholder, token preview, regenerate token, revoke token, feed explanation
+- [ ] Add Settings > Publishing public feed controls: copy link and public endpoint-backed explanation
 - [ ] Add Settings > Export/print: default output details and note/status/dimension visibility
 - [x] Add Settings > Privacy/help: privacy explanation, feed explanation, help/about
 - [ ] Add calendar-level plan settings: week start, earliest/latest time, default activity count
@@ -104,8 +105,11 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Save calendars, activities, generated plans, and check-in statuses in Firestore
 - [x] Add Firestore security rules for shared calendar access
 - [x] Generate local read-only ICS/iCalendar feed string for the selected calendar
+- [x] Add private/unguessable feed token metadata per selected calendar
+- [x] Add ability to disable publishing metadata without deleting the calendar
+- [x] Add ability to revoke/regenerate calendar feed token
 - [ ] Add private/unguessable calendar feed URL per published calendar
-- [ ] Add ability to revoke/regenerate calendar feed URL
+- [ ] Add public endpoint support for revoked/regenerated feed URLs
 - [ ] Add printable calendar view
 - [ ] Add PDF export if practical
 - [ ] Add simple text/share export if practical

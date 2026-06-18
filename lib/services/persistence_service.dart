@@ -26,6 +26,11 @@ class PersistenceService {
   static const _keyDefaultDifficulty = 'ls_default_difficulty';
   static const _keyDefaultEnergy = 'ls_default_energy';
   static const _keyDefaultSocial = 'ls_default_social';
+  static const _keyFeedEnabled = 'ls_feed_enabled';
+  static const _keyFeedToken = 'ls_feed_token';
+  static const _keyFeedCreatedAtMillis = 'ls_feed_created_at_millis';
+  static const _keyFeedUpdatedAtMillis = 'ls_feed_updated_at_millis';
+  static const _keyFeedRevokedAtMillis = 'ls_feed_revoked_at_millis';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -50,6 +55,11 @@ class PersistenceService {
     final defaultDifficulty = _prefs.getInt(_keyDefaultDifficulty) ?? 3;
     final defaultEnergy = _prefs.getString(_keyDefaultEnergy) ?? 'medium';
     final defaultSocial = _prefs.getString(_keyDefaultSocial) ?? 'either';
+    final feedEnabled = _prefs.getBool(_keyFeedEnabled) ?? false;
+    final feedToken = _prefs.getString(_keyFeedToken);
+    final feedCreatedAtMillis = _prefs.getInt(_keyFeedCreatedAtMillis);
+    final feedUpdatedAtMillis = _prefs.getInt(_keyFeedUpdatedAtMillis);
+    final feedRevokedAtMillis = _prefs.getInt(_keyFeedRevokedAtMillis);
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
@@ -85,6 +95,11 @@ class PersistenceService {
       defaultDifficulty: defaultDifficulty,
       defaultEnergy: defaultEnergy,
       defaultSocial: defaultSocial,
+      feedEnabled: feedEnabled,
+      feedToken: feedToken,
+      feedCreatedAtMillis: feedCreatedAtMillis,
+      feedUpdatedAtMillis: feedUpdatedAtMillis,
+      feedRevokedAtMillis: feedRevokedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -141,6 +156,26 @@ class PersistenceService {
   static void saveDefaultSocial(String value) =>
       _prefs.setString(_keyDefaultSocial, value.trim().toLowerCase());
 
+  static void saveFeedEnabled(bool value) =>
+      _prefs.setBool(_keyFeedEnabled, value);
+
+  static void saveFeedToken(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      _prefs.remove(_keyFeedToken);
+      return;
+    }
+    _prefs.setString(_keyFeedToken, value.trim());
+  }
+
+  static void saveFeedCreatedAtMillis(int? value) =>
+      _saveNullableInt(_keyFeedCreatedAtMillis, value);
+
+  static void saveFeedUpdatedAtMillis(int? value) =>
+      _saveNullableInt(_keyFeedUpdatedAtMillis, value);
+
+  static void saveFeedRevokedAtMillis(int? value) =>
+      _saveNullableInt(_keyFeedRevokedAtMillis, value);
+
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
 
@@ -174,6 +209,14 @@ class PersistenceService {
 
     return defaultActivities.map((activity) => activity.copy()).toList();
   }
+
+  static void _saveNullableInt(String key, int? value) {
+    if (value == null || value <= 0) {
+      _prefs.remove(key);
+      return;
+    }
+    _prefs.setInt(key, value);
+  }
 }
 
 class SavedState {
@@ -195,6 +238,11 @@ class SavedState {
     this.defaultDifficulty = 3,
     this.defaultEnergy = 'medium',
     this.defaultSocial = 'either',
+    this.feedEnabled = false,
+    this.feedToken,
+    this.feedCreatedAtMillis,
+    this.feedUpdatedAtMillis,
+    this.feedRevokedAtMillis,
   });
 
   final List<Activity> activities;
@@ -211,6 +259,11 @@ class SavedState {
   final int defaultDifficulty;
   final String defaultEnergy;
   final String defaultSocial;
+  final bool feedEnabled;
+  final String? feedToken;
+  final int? feedCreatedAtMillis;
+  final int? feedUpdatedAtMillis;
+  final int? feedRevokedAtMillis;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -231,6 +284,12 @@ class SavedState {
       'defaultDifficulty': defaultDifficulty,
       'defaultEnergy': defaultEnergy,
       'defaultSocial': defaultSocial,
+      'feedEnabled': feedEnabled,
+      'isPublished': feedEnabled,
+      'feedToken': feedToken,
+      'feedCreatedAtMillis': feedCreatedAtMillis,
+      'feedUpdatedAtMillis': feedUpdatedAtMillis,
+      'feedRevokedAtMillis': feedRevokedAtMillis,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -269,6 +328,11 @@ class SavedState {
         fallback: 'either',
         allowed: const ['solo', 'together', 'group', 'either'],
       ),
+      feedEnabled: _readBool(map['feedEnabled'] ?? map['isPublished']),
+      feedToken: _readNullableString(map['feedToken']),
+      feedCreatedAtMillis: _readNullableInt(map['feedCreatedAtMillis']),
+      feedUpdatedAtMillis: _readNullableInt(map['feedUpdatedAtMillis']),
+      feedRevokedAtMillis: _readNullableInt(map['feedRevokedAtMillis']),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
@@ -279,6 +343,12 @@ class SavedState {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return 0;
+  }
+
+  static int? _readNullableInt(Object? value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    return null;
   }
 
   static int _readBoundedInt(

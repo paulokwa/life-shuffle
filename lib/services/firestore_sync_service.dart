@@ -130,6 +130,11 @@ class CalendarMetadata {
     required this.memberUserIds,
     required this.createdAtMillis,
     required this.updatedAtMillis,
+    this.feedEnabled = false,
+    this.feedToken,
+    this.feedCreatedAtMillis,
+    this.feedUpdatedAtMillis,
+    this.feedRevokedAtMillis,
   });
 
   final String calendarId;
@@ -138,6 +143,11 @@ class CalendarMetadata {
   final List<String> memberUserIds;
   final int createdAtMillis;
   final int updatedAtMillis;
+  final bool feedEnabled;
+  final String? feedToken;
+  final int? feedCreatedAtMillis;
+  final int? feedUpdatedAtMillis;
+  final int? feedRevokedAtMillis;
 
   factory CalendarMetadata.fromMap(
     Map<String, dynamic> map, {
@@ -159,6 +169,11 @@ class CalendarMetadata {
         map['updatedAtMillis'],
         fallback.updatedAtMillis,
       ),
+      feedEnabled: _readBool(map['feedEnabled'] ?? map['isPublished']),
+      feedToken: _readNullableString(map['feedToken']),
+      feedCreatedAtMillis: _readNullableInt(map['feedCreatedAtMillis']),
+      feedUpdatedAtMillis: _readNullableInt(map['feedUpdatedAtMillis']),
+      feedRevokedAtMillis: _readNullableInt(map['feedRevokedAtMillis']),
     );
   }
 
@@ -179,4 +194,18 @@ class CalendarMetadata {
     if (value is num) return value.toInt();
     return fallback;
   }
+
+  static int? _readNullableInt(Object? value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    return null;
+  }
+
+  static String? _readNullableString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static bool _readBool(Object? value) => value is bool ? value : false;
 }

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../models/day_plan.dart';
@@ -33,6 +36,11 @@ class AppState extends ChangeNotifier {
   int _defaultDifficulty = 3;
   String _defaultEnergy = 'medium';
   String _defaultSocial = 'either';
+  bool _feedEnabled = false;
+  String? _feedToken;
+  int? _feedCreatedAtMillis;
+  int? _feedUpdatedAtMillis;
+  int? _feedRevokedAtMillis;
 
   AppState({required List<Activity> activities, SavedState? savedState})
       : activities = activities.map((activity) => activity.copy()).toList() {
@@ -65,6 +73,18 @@ class AppState extends ChangeNotifier {
   String get defaultSocial => _defaultSocial;
   String get defaultEnergyLabel => _capitalize(_defaultEnergy);
   String get defaultSocialLabel => _capitalize(_defaultSocial);
+  bool get feedEnabled => _feedEnabled;
+  bool get isPublished => _feedEnabled;
+  String? get feedToken => _feedToken;
+  int? get feedCreatedAtMillis => _feedCreatedAtMillis;
+  int? get feedUpdatedAtMillis => _feedUpdatedAtMillis;
+  int? get feedRevokedAtMillis => _feedRevokedAtMillis;
+  String get feedTokenPreview {
+    final token = _feedToken;
+    if (token == null || token.isEmpty) return 'No token yet';
+    if (token.length <= 16) return token;
+    return '${token.substring(0, 8)}...${token.substring(token.length - 6)}';
+  }
 
   void setUserId(String? uid) {
     if (_userId == uid) return;
@@ -331,6 +351,39 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setFeedEnabled(bool value) {
+    if (value) {
+      _enableFeed();
+      return;
+    }
+    _disableFeed();
+  }
+
+  void regenerateFeedToken() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final hadToken = _feedToken != null && _feedToken!.isNotEmpty;
+    _feedToken = _generateFeedToken();
+    _feedEnabled = true;
+    _feedCreatedAtMillis ??= now;
+    _feedUpdatedAtMillis = now;
+    if (hadToken) {
+      _feedRevokedAtMillis = now;
+    }
+    _persist();
+    notifyListeners();
+  }
+
+  void revokeFeedToken() {
+    if (!_feedEnabled && _feedToken == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _feedEnabled = false;
+    _feedToken = null;
+    _feedUpdatedAtMillis = now;
+    _feedRevokedAtMillis = now;
+    _persist();
+    notifyListeners();
+  }
+
   void toggleLock(PlannedActivity activity) {
     activity.locked = !activity.locked;
     _persist();
@@ -375,6 +428,11 @@ class AppState extends ChangeNotifier {
       fallback: 'either',
       allowed: const ['solo', 'together', 'group', 'either'],
     );
+    _feedEnabled = saved.feedEnabled;
+    _feedToken = saved.feedToken;
+    _feedCreatedAtMillis = saved.feedCreatedAtMillis;
+    _feedUpdatedAtMillis = saved.feedUpdatedAtMillis;
+    _feedRevokedAtMillis = saved.feedRevokedAtMillis;
     for (final entry in saved.enabledMap.entries) {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
@@ -411,6 +469,11 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveDefaultDifficulty(state.defaultDifficulty);
     PersistenceService.saveDefaultEnergy(state.defaultEnergy);
     PersistenceService.saveDefaultSocial(state.defaultSocial);
+    PersistenceService.saveFeedEnabled(state.feedEnabled);
+    PersistenceService.saveFeedToken(state.feedToken);
+    PersistenceService.saveFeedCreatedAtMillis(state.feedCreatedAtMillis);
+    PersistenceService.saveFeedUpdatedAtMillis(state.feedUpdatedAtMillis);
+    PersistenceService.saveFeedRevokedAtMillis(state.feedRevokedAtMillis);
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -479,6 +542,11 @@ class AppState extends ChangeNotifier {
       defaultDifficulty: _defaultDifficulty,
       defaultEnergy: _defaultEnergy,
       defaultSocial: _defaultSocial,
+      feedEnabled: _feedEnabled,
+      feedToken: _feedToken,
+      feedCreatedAtMillis: _feedCreatedAtMillis,
+      feedUpdatedAtMillis: _feedUpdatedAtMillis,
+      feedRevokedAtMillis: _feedRevokedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -562,6 +630,36 @@ class AppState extends ChangeNotifier {
 
   static String _normalizeActivityTitle(String title) {
     return title.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  void _enableFeed() {
+    final hasToken = _feedToken != null && _feedToken!.isNotEmpty;
+    if (_feedEnabled && hasToken) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _feedEnabled = true;
+    if (!hasToken) {
+      _feedToken = _generateFeedToken();
+      _feedCreatedAtMillis ??= now;
+    }
+    _feedUpdatedAtMillis = now;
+    _persist();
+    notifyListeners();
+  }
+
+  void _disableFeed() {
+    if (!_feedEnabled) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _feedEnabled = false;
+    _feedUpdatedAtMillis = now;
+    _persist();
+    notifyListeners();
+  }
+
+  static String _generateFeedToken() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   static PlanStyle _parsePlanStyle(String value) {

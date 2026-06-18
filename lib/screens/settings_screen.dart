@@ -225,7 +225,7 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   _SectionLabel(label: 'PUBLISHING'),
                   const SizedBox(height: 10),
-                  const _PublishingPlaceholderCard(),
+                  _PublishingCard(state: state),
                   const SizedBox(height: 16),
                   const _SectionLabel(label: 'PRIVACY / HELP'),
                   const SizedBox(height: 10),
@@ -278,18 +278,20 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-class _PublishingPlaceholderCard extends StatelessWidget {
-  const _PublishingPlaceholderCard();
+class _PublishingCard extends StatelessWidget {
+  const _PublishingCard({required this.state});
+
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
     return LsCard(
-      key: const ValueKey('settings-publishing-placeholder'),
+      key: const ValueKey('settings-publishing-card'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 36,
@@ -320,28 +322,180 @@ class _PublishingPlaceholderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Not enabled yet',
+                      state.feedEnabled
+                          ? 'Feed metadata enabled'
+                          : 'Not enabled yet',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: textMuted,
+                        color: state.feedEnabled ? accentSage : textMuted,
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
+              Switch.adaptive(
+                key: const ValueKey('settings-feed-switch'),
+                value: state.feedEnabled,
+                activeThumbColor: primaryTerracotta,
+                activeTrackColor: primaryTerracotta.withValues(alpha: 0.32),
+                onChanged: state.setFeedEnabled,
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            'Life Shuffle can now generate a read-only ICS calendar feed inside the app. Public feed links, copying, revoking, and regenerating are still off.',
+            state.feedEnabled
+                ? 'A private token exists for this calendar, but there is no public feed endpoint yet.'
+                : 'Turn this on to prepare private feed metadata for this calendar. No public URL will be created yet.',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               height: 1.35,
               color: textMuted,
             ),
           ),
+          const SizedBox(height: 12),
+          _FeedLinkPlaceholder(feedEnabled: state.feedEnabled),
+          if (state.feedToken != null) ...[
+            const SizedBox(height: 10),
+            _TokenPreview(tokenPreview: state.feedTokenPreview),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'The feed will be read-only when a public endpoint exists. Anyone with a future feed link may be able to view it, and outside calendar apps may refresh slowly.',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              height: 1.35,
+              color: textMuted,
+            ),
+          ),
+          if (state.feedToken != null) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (state.feedEnabled)
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-regenerate-feed-token'),
+                    icon: Icons.refresh_rounded,
+                    label: 'Regenerate token',
+                    onTap: state.regenerateFeedToken,
+                  ),
+                _PublishingActionButton(
+                  key: const ValueKey('settings-revoke-feed-token'),
+                  icon: Icons.link_off_rounded,
+                  label: 'Revoke token',
+                  onTap: state.revokeFeedToken,
+                  quiet: true,
+                ),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _FeedLinkPlaceholder extends StatelessWidget {
+  const _FeedLinkPlaceholder({required this.feedEnabled});
+
+  final bool feedEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('settings-feed-link-placeholder'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: warmBeige,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        feedEnabled
+            ? 'Copy link will appear after a public feed endpoint is added.'
+            : 'No feed link exists yet. Enabling now only creates private metadata.',
+        style: GoogleFonts.dmSans(
+          fontSize: 12,
+          height: 1.35,
+          color: textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _TokenPreview extends StatelessWidget {
+  const _TokenPreview({required this.tokenPreview});
+
+  final String tokenPreview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('settings-feed-token-preview'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF6F2),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        'Private token: $tokenPreview',
+        style: GoogleFonts.dmSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: accentSage,
+        ),
+      ),
+    );
+  }
+}
+
+class _PublishingActionButton extends StatelessWidget {
+  const _PublishingActionButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.quiet = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool quiet;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = quiet ? textMuted : primaryTerracotta;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: quiet ? warmBeige : const Color(0xFFFAF0EC),
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: foreground),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: foreground,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

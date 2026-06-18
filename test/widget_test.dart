@@ -12,6 +12,7 @@ import 'package:life_shuffle/screens/plan_screen.dart';
 import 'package:life_shuffle/screens/progress_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
+import 'package:life_shuffle/services/firestore_sync_service.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
@@ -324,7 +325,7 @@ void main() {
     );
   });
 
-  testWidgets('Settings displays publishing placeholder',
+  testWidgets('Settings displays publishing controls while disabled',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -341,17 +342,200 @@ void main() {
 
     expect(find.text('PUBLISHING'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('settings-publishing-placeholder')),
+      find.byKey(const ValueKey('settings-publishing-card')),
       findsOneWidget,
     );
     expect(find.text('Calendar feed'), findsOneWidget);
     expect(find.text('Not enabled yet'), findsOneWidget);
     expect(
       find.text(
-        'Life Shuffle can now generate a read-only ICS calendar feed inside the app. Public feed links, copying, revoking, and regenerating are still off.',
+        'Turn this on to prepare private feed metadata for this calendar. No public URL will be created yet.',
       ),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('settings-feed-link-placeholder')),
+      findsOneWidget,
+    );
+    expect(
+        find.text(
+            'No feed link exists yet. Enabling now only creates private metadata.'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
+        findsNothing);
+  });
+
+  testWidgets('Settings publishing controls enable regenerate and revoke token',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.pump();
+
+    final firstToken = appState.feedToken;
+    expect(appState.feedEnabled, isTrue);
+    expect(firstToken, isNotNull);
+    expect(firstToken!.length, greaterThanOrEqualTo(32));
+    expect(find.text('Feed metadata enabled'), findsOneWidget);
+    expect(
+      find.text('Copy link will appear after a public feed endpoint is added.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-regenerate-feed-token')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-revoke-feed-token')),
+        findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-regenerate-feed-token')));
+    await tester.pump();
+
+    final regeneratedToken = appState.feedToken;
+    expect(regeneratedToken, isNot(firstToken));
+    expect(appState.feedEnabled, isTrue);
+    expect(appState.feedRevokedAtMillis, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('settings-revoke-feed-token')));
+    await tester.pump();
+
+    expect(appState.feedEnabled, isFalse);
+    expect(appState.feedToken, isNull);
+    expect(find.text('Not enabled yet'), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
+        findsNothing);
+  });
+
+  test('Publishing metadata enables disables regenerates and persists',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.feedEnabled, isFalse);
+    expect(appState.isPublished, isFalse);
+    expect(appState.feedToken, isNull);
+
+    appState.setFeedEnabled(true);
+
+    final firstToken = appState.feedToken;
+    expect(appState.feedEnabled, isTrue);
+    expect(appState.isPublished, isTrue);
+    expect(firstToken, isNotNull);
+    expect(firstToken!.length, greaterThanOrEqualTo(32));
+    expect(appState.feedCreatedAtMillis, isNotNull);
+    expect(appState.feedUpdatedAtMillis, isNotNull);
+
+    appState.setFeedEnabled(false);
+
+    expect(appState.feedEnabled, isFalse);
+    expect(appState.feedToken, firstToken);
+
+    var saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.feedEnabled, isFalse);
+    expect(saved.feedToken, firstToken);
+    expect(saved.feedCreatedAtMillis, appState.feedCreatedAtMillis);
+
+    appState.setFeedEnabled(true);
+    expect(appState.feedToken, firstToken);
+
+    appState.regenerateFeedToken();
+
+    final regeneratedToken = appState.feedToken;
+    expect(appState.feedEnabled, isTrue);
+    expect(regeneratedToken, isNot(firstToken));
+    expect(appState.feedRevokedAtMillis, isNotNull);
+
+    saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.feedEnabled, isTrue);
+    expect(saved.feedToken, regeneratedToken);
+    expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
+
+    appState.revokeFeedToken();
+
+    expect(appState.feedEnabled, isFalse);
+    expect(appState.feedToken, isNull);
+    expect(appState.feedRevokedAtMillis, isNotNull);
+
+    saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.feedEnabled, isFalse);
+    expect(saved.feedToken, isNull);
+    expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
+  });
+
+  test('SavedState maps publishing metadata for Firestore sync', () {
+    const state = SavedState(
+      activities: [],
+      seed: 0,
+      updatedAtMillis: 200,
+      feedEnabled: true,
+      feedToken: 'private-token',
+      feedCreatedAtMillis: 100,
+      feedUpdatedAtMillis: 200,
+      feedRevokedAtMillis: 150,
+      enabledMap: {},
+      checkinMap: {},
+      lockedMap: {},
+    );
+
+    final map = state.toMap();
+    expect(map['feedEnabled'], isTrue);
+    expect(map['isPublished'], isTrue);
+    expect(map['feedToken'], 'private-token');
+    expect(map['feedCreatedAtMillis'], 100);
+    expect(map['feedUpdatedAtMillis'], 200);
+    expect(map['feedRevokedAtMillis'], 150);
+
+    final restored = SavedState.fromMap({
+      ...map,
+      'feedEnabled': null,
+      'isPublished': true,
+    });
+    expect(restored.feedEnabled, isTrue);
+    expect(restored.feedToken, 'private-token');
+    expect(restored.feedCreatedAtMillis, 100);
+    expect(restored.feedUpdatedAtMillis, 200);
+    expect(restored.feedRevokedAtMillis, 150);
+  });
+
+  test('CalendarMetadata parses publishing metadata', () {
+    final fallback = FirestoreSyncService.defaultMetadata('user-1');
+    final metadata = CalendarMetadata.fromMap(
+      {
+        'calendarId': 'cal-1',
+        'title': 'Weekend ideas',
+        'ownerUserId': 'user-1',
+        'memberUserIds': ['user-1'],
+        'createdAtMillis': 100,
+        'updatedAtMillis': 200,
+        'feedEnabled': true,
+        'feedToken': 'token-1',
+        'feedCreatedAtMillis': 110,
+        'feedUpdatedAtMillis': 210,
+        'feedRevokedAtMillis': 190,
+      },
+      fallback: fallback,
+    );
+
+    expect(metadata.feedEnabled, isTrue);
+    expect(metadata.feedToken, 'token-1');
+    expect(metadata.feedCreatedAtMillis, 110);
+    expect(metadata.feedUpdatedAtMillis, 210);
+    expect(metadata.feedRevokedAtMillis, 190);
   });
 
   test('Activity dimensions serialize with normalized defaults and values', () {

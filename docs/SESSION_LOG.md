@@ -730,3 +730,34 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The app can generate a valid local ICS feed string for the current generated plan, and Settings exposes a non-enabled Publishing placeholder.
 - **Next recommended step**: Add private published feed URL infrastructure later, likely after the selected-calendar/multiple-calendar model is firmer.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Private feed token metadata and publishing toggle
+
+- **Goal**: Let the selected calendar carry publishing metadata before any public feed endpoint exists.
+- **Summary**: Added calendar publishing metadata to `SavedState`, SharedPreferences persistence, Firestore state maps, and `CalendarMetadata` parsing: `feedEnabled`/`isPublished`, `feedToken`, `feedCreatedAtMillis`, `feedUpdatedAtMillis`, and `feedRevokedAtMillis`. `AppState` now generates a private URL-safe token with `Random.secure()` when feed metadata is enabled, allows disabling the feed without deleting the calendar or token, regenerates the token while keeping publishing enabled, and revokes the token by disabling publishing and clearing the token. Settings > Publishing now has an enable/disable switch, no-endpoint copy/link placeholder, token preview, regenerate token action, revoke token action, and plain-language explanation. No Netlify Functions, public feed endpoint, Google Calendar API, export/print, sharing/member UI, or AI were added.
+- **Files changed**:
+  - `lib/services/persistence_service.dart`
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep publishing metadata flat in the existing selected-calendar saved state so local fallback and Firestore sync stay aligned.
+  - Treat disabling publishing as a reversible off switch that keeps the token, while revoking clears the token and records revocation time.
+  - Keep copy/link UI as explicit placeholder text until a public endpoint exists.
+- **Tests run**:
+  - `dart format lib/services/persistence_service.dart lib/services/firestore_sync_service.dart lib/state/app_state.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test test/widget_test.dart --plain-name "Publishing metadata enables disables regenerates and persists"`
+  - `flutter test test/widget_test.dart --plain-name "Settings publishing controls enable regenerate and revoke token"`
+  - `flutter test test/widget_test.dart --plain-name "SavedState maps publishing metadata for Firestore sync"`
+  - `flutter test test/widget_test.dart --plain-name "CalendarMetadata parses publishing metadata"`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with 23 info-level lints.
+  - `flutter build web` passed with the existing icon-font warning and wasm dry-run note.
+- **Current state**: The selected calendar can hold local and synced private feed-token metadata and Settings can control that metadata, but there is still no public URL or endpoint.
+- **Next recommended step**: Add a public read-only feed endpoint later, after confirming the URL shape and token lookup strategy.
+- **Open questions**: None.
