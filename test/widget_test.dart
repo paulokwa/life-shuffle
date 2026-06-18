@@ -1217,6 +1217,79 @@ void main() {
     expect(rhythm.hasComparisonHistory, isFalse);
   });
 
+  test('Looking ahead summary counts upcoming next 7 days only', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(DateTime(2026, 6, 17), [
+        CheckStatus.none,
+      ]),
+      _summaryDay(DateTime(2026, 6, 18), [
+        CheckStatus.none,
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 24), [
+        CheckStatus.partly,
+      ]),
+      _summaryDay(DateTime(2026, 6, 25), [
+        CheckStatus.none,
+      ]),
+    ];
+
+    final summary = ProgressSummaryCalculator.lookingAhead(
+      plans,
+      now: now,
+    );
+
+    expect(summary.planned, 3);
+    expect(summary.activities, hasLength(3));
+    expect(summary.hasUpcoming, isTrue);
+  });
+
+  test('Looking ahead summary orders next activities by day and time', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(
+        DateTime(2026, 6, 19),
+        [
+          CheckStatus.none,
+        ],
+        titles: ['Tomorrow early'],
+        timeSlots: ['8:00 AM'],
+      ),
+      _summaryDay(
+        DateTime(2026, 6, 18),
+        [
+          CheckStatus.none,
+          CheckStatus.none,
+        ],
+        titles: ['Lunch plan', 'Morning walk'],
+        timeSlots: ['12:00 PM', '9:00 AM'],
+      ),
+    ];
+
+    final summary = ProgressSummaryCalculator.lookingAhead(
+      plans,
+      now: now,
+    );
+
+    expect(summary.activities.map((activity) => activity.title), [
+      'Morning walk',
+      'Lunch plan',
+      'Tomorrow early',
+    ]);
+  });
+
+  test('Looking ahead summary reports empty upcoming plan', () {
+    final summary = ProgressSummaryCalculator.lookingAhead(
+      const [],
+      now: DateTime(2026, 6, 18, 14),
+    );
+
+    expect(summary.planned, 0);
+    expect(summary.activities, isEmpty);
+    expect(summary.hasUpcoming, isFalse);
+  });
+
   testWidgets('Progress displays past 7 and past 30 day summaries',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -1346,6 +1419,70 @@ void main() {
     );
   });
 
+  testWidgets('Progress displays looking ahead section',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final today = _today();
+    appState.weekPlan
+      ..clear()
+      ..addAll([
+        _summaryDay(
+          today.subtract(const Duration(days: 1)),
+          [
+            CheckStatus.none,
+          ],
+          titles: ['Past item'],
+        ),
+        _summaryDay(
+          today,
+          [
+            CheckStatus.none,
+            CheckStatus.none,
+          ],
+          titles: ['Morning walk', 'Cafe reading'],
+          categories: ['Outside', 'Creative'],
+          timeSlots: ['9:00 AM', '12:00 PM'],
+        ),
+      ]);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('progress-looking-ahead-summary')),
+        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('progress-looking-ahead-card')),
+      findsOneWidget,
+    );
+    expect(find.text('LOOKING AHEAD'), findsOneWidget);
+    expect(find.text('2 planned in the next 7 days'), findsOneWidget);
+    expect(find.text('Morning walk'), findsOneWidget);
+    expect(find.text('Cafe reading'), findsOneWidget);
+    expect(find.text('Past item'), findsNothing);
+  });
+
+  testWidgets('Progress shows looking ahead empty state',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(
+      find.byKey(const ValueKey('progress-looking-ahead-empty')),
+      findsOneWidget,
+    );
+    expect(find.text('Nothing planned in the next 7 days'), findsOneWidget);
+    expect(
+      find.text(
+        'Generate or adjust the plan when you want something on deck.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Progress hides difficulty summary when Difficulty is disabled',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -1453,6 +1590,9 @@ DayPlan _summaryDay(
   DateTime date,
   List<CheckStatus> statuses, {
   List<int>? difficulties,
+  List<String>? titles,
+  List<String>? categories,
+  List<String>? timeSlots,
 }) {
   return DayPlan(
     date: date,
@@ -1461,12 +1601,12 @@ DayPlan _summaryDay(
         PlannedActivity(
           activity: Activity(
             id: '${date.toIso8601String()}-$i',
-            title: 'Activity $i',
-            category: i.isEven ? 'Outside' : 'Creative',
+            title: titles?[i] ?? 'Activity $i',
+            category: categories?[i] ?? (i.isEven ? 'Outside' : 'Creative'),
             durationMinutes: 30,
             difficulty: difficulties?[i] ?? 3,
           ),
-          timeSlot: '9:00 AM',
+          timeSlot: timeSlots?[i] ?? '9:00 AM',
           status: statuses[i],
         ),
     ],

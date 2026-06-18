@@ -60,6 +60,34 @@ class RhythmProgressSummary {
   bool get hasComparisonHistory => previous7Planned > 0;
 }
 
+class UpcomingActivitySummary {
+  const UpcomingActivitySummary({
+    required this.date,
+    required this.time,
+    required this.title,
+    required this.category,
+  });
+
+  final DateTime date;
+  final String time;
+  final String title;
+  final String category;
+}
+
+class LookingAheadSummary {
+  const LookingAheadSummary({
+    required this.days,
+    required this.planned,
+    required this.activities,
+  });
+
+  final int days;
+  final int planned;
+  final List<UpcomingActivitySummary> activities;
+
+  bool get hasUpcoming => planned > 0;
+}
+
 class ProgressSummaryCalculator {
   const ProgressSummaryCalculator._();
 
@@ -200,9 +228,84 @@ class ProgressSummaryCalculator {
     );
   }
 
+  static LookingAheadSummary lookingAhead(
+    List<DayPlan> plans, {
+    int days = 7,
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? DateTime.now());
+    final end = today.add(Duration(days: days - 1));
+    final upcoming = <_UpcomingCandidate>[];
+
+    for (final day in plans) {
+      final date = _dateOnly(day.date);
+      if (date.isBefore(today) || date.isAfter(end)) continue;
+
+      for (final activity in day.activities) {
+        upcoming.add(
+          _UpcomingCandidate(
+            date: date,
+            time: activity.time,
+            title: activity.title,
+            category: activity.category,
+          ),
+        );
+      }
+    }
+
+    upcoming.sort((a, b) {
+      final dateCompare = a.date.compareTo(b.date);
+      if (dateCompare != 0) return dateCompare;
+      return _timeRank(a.time).compareTo(_timeRank(b.time));
+    });
+
+    return LookingAheadSummary(
+      days: days,
+      planned: upcoming.length,
+      activities: upcoming
+          .take(3)
+          .map(
+            (activity) => UpcomingActivitySummary(
+              date: activity.date,
+              time: activity.time,
+              title: activity.title,
+              category: activity.category,
+            ),
+          )
+          .toList(),
+    );
+  }
+
   static DateTime _dateOnly(DateTime value) =>
       DateTime(value.year, value.month, value.day);
 
   static bool _isDoneOrPartly(CheckStatus status) =>
       status == CheckStatus.done || status == CheckStatus.partly;
+
+  static int _timeRank(String value) {
+    final match = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', caseSensitive: false)
+        .firstMatch(value.trim());
+    if (match == null) return 24 * 60;
+
+    var hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    final period = (match.group(3) ?? '').toUpperCase();
+    if (period == 'AM' && hour == 12) hour = 0;
+    if (period == 'PM' && hour != 12) hour += 12;
+    return hour * 60 + minute;
+  }
+}
+
+class _UpcomingCandidate {
+  const _UpcomingCandidate({
+    required this.date,
+    required this.time,
+    required this.title,
+    required this.category,
+  });
+
+  final DateTime date;
+  final String time;
+  final String title;
+  final String category;
 }

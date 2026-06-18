@@ -46,6 +46,7 @@ class ProgressScreen extends StatelessWidget {
     final hardPast7 = ProgressSummaryCalculator.recentHard(week, days: 7);
     final hardPast30 = ProgressSummaryCalculator.recentHard(week, days: 30);
     final rhythm = ProgressSummaryCalculator.rhythm(week);
+    final lookingAhead = ProgressSummaryCalculator.lookingAhead(week);
     final rateLabel = '${(stats.rate * 100).round()}%';
 
     return SafeArea(
@@ -86,6 +87,8 @@ class ProgressScreen extends StatelessWidget {
                     const SizedBox(height: 20),
                   ],
                   _RhythmSummarySection(rhythm: rhythm),
+                  const SizedBox(height: 20),
+                  _LookingAheadSection(summary: lookingAhead),
                   const SizedBox(height: 20),
                   Row(
                     children: [
@@ -719,6 +722,189 @@ class _RhythmSummarySection extends StatelessWidget {
     }
     return 'Past 7 days and the previous 7 have the same Done or Partly '
         'count.';
+  }
+}
+
+class _LookingAheadSection extends StatelessWidget {
+  const _LookingAheadSection({required this.summary});
+
+  final LookingAheadSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('progress-looking-ahead-summary'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'LOOKING AHEAD',
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        LsCard(
+          key: summary.hasUpcoming
+              ? const ValueKey('progress-looking-ahead-card')
+              : const ValueKey('progress-looking-ahead-empty'),
+          color: summary.hasUpcoming
+              ? surfaceWhite
+              : warmBeige.withValues(alpha: 0.55),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0x1A8BB4C8),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_month_rounded,
+                      size: 17,
+                      color: dustySky,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          summary.hasUpcoming
+                              ? '${summary.planned} planned in the next 7 days'
+                              : 'Nothing planned in the next 7 days',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          summary.hasUpcoming
+                              ? 'A quick peek at what future-you already has.'
+                              : 'Generate or adjust the plan when you want '
+                                  'something on deck.',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: textMuted,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (summary.activities.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                for (var i = 0; i < summary.activities.length; i++) ...[
+                  _UpcomingActivityRow(
+                    key: ValueKey('upcoming-activity-$i'),
+                    activity: summary.activities[i],
+                  ),
+                  if (i < summary.activities.length - 1)
+                    const SizedBox(height: 10),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpcomingActivityRow extends StatelessWidget {
+  const _UpcomingActivityRow({
+    super.key,
+    required this.activity,
+  });
+
+  final UpcomingActivitySummary activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final categoryColor = categoryChipText(activity.category);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: categoryChipBg(activity.category),
+          ),
+          child: Icon(
+            Icons.event_note_rounded,
+            size: 16,
+            color: categoryColor,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                activity.title,
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    '${_dateLabel(activity.date)}, ${activity.time}',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: categoryChipBg(activity.category),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      activity.category,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: categoryColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _dateLabel(DateTime date) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[date.weekday - 1]} ${date.day}';
   }
 }
 

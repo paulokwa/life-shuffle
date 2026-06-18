@@ -652,3 +652,28 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Progress now shows a compact Recent Rhythm section with streak, 7-day comparison, and empty/history-waiting copy. Calculation and widget behavior are covered by tests.
 - **Next recommended step**: Add the looking-ahead summary for upcoming planned items or continue with planning-dimensions onboarding.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Looking ahead summary in Progress
+
+- **Goal**: Connect Progress reflection with future planning by showing what is coming up next.
+- **Summary**: Added a compact Looking Ahead section to Progress. It uses existing generated `DayPlan` data, counts upcoming planned items for today plus the next 6 days, excludes past days, and shows the next 1-3 upcoming activities with day, time, title, and category. The section has helpful empty copy when there is nothing upcoming. No charts, notifications, calendar publishing/export, AI, or sharing/member UI were added.
+- **Files changed**:
+  - `lib/models/progress_summary.dart`
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat "next 7 days" as today plus the next 6 calendar days because the app does not yet track exact past/future times within a day.
+  - Sort upcoming activities by date first, then by parsed time label.
+  - Show at most three upcoming activities so Progress stays compact.
+- **Tests run**:
+  - `dart format lib/models/progress_summary.dart lib/screens/progress_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Progress now shows a compact Looking Ahead section with the next 7-day planned count, up to three upcoming activities, and helpful empty copy. Calculation and widget behavior are covered by tests.
+- **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views.
+- **Open questions**: None.
