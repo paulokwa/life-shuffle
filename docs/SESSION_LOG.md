@@ -807,3 +807,41 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: When a calendar's feed is enabled, `AppState.cachedIcsText`/`cachedIcsUpdatedAtMillis` hold freshly generated ICS text that's persisted through the existing local/Firestore `SavedState` path on every relevant mutation. No Netlify Function or public endpoint exists yet — this only prepares the data the future endpoint will read.
 - **Next recommended step**: Follow `docs/ICS_FEED_ENDPOINT_PLAN.md` section 10 steps 5-10 — add the root `package.json`, create `netlify/functions/calendar-feed.js` to look up a calendar by `feedToken` and serve `cachedIcsText` when `feedEnabled` is true, update `netlify.toml`, add the `FIREBASE_SERVICE_ACCOUNT_JSON` Netlify env var, and replace the Settings `_FeedLinkPlaceholder` copy with a real copyable URL.
 - **Open questions**: None — the staleness tradeoff question from the previous entry is narrowed by this work (the cache now also refreshes on every app-open/sync, not only on explicit edits), but still depends on someone opening the app periodically, consistent with the accepted plan.
+
+---
+
+## 2026-06-18 (continued) - Netlify ICS feed endpoint implementation
+
+- **Goal**: Implement the actual public read-only `.ics` feed endpoint from `docs/ICS_FEED_ENDPOINT_PLAN.md` — a Netlify Function that serves the `cachedIcsText` already cached in Firestore (previous entry) by `feedToken`, with no planner logic in the function and no auth on the feed URL.
+- **Summary**: Added a root-level `package.json` (this repo had no Node project before) with `firebase-admin` as its only dependency, plus `package-lock.json`. Created `netlify/functions/calendar-feed.js`: a GET-only handler that reads `token` from the query string, queries the existing `calendars` collection by `feedToken` (no new index or lookup collection needed — confirmed in the plan doc), and returns `cachedIcsText` with `Content-Type: text/calendar; charset=utf-8; method=PUBLISH`, `Content-Disposition: inline`, and `Cache-Control: private, max-age=900, must-revalidate`. Every "feed not available" case — missing token, token never existed, feed disabled, token revoked, or no cached ICS yet — returns an identical generic `404` so the response never signals which case applied; wrong HTTP method returns `405`; unexpected Firestore/Admin SDK errors return `500` without leaking details (and without logging the raw token). The decision logic (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) is split into small pure functions with no Firestore access, so `netlify/functions/calendar-feed.test.js` (Node's built-in `node:test` runner, wired up as `npm test`) covers all of it plus the handler's no-credentials/missing-token/wrong-method paths without needing real Firebase credentials — 12 tests, all passing. Hit and fixed one real bug along the way: `firebase-admin` v14 (the version that installs today) removed the old namespaced `admin.firestore()`/`admin.credential.cert()`/`admin.apps` API entirely, so initializing with that API produced a confusing `TypeError: Cannot read properties of undefined (reading 'length')` instead of a clean error; switched to the modular `require('firebase-admin/app')` / `require('firebase-admin/firestore')` imports, which fixed it. Updated `netlify.toml` to declare `[functions] directory = "netlify/functions"`. Updated Settings > Publishing (`lib/screens/settings_screen.dart`): renamed `_FeedLinkPlaceholder` to `_FeedLinkDisplay`, which now renders the real `/.netlify/functions/calendar-feed?token=<feedToken>` URL built from `Uri.base` (guarded against `Uri.origin` throwing outside http/https, which is exactly what happens under `flutter test`'s `file:` scheme), added a working "Copy link" button (`Clipboard.setData` + a confirmation `SnackBar`), and reworded the enabled/disabled explanatory copy and status label ("Feed is live" instead of "Feed metadata enabled") now that the endpoint is real. Updated the two existing Settings widget tests that asserted the old placeholder copy, and added clipboard/copy-button coverage. Documented `FIREBASE_SERVICE_ACCOUNT_JSON` and the `npm install`/`npm test` workflow in `README.md`. Brought `docs/ICS_FEED_ENDPOINT_PLAN.md` up to date with what was actually implemented (status banner, `cachedIcsText` field names replacing the originally-sketched `icsFeed`, the missing-token-is-404-not-400 decision, the firebase-admin v14 modular-import note, and a status checklist in section 10 marking what's done vs. still pending).
+- **Files changed**:
+  - `package.json` (new)
+  - `package-lock.json` (new)
+  - `netlify/functions/calendar-feed.js` (new)
+  - `netlify/functions/calendar-feed.test.js` (new)
+  - `netlify.toml`
+  - `.gitignore`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `README.md`
+  - `docs/ICS_FEED_ENDPOINT_PLAN.md`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - A missing `token` query param returns `404`, not the `400` originally sketched in the plan doc — folding it into the same generic "not available" bucket as every other negative case is simpler and removes one more bit of signal about why a request failed.
+  - `feedEnabled` is checked in application code after the Firestore query, not as a second equality clause in the query itself, so legacy documents that only set `isPublished` (pre-dating the `feedEnabled` field) still resolve correctly.
+  - Split the function into pure decision functions plus a thin I/O `handler`, and used Node's built-in `node:test` runner instead of adding a JS test framework dependency — this repo had zero JS tooling before this session, so the smallest-dependency option seemed right for an MVP feed.
+  - `firebase-admin`'s modular subpath imports (`firebase-admin/app`, `firebase-admin/firestore`) are required, not the legacy namespaced default export, for whatever major version npm resolves at install time (v14 as of this session).
+- **Tests run**:
+  - `npm install` (added `firebase-admin`, generated `package-lock.json`).
+  - `npm test` — 12/12 passing (`node --test "netlify/functions/**/*.test.js"`).
+  - Manual standalone repro (`node -e ...`) to confirm the real error message and status code on the no-credentials path before and after the firebase-admin v14 fix.
+  - `dart format lib/screens/settings_screen.dart test/widget_test.dart`.
+  - `flutter test` — 68/68 passing, including updated Settings publishing tests and new copy-link/clipboard coverage.
+  - `flutter analyze --no-fatal-infos` — 0 errors/warnings, same 23 pre-existing info-level lints.
+  - `flutter build web` — passed, same pre-existing icon-font warning and wasm dry-run note.
+  - `git diff --check` — passed with only CRLF normalization warnings.
+- **Current state**: The endpoint exists and is unit-tested, but has **not** been exercised against a real deployed calendar yet — that needs a `FIREBASE_SERVICE_ACCOUNT_JSON` value in the Netlify dashboard (this session had no dashboard access) and a manual test per `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8 (curl against `netlify dev`, then a real Apple/Google Calendar subscription test). Settings > Publishing now shows the real feed URL and a working copy button whenever a calendar's feed is enabled. `docs/ROADMAP.md`'s two feed-URL/endpoint lines are now ticked.
+- **Next recommended step**: Add `FIREBASE_SERVICE_ACCOUNT_JSON` to the Netlify dashboard for the Production context, then run through `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8's manual steps end-to-end, finishing with a real calendar-app subscription test (Apple Calendar or Google Calendar) to catch anything `curl`/unit tests can't.
+- **Open questions**:
+  - Should there be a smoke-test script that exercises the deployed function against a real (test) calendar as part of future deploys, or is the current unit-test-only coverage acceptable given the two-person scale?

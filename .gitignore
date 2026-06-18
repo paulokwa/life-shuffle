@@ -4,6 +4,10 @@
 # Local env/secrets — never commit real Firebase/Google API keys
 .env.local
 tool/local_run.ps1
+tool/serviceAccountKey.json
+
+# Node (Netlify Functions)
+node_modules/
 
 # IDE
 .idea/

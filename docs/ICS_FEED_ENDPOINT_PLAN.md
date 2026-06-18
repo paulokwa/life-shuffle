@@ -1,6 +1,6 @@
 # Public ICS Feed Endpoint — Implementation Plan
 
-Status: **Planning only. Not implemented yet.**
+Status: **Implemented** (`netlify/functions/calendar-feed.js`, 2026-06-18 — see `docs/SESSION_LOG.md`). The sections below are kept as the design record; a few details were adjusted during implementation and are called out inline where they diverge from what was originally proposed.
 
 This plan covers the smallest safe way to let Apple Calendar, Google Calendar, Outlook, and similar apps subscribe to a Life Shuffle calendar's read-only `.ics` feed, using the private feed-token metadata that already exists (`docs/SESSION_LOG.md`, 2026-06-18 — "Private feed token metadata and publishing toggle").
 
@@ -19,7 +19,7 @@ This is the one architectural fork in the plan. Everything else follows from it.
 A Netlify Function written in Node can't run this Dart logic. There are two ways to bridge that gap:
 
 - **Option A (recommended) — cached ICS text, written by the Flutter client.**
-  Whenever `AppState._persist()` runs and the feed is enabled, the client calls the existing `IcsCalendarService.generate()` (`lib/services/ics_calendar_service.dart`) against the current `_weekPlan` and writes the resulting ICS string into the calendar's Firestore document (`icsFeed` + `icsFeedUpdatedAtMillis`). The Netlify Function becomes a dumb, stateless proxy: look up the doc by token, check `feedEnabled`, serve the cached text.
+  Whenever `AppState._persist()` runs and the feed is enabled, the client calls the existing `IcsCalendarService.generate()` (`lib/services/ics_calendar_service.dart`) against the current `_weekPlan` and writes the resulting ICS string into the calendar's Firestore document (`cachedIcsText` + `cachedIcsUpdatedAtMillis` — implemented as those names rather than the originally-sketched `icsFeed`/`icsFeedUpdatedAtMillis`). The Netlify Function becomes a dumb, stateless proxy: look up the doc by token, check `feedEnabled`, serve the cached text.
   - Pro: zero duplicated business logic. The function never needs to know about rules, difficulty spacing, or time slots.
   - Con: the cached text only refreshes when someone with the app open triggers a save. If nobody opens the app for a week, the feed keeps serving last week's dates until the next open.
 
@@ -82,10 +82,10 @@ Cache-Control: private, max-age=900, must-revalidate
 | State | Firestore shape | Function response |
 |---|---|---|
 | Never published | no doc has this token | `404` |
-| Enabled | `feedEnabled: true`, `feedToken` set, `icsFeed` present | `200` + ICS body |
+| Enabled | `feedEnabled: true`, `feedToken` set, `cachedIcsText` present | `200` + ICS body |
 | Disabled (toggle off, token kept) | `feedEnabled: false`, `feedToken` still set | `404` |
 | Revoked / regenerated | old token cleared from the doc entirely | `404` (lookup finds nothing) |
-| Enabled but `icsFeed` not yet computed (edge case — feed just turned on, no save has run yet) | `feedEnabled: true`, `icsFeed` missing/empty | `404` |
+| Enabled but `cachedIcsText` not yet computed (edge case — feed just turned on, no save has run yet) | `feedEnabled: true`, `cachedIcsText` missing/empty | `404` |
 
 All four "not available" rows return the **same generic 404**, by design (see §4 — no signal about *why*).
 
@@ -93,22 +93,28 @@ All four "not available" rows return the **same generic 404**, by design (see §
 
 | Condition | Status | Body |
 |---|---|---|
-| Missing/empty `token` query param | `400` | `{"error":"missing_token"}` |
+| Missing/empty `token` query param | `404` | `{"error":"not_found"}` |
 | Method other than GET | `405` (+ `Allow: GET`) | `{"error":"method_not_allowed"}` |
 | Token not found, disabled, or revoked | `404` | `{"error":"not_found"}` |
 | Firestore/Admin SDK failure | `500` | `{"error":"internal_error"}` (no internals in the body; log details server-side only) |
 
 Error bodies are plain JSON for easy debugging; calendar clients fetching a working feed will only ever see `200` + ICS text, so the error shape doesn't need to be calendar-app-friendly.
 
+**Implementation note:** a missing token returns `404` rather than the `400` originally sketched above. Folding it into the same generic "not available" bucket as every other negative case is simpler and slightly more private (it removes even the weak signal of "this looks like a well-formed-but-wrong request" vs. "this looks malformed").
+
 ## 8. Local testing steps
 
-1. Get a Firebase service-account key for local-only use: Firebase Console → Project Settings → Service Accounts → "Generate new private key" for project `life-shuffle-8d3bd`. Save it outside the repo or to a gitignored path (e.g. `tool/serviceAccountKey.json` — must be added to `.gitignore`, never committed).
-2. Export it for local function runs: `GOOGLE_APPLICATION_CREDENTIALS=tool/serviceAccountKey.json` (or load the JSON into `FIREBASE_SERVICE_ACCOUNT_JSON` directly, matching what production will use — see §9).
-3. Get a real `feedToken` to test against: enable publishing in a signed-in local app run (Settings > Publishing), then read the token straight from the Firebase Console (`calendars/{uid}_default` → `feedToken` field) rather than from the app UI, since there's no copy-link UI yet.
+**Automated (done, run anytime, no credentials needed):** `npm test` (`node --test "netlify/functions/**/*.test.js"`) runs `netlify/functions/calendar-feed.test.js` against the pure helper functions (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) and the parts of `handler` that don't need live Firestore access (missing token, wrong method, missing credentials). This is fast unit coverage, not a substitute for the steps below against a real calendar.
+
+**Manual, against a real calendar (still pending — needs a real Firebase service-account key, which this implementation session didn't have access to):**
+
+1. Get a Firebase service-account key for local-only use: Firebase Console → Project Settings → Service Accounts → "Generate new private key" for project `life-shuffle-8d3bd`. Save it outside the repo or to a gitignored path (e.g. `tool/serviceAccountKey.json` — already added to `.gitignore`, never commit it).
+2. Export it for local function runs as `FIREBASE_SERVICE_ACCOUNT_JSON` (the function reads this exact env var — see §9). On Windows PowerShell: `$env:FIREBASE_SERVICE_ACCOUNT_JSON = Get-Content tool/serviceAccountKey.json -Raw`.
+3. Get a real `feedToken` to test against: enable publishing in a signed-in local app run (Settings > Publishing), then either copy the link directly from the new "Copy link" button, or read `feedToken` from the Firebase Console (`calendars/{uid}_default`).
 4. Run the function locally with the Netlify CLI: `netlify dev` (serves both the function and a static site) or `netlify functions:serve` (function only).
 5. `curl "http://localhost:8888/.netlify/functions/calendar-feed?token=<token>"` and confirm `Content-Type: text/calendar` and a well-formed `BEGIN:VCALENDAR…END:VCALENDAR` body. Cross-check the body against `test/ics_calendar_service_test.dart` expectations.
-6. Exercise the negative paths: no `token` param (expect 400), a made-up token (expect 404), a token for a disabled feed (expect 404, after toggling off in Settings), a POST request (expect 405).
-7. Optional but recommended before declaring this done: use `netlify dev --live` (or any HTTPS tunnel) to get a public HTTPS URL, then actually add it as a subscribed calendar in Apple Calendar or Google Calendar and confirm it imports without errors — this is the only way to catch ICS formatting issues that `curl` won't surface.
+6. Exercise the negative paths: no `token` param (expect 404), a made-up token (expect 404), a token for a disabled feed (expect 404, after toggling off in Settings), a POST request (expect 405).
+7. Recommended before considering this fully verified: use `netlify dev --live` (or any HTTPS tunnel) to get a public HTTPS URL, then actually add it as a subscribed calendar in Apple Calendar or Google Calendar and confirm it imports without errors — this is the only way to catch ICS formatting issues that `curl` won't surface.
 8. Optional: run against the Firebase Local Emulator Suite (`firebase emulators:start --only firestore`, with `FIRESTORE_EMULATOR_HOST=localhost:8080` set for the function process) to avoid touching the real project's data while iterating. Seed a fake calendar doc with a known token via the Emulator UI.
 
 ## 9. Netlify env vars needed
@@ -120,26 +126,21 @@ Error bodies are plain JSON for easy debugging; calendar clients fetching a work
 
 No changes needed to the existing `[build]` command in `netlify.toml`. Netlify's own dependency-install step (which runs before the configured build command) will pick up a root-level `package.json` automatically.
 
-## 10. Exact implementation steps for the next coding session
+**Implementation note:** `firebase-admin` v14 (the version available when this was implemented) dropped the old namespaced `admin.firestore()` / `admin.credential.cert()` / `admin.apps` API entirely — there is no top-level `apps` property anymore, so that exact check silently produced a confusing `TypeError` instead of the intended "credentials not set" error. The function uses the modular subpath imports instead: `require('firebase-admin/app')` for `initializeApp`/`getApps`/`cert`, and `require('firebase-admin/firestore')` for `getFirestore`. If `firebase-admin` is upgraded later, re-check this surface again.
 
-1. Confirm the §0 decision (cached ICS text written by the client) before writing any code.
-2. In `lib/state/app_state.dart`, extend `_persist()` (around line 448) so that when `_feedEnabled && _feedToken != null`, it calls `IcsCalendarService.generate(calendarId: _calendarId ?? _feedToken!, calendarTitle: _calendarTitle, plan: _weekPlan)` and passes the result through to Firestore.
-3. In `lib/services/firestore_sync_service.dart`, extend `saveState()` (line 42) to accept an optional `icsFeed` string and merge `{'icsFeed': icsFeed, 'icsFeedUpdatedAtMillis': now}` into the same `calendarDoc.set(..., SetOptions(merge: true))` call. Do not add `icsFeed` to `SavedState`/`PersistenceService` — it's Firestore-only derived data, not something local-only mode needs.
-4. When `_disableFeed()` runs, optionally also clear `icsFeed`/`icsFeedUpdatedAtMillis` from Firestore for hygiene (not required for correctness — the function already gates on `feedEnabled` — but avoids leaving rendered personal data sitting in the doc after the user turns publishing off).
-5. Add a root-level `package.json` (new — this repo currently has no Node project) with `firebase-admin` as a dependency.
-6. Create `netlify/functions/calendar-feed.js`:
-   - Initialize the Admin SDK once per cold start (guard with `admin.apps.length` check), reading credentials from `FIREBASE_SERVICE_ACCOUNT_JSON`.
-   - Implement the GET-only, token-lookup, status-table behavior from §6 and the error table from §7.
-   - Set the response headers from §5.
-7. Update `netlify.toml` to add:
-   ```
-   [functions]
-     directory = "netlify/functions"
-   ```
-8. Add `FIREBASE_SERVICE_ACCOUNT_JSON` to Netlify dashboard env vars (Site settings → Environment variables) for the Production context.
-9. Run through all of §8's local testing steps, including at least one real calendar-app subscription test.
-10. Update `lib/screens/settings_screen.dart`: replace `_FeedLinkPlaceholder`'s "no public feed endpoint yet" copy with the real copyable URL (`/.netlify/functions/calendar-feed?token=<feedToken>`, built from `Uri.base` so it works on any deploy domain) and a working copy-to-clipboard action.
-11. Update `docs/ROADMAP.md` to tick the two relevant unchecked lines ("Add private/unguessable calendar feed URL per published calendar" and "Add public endpoint support for revoked/regenerated feed URLs") and add a `docs/SESSION_LOG.md` entry for the implementation work itself (separate from this planning entry).
+## 10. Implementation steps (status)
+
+1. [x] Confirmed the §0 decision (cached ICS text written by the client).
+2. [x] `AppState._refreshCachedIcs()` (`lib/state/app_state.dart`) recomputes ICS via `IcsCalendarService.generate()` whenever the feed is enabled, called from `_currentSavedState()` and `_applySavedState()` — implemented in the prior session (2026-06-18, "Cache generated ICS text in Firestore for the future feed endpoint").
+3. [x] `cachedIcsText`/`cachedIcsUpdatedAtMillis` flow into Firestore automatically because `FirestoreSyncService.saveState()` already spreads `SavedState.toMap()` — no changes to `firestore_sync_service.dart` were needed (the original step 3 here, written before that prior session ran, turned out to be unnecessary).
+4. [x] `_refreshCachedIcs()` clears `cachedIcsText`/`cachedIcsUpdatedAtMillis` to `null` whenever `feedEnabled` is false, so disabling always clears the cache (stronger than the "optional hygiene" originally sketched here).
+5. [x] Added root-level `package.json` with `firebase-admin` as a dependency (`npm install` run; `package-lock.json` committed).
+6. [x] Created `netlify/functions/calendar-feed.js` — GET-only, token lookup via `findCalendarByFeedToken`, status/error behavior from §6/§7, headers from §5. Pure decision logic (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) is split out and covered by `netlify/functions/calendar-feed.test.js` (Node's built-in test runner, `npm test`).
+7. [x] `netlify.toml` now has `[functions]\n  directory = "netlify/functions"`.
+8. [ ] **Still pending** — add `FIREBASE_SERVICE_ACCOUNT_JSON` to the Netlify dashboard env vars. This requires dashboard access this implementation session didn't have.
+9. [ ] **Still pending** — the real-calendar manual testing steps in §8 (everything past the automated `npm test` run), including at least one real calendar-app subscription test. Needs a live service-account key and a deployed/tunneled URL.
+10. [x] `lib/screens/settings_screen.dart`: `_FeedLinkPlaceholder` → `_FeedLinkDisplay`, now renders the real `/.netlify/functions/calendar-feed?token=<feedToken>` URL (via `Uri.base`, with a safe fallback when not running under http/https — e.g. `flutter test`) plus a working "Copy link" button.
+11. [x] `docs/ROADMAP.md` and `docs/SESSION_LOG.md` updated for this implementation session.
 
 ## 11. Explicitly out of scope (do not build these now)
 

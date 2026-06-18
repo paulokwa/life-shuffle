@@ -349,17 +349,17 @@ void main() {
     expect(find.text('Not enabled yet'), findsOneWidget);
     expect(
       find.text(
-        'Turn this on to prepare private feed metadata for this calendar. No public URL will be created yet.',
+        'Turn this on to create a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
       ),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('settings-feed-link-placeholder')),
+      find.byKey(const ValueKey('settings-feed-link-display')),
       findsOneWidget,
     );
     expect(
         find.text(
-            'No feed link exists yet. Enabling now only creates private metadata.'),
+            'No feed link exists yet. Turning this on creates a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.'),
         findsOneWidget);
     expect(find.byKey(const ValueKey('settings-feed-token-preview')),
         findsNothing);
@@ -389,17 +389,25 @@ void main() {
     expect(appState.feedEnabled, isTrue);
     expect(firstToken, isNotNull);
     expect(firstToken!.length, greaterThanOrEqualTo(32));
-    expect(find.text('Feed metadata enabled'), findsOneWidget);
+    expect(find.text('Feed is live'), findsOneWidget);
     expect(
-      find.text('Copy link will appear after a public feed endpoint is added.'),
+      find.textContaining(
+        '/.netlify/functions/calendar-feed?token=$firstToken',
+      ),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('settings-feed-token-preview')),
         findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('settings-copy-feed-link')), findsOneWidget);
     expect(find.byKey(const ValueKey('settings-regenerate-feed-token')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('settings-revoke-feed-token')),
         findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('settings-copy-feed-link')));
+    await tester.pump();
+    expect(find.text('Feed link copied'), findsOneWidget);
 
     await tester
         .tap(find.byKey(const ValueKey('settings-regenerate-feed-token')));

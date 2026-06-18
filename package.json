@@ -1,0 +1,12 @@
+{
+  "name": "life-shuffle-functions",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Netlify Functions backing the Life Shuffle read-only ICS calendar feed.",
+  "scripts": {
+    "test": "node --test \"netlify/functions/**/*.test.js\""
+  },
+  "dependencies": {
+    "firebase-admin": "^14.0.0"
+  }
+}

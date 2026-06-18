@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/planner_service.dart' show PlanStyle;
@@ -322,9 +323,7 @@ class _PublishingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      state.feedEnabled
-                          ? 'Feed metadata enabled'
-                          : 'Not enabled yet',
+                      state.feedEnabled ? 'Feed is live' : 'Not enabled yet',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -347,8 +346,8 @@ class _PublishingCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             state.feedEnabled
-                ? 'A private token exists for this calendar, but there is no public feed endpoint yet.'
-                : 'Turn this on to prepare private feed metadata for this calendar. No public URL will be created yet.',
+                ? 'Your calendar feed is live. Copy the link below into Apple Calendar, Google Calendar, or Outlook to subscribe.'
+                : 'Turn this on to create a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               height: 1.35,
@@ -356,14 +355,17 @@ class _PublishingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _FeedLinkPlaceholder(feedEnabled: state.feedEnabled),
+          _FeedLinkDisplay(
+            feedEnabled: state.feedEnabled,
+            feedToken: state.feedToken,
+          ),
           if (state.feedToken != null) ...[
             const SizedBox(height: 10),
             _TokenPreview(tokenPreview: state.feedTokenPreview),
           ],
           const SizedBox(height: 12),
           Text(
-            'The feed will be read-only when a public endpoint exists. Anyone with a future feed link may be able to view it, and outside calendar apps may refresh slowly.',
+            'The feed is read-only. Anyone with the link may be able to view it, and outside calendar apps may take a while to refresh after changes.',
             style: GoogleFonts.dmSans(
               fontSize: 12,
               height: 1.35,
@@ -376,13 +378,20 @@ class _PublishingCard extends StatelessWidget {
               spacing: 10,
               runSpacing: 10,
               children: [
-                if (state.feedEnabled)
+                if (state.feedEnabled) ...[
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-copy-feed-link'),
+                    icon: Icons.copy_rounded,
+                    label: 'Copy link',
+                    onTap: () => _copyFeedLink(context, state.feedToken!),
+                  ),
                   _PublishingActionButton(
                     key: const ValueKey('settings-regenerate-feed-token'),
                     icon: Icons.refresh_rounded,
                     label: 'Regenerate token',
                     onTap: state.regenerateFeedToken,
                   ),
+                ],
                 _PublishingActionButton(
                   key: const ValueKey('settings-revoke-feed-token'),
                   icon: Icons.link_off_rounded,
@@ -399,15 +408,39 @@ class _PublishingCard extends StatelessWidget {
   }
 }
 
-class _FeedLinkPlaceholder extends StatelessWidget {
-  const _FeedLinkPlaceholder({required this.feedEnabled});
+/// Builds the public, token-gated feed URL served by
+/// `netlify/functions/calendar-feed.js`. Uses [Uri.base] so the link is
+/// correct on any deploy domain (localhost, Netlify preview, production).
+/// [Uri.origin] throws outside http/https (e.g. the file: scheme `flutter
+/// test` runs under), so non-web/test contexts fall back to a relative path.
+String _buildCalendarFeedUrl(String token) {
+  final base = Uri.base;
+  final origin =
+      (base.scheme == 'http' || base.scheme == 'https') ? base.origin : '';
+  return '$origin/.netlify/functions/calendar-feed?token=$token';
+}
+
+void _copyFeedLink(BuildContext context, String token) {
+  Clipboard.setData(ClipboardData(text: _buildCalendarFeedUrl(token)));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Feed link copied')),
+  );
+}
+
+class _FeedLinkDisplay extends StatelessWidget {
+  const _FeedLinkDisplay({required this.feedEnabled, required this.feedToken});
 
   final bool feedEnabled;
+  final String? feedToken;
 
   @override
   Widget build(BuildContext context) {
+    final token = feedToken;
+    final url =
+        feedEnabled && token != null ? _buildCalendarFeedUrl(token) : null;
+
     return Container(
-      key: const ValueKey('settings-feed-link-placeholder'),
+      key: const ValueKey('settings-feed-link-display'),
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -415,13 +448,13 @@ class _FeedLinkPlaceholder extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        feedEnabled
-            ? 'Copy link will appear after a public feed endpoint is added.'
-            : 'No feed link exists yet. Enabling now only creates private metadata.',
+        url ??
+            'No feed link exists yet. Turning this on creates a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
         style: GoogleFonts.dmSans(
           fontSize: 12,
           height: 1.35,
-          color: textMuted,
+          fontWeight: url != null ? FontWeight.w600 : FontWeight.normal,
+          color: url != null ? textPrimary : textMuted,
         ),
       ),
     );

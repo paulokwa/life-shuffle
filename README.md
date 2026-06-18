@@ -17,3 +17,26 @@ To avoid retyping the key, copy `tool/local_run.ps1.example` to `tool/local_run.
 ## Netlify
 
 Netlify build reads the key from a `FIREBASE_WEB_API_KEY` environment variable (Site settings → Environment variables) and passes it through in `netlify.toml`. Never put the real key in `netlify.toml` itself.
+
+## Calendar feed (Netlify Function)
+
+`netlify/functions/calendar-feed.js` serves the read-only `.ics` subscription feed for a published calendar at:
+
+```
+/.netlify/functions/calendar-feed?token=<feedToken>
+```
+
+It looks up the calendar by `feedToken` in Firestore and returns the `cachedIcsText` the Flutter app already generated and saved (see `docs/ICS_FEED_ENDPOINT_PLAN.md` for the full design). It needs one more environment variable beyond `FIREBASE_WEB_API_KEY`:
+
+| Var | Where to get it |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase Console → Project Settings → Service Accounts → "Generate new private key" for project `life-shuffle-8d3bd`. Paste the entire downloaded JSON file as one Netlify dashboard environment variable value. Never commit the key file itself — `tool/serviceAccountKey.json` is gitignored for local use. |
+
+This repo also has a small root-level `package.json` (Node, not Dart) just for this function. To work on it locally:
+
+```
+npm install
+npm test
+```
+
+`npm test` runs `netlify/functions/calendar-feed.test.js` with Node's built-in test runner — no credentials needed, since it only exercises the pure decision logic and the no-credentials/wrong-method/missing-token error paths. Testing against a real calendar requires `netlify dev` plus a real `FIREBASE_SERVICE_ACCOUNT_JSON` — see `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8.
