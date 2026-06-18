@@ -4,14 +4,18 @@ import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
+import 'package:life_shuffle/screens/plan_screen.dart';
+import 'package:life_shuffle/screens/progress_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
+import 'package:life_shuffle/theme/app_colors.dart';
 import 'package:life_shuffle/widgets/life_shuffle_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -927,7 +931,495 @@ void main() {
     expect(regeneratedLockedItem.locked, isTrue);
     expect(appState.canUndoLastRegeneration, isTrue);
   });
+
+  testWidgets('Plan day card opens a day check-in sheet',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final day = appState.weekPlan.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text(day.fullLabel), findsWidgets);
+    expect(find.text(planned.title), findsWidgets);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Partly'), findsOneWidget);
+    expect(find.text('Skipped'), findsOneWidget);
+    expect(find.text('Unchecked'), findsOneWidget);
+  });
+
+  testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final day = appState.weekPlan.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-done')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.done);
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-partly')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.partly);
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-skipped')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.skipped);
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-none')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.none);
+  });
+
+  testWidgets('Plan day sheet check-in persists through SavedState',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final day = appState.weekPlan.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-partly')),
+    );
+    await tester.pumpAndSettle();
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.checkinMap[planned.id], CheckStatus.partly.index);
+
+    final restored = AppState(
+      activities: saved.activities,
+      savedState: saved,
+    );
+    final restoredPlanned = restored.weekPlan
+        .expand((candidate) => candidate.activities)
+        .firstWhere((candidate) => candidate.id == planned.id);
+    expect(restoredPlanned.status, CheckStatus.partly);
+  });
+
+  testWidgets('Plan empty day opens empty check-in sheet',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final emptyDay = appState.weekPlan.firstWhere(
+      (candidate) => candidate.activities.isEmpty,
+    );
+
+    await _pumpPlanScreen(tester, appState);
+
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-strip-${_dateKey(emptyDay.date)}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text('No planned items to check in.'), findsOneWidget);
+    expect(find.text('Nothing planned for this day'), findsOneWidget);
+    expect(find.text('There is nothing to mark right now.'), findsOneWidget);
+  });
+
+  test('Progress summary counts past 7 days and excludes future items', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(DateTime(2026, 6, 12), [
+        CheckStatus.done,
+        CheckStatus.partly,
+      ]),
+      _summaryDay(DateTime(2026, 6, 11), [
+        CheckStatus.skipped,
+      ]),
+      _summaryDay(DateTime(2026, 6, 18), [
+        CheckStatus.none,
+      ]),
+      _summaryDay(DateTime(2026, 6, 19), [
+        CheckStatus.done,
+      ]),
+    ];
+
+    final summary = ProgressSummaryCalculator.recent(
+      plans,
+      days: 7,
+      now: now,
+    );
+
+    expect(summary.planned, 3);
+    expect(summary.done, 1);
+    expect(summary.partly, 1);
+    expect(summary.skipped, 0);
+    expect(summary.unchecked, 1);
+    expect(summary.checked, 2);
+  });
+
+  test('Progress summary counts past 30 days including older history', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(DateTime(2026, 5, 20), [
+        CheckStatus.skipped,
+      ]),
+      _summaryDay(DateTime(2026, 5, 19), [
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 1), [
+        CheckStatus.done,
+        CheckStatus.none,
+      ]),
+      _summaryDay(DateTime(2026, 6, 18), [
+        CheckStatus.partly,
+      ]),
+    ];
+
+    final summary = ProgressSummaryCalculator.recent(
+      plans,
+      days: 30,
+      now: now,
+    );
+
+    expect(summary.planned, 4);
+    expect(summary.done, 1);
+    expect(summary.partly, 1);
+    expect(summary.skipped, 1);
+    expect(summary.unchecked, 1);
+    expect(summary.hasHistory, isTrue);
+  });
+
+  test('Difficulty progress summary counts only hard recent activities', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(
+        DateTime(2026, 6, 12),
+        [
+          CheckStatus.done,
+          CheckStatus.partly,
+          CheckStatus.skipped,
+        ],
+        difficulties: [5, 4, 3],
+      ),
+      _summaryDay(
+        DateTime(2026, 6, 18),
+        [
+          CheckStatus.none,
+        ],
+        difficulties: [5],
+      ),
+      _summaryDay(
+        DateTime(2026, 6, 19),
+        [
+          CheckStatus.done,
+        ],
+        difficulties: [5],
+      ),
+    ];
+
+    final summary = ProgressSummaryCalculator.recentHard(
+      plans,
+      days: 7,
+      now: now,
+    );
+
+    expect(summary.planned, 3);
+    expect(summary.done, 1);
+    expect(summary.partly, 1);
+    expect(summary.skipped, 0);
+    expect(summary.hasHardActivities, isTrue);
+  });
+
+  testWidgets('Progress displays past 7 and past 30 day summaries',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final recentItems = appState.weekPlan
+        .where(
+          (day) => !DateTime(day.date.year, day.date.month, day.date.day)
+              .isAfter(_today()),
+        )
+        .expand((day) => day.activities)
+        .take(4)
+        .toList();
+
+    expect(recentItems, isNotEmpty);
+    final statuses = [
+      CheckStatus.done,
+      CheckStatus.partly,
+      CheckStatus.skipped,
+      CheckStatus.none,
+    ];
+    for (var i = 0; i < recentItems.length; i++) {
+      recentItems[i].status = statuses[i % statuses.length];
+    }
+
+    final expected7 = ProgressSummaryCalculator.recent(
+      appState.weekPlan,
+      days: 7,
+    );
+    final expected30 = ProgressSummaryCalculator.recent(
+      appState.weekPlan,
+      days: 30,
+    );
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('progress-summary-7')), findsOneWidget);
+    expect(find.byKey(const ValueKey('progress-summary-30')), findsOneWidget);
+    expect(find.text('Past 7 days'), findsOneWidget);
+    expect(find.text('Past 30 days'), findsOneWidget);
+
+    _expectSummaryCardCounts(
+      cardKey: const ValueKey('progress-summary-7'),
+      summary: expected7,
+    );
+    _expectSummaryCardCounts(
+      cardKey: const ValueKey('progress-summary-30'),
+      summary: expected30,
+    );
+  });
+
+  testWidgets('Progress shows recent history empty state',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('progress-recent-empty')), findsOneWidget);
+    expect(find.text('No recent history yet'), findsOneWidget);
+    expect(
+      find.text(
+        'Recent summaries will appear after planned days pass or '
+        'you check in for today.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Progress hides difficulty summary when Difficulty is disabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(
+      find.byKey(const ValueKey('progress-difficulty-summary')),
+      findsNothing,
+    );
+    expect(find.text('Higher effort activities'), findsNothing);
+  });
+
+  testWidgets('Progress shows difficulty summary when Difficulty is enabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setDifficultyEnabled(true);
+    final recentItems = appState.weekPlan
+        .where(
+          (day) => !DateTime(day.date.year, day.date.month, day.date.day)
+              .isAfter(_today()),
+        )
+        .expand((day) => day.activities)
+        .take(3)
+        .toList();
+
+    expect(recentItems, isNotEmpty);
+    for (final item in appState.weekPlan.expand((day) => day.activities)) {
+      item.activity.difficulty = 3;
+      item.status = CheckStatus.none;
+    }
+    recentItems[0].activity.difficulty = 5;
+    recentItems[0].status = CheckStatus.done;
+    if (recentItems.length > 1) {
+      recentItems[1].activity.difficulty = 4;
+      recentItems[1].status = CheckStatus.partly;
+    }
+    if (recentItems.length > 2) {
+      recentItems[2].activity.difficulty = 5;
+      recentItems[2].status = CheckStatus.skipped;
+    }
+
+    final expected7 = ProgressSummaryCalculator.recentHard(
+      appState.weekPlan,
+      days: 7,
+    );
+    final expected30 = ProgressSummaryCalculator.recentHard(
+      appState.weekPlan,
+      days: 30,
+    );
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(
+      find.byKey(const ValueKey('progress-difficulty-summary')),
+      findsOneWidget,
+    );
+    expect(find.text('Higher effort activities'), findsOneWidget);
+    expect(find.text('Difficulty 4-5, spaced gently by the planner.'),
+        findsOneWidget);
+    _expectDifficultyCardCounts(
+      cardKey: const ValueKey('difficulty-summary-7'),
+      summary: expected7,
+    );
+    _expectDifficultyCardCounts(
+      cardKey: const ValueKey('difficulty-summary-30'),
+      summary: expected30,
+    );
+  });
 }
+
+Future<void> _pumpPlanScreen(WidgetTester tester, AppState appState) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: AppStateScope(
+        state: appState,
+        child: const Scaffold(
+          backgroundColor: backgroundCream,
+          body: PlanScreen(),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _pumpProgressScreen(WidgetTester tester, AppState appState) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: AppStateScope(
+        state: appState,
+        child: const Scaffold(
+          backgroundColor: backgroundCream,
+          body: ProgressScreen(),
+        ),
+      ),
+    ),
+  );
+}
+
+DayPlan _summaryDay(
+  DateTime date,
+  List<CheckStatus> statuses, {
+  List<int>? difficulties,
+}) {
+  return DayPlan(
+    date: date,
+    activities: [
+      for (var i = 0; i < statuses.length; i++)
+        PlannedActivity(
+          activity: Activity(
+            id: '${date.toIso8601String()}-$i',
+            title: 'Activity $i',
+            category: i.isEven ? 'Outside' : 'Creative',
+            durationMinutes: 30,
+            difficulty: difficulties?[i] ?? 3,
+          ),
+          timeSlot: '9:00 AM',
+          status: statuses[i],
+        ),
+    ],
+  );
+}
+
+void _expectDifficultyCardCounts({
+  required ValueKey<String> cardKey,
+  required DifficultyProgressSummary summary,
+}) {
+  final card = find.byKey(cardKey);
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.planned}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.done}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.partly}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.skipped}')),
+    findsAtLeastNWidgets(1),
+  );
+}
+
+void _expectSummaryCardCounts({
+  required ValueKey<String> cardKey,
+  required ProgressSummary summary,
+}) {
+  final card = find.byKey(cardKey);
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.planned}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.done}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.partly}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.skipped}')),
+    findsAtLeastNWidgets(1),
+  );
+  expect(
+    find.descendant(of: card, matching: find.text('${summary.unchecked}')),
+    findsAtLeastNWidgets(1),
+  );
+}
+
+DateTime _today() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
+String _dateKey(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
 
 List<String> _planSignature(AppState appState) {
   final result = <String>[];

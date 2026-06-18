@@ -553,3 +553,77 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Regeneration now respects the Difficulty setting when enabled, spreads hard activities more gently, preserves locked items, and falls back through existing soft-failure messaging when rules prevent a full week.
 - **Next recommended step**: Add the planning-dimensions onboarding screen so users can choose Difficulty/Energy/Social during setup before configuring activities.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Plan day-sheet check-in
+
+- **Goal**: Let users tap a day in the Plan screen and check in on that day's planned items without typing.
+- **Summary**: Made Plan day cards tappable and added a day-strip tap target for every day, including rest days. Tapping a day opens a warm bottom sheet showing that day's planned items with explicit Done, Partly, Skipped, and Unchecked status controls. Status changes update the existing `PlannedActivity.status` value and call `AppState.notifyCheckIn`, so local persistence and Firestore sync continue through the existing `SavedState` path. Quick catch-up check-in was not changed.
+- **Files changed**:
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Use a bottom sheet rather than a new full-screen route for the day check-in flow.
+  - Include Unchecked as an explicit status option so users can reverse a mistaken check-in without typing.
+  - Keep notes, week review, one-by-one review, AI, notifications, export, and sharing UI out of this step.
+- **Tests run**:
+  - `dart format lib/screens/plan_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Plan supports day-sheet check-ins for planned and empty days. Check-in statuses persist locally and restore through `SavedState`; signed-in users continue to sync through the existing Firestore save path.
+- **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views, depending on whether setup polish or check-in depth is the next priority.
+- **Open questions**: None.
+
+---
+
+## 2026-06-18 - Past 7 and 30 day progress summaries
+
+- **Goal**: Make Progress more useful by showing recent completion summaries without adding charts or trends.
+- **Summary**: Added a reusable `ProgressSummaryCalculator` that counts planned, done, partly, skipped, and unchecked items for recent date windows using existing dated `DayPlan` and `PlannedActivity.status` data. Progress now shows Past 7 days and Past 30 days cards above the existing weekly summary, with a gentle empty state when no recent planned items exist. No charts, streaks/trends, difficulty summary, AI, notifications, export, or sharing UI were added.
+- **Files changed**:
+  - `lib/models/progress_summary.dart`
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat "past 7 days" as today plus the previous 6 days, and "past 30 days" as today plus the previous 29 days.
+  - Exclude future planned items from recent progress summaries.
+  - Keep the existing weekly summary and category breakdown unchanged.
+- **Tests run**:
+  - `dart format lib/models/progress_summary.dart lib/screens/progress_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Progress displays recent 7-day and 30-day status counts from existing planned item data, and summary calculation is covered by direct unit tests plus widget display tests.
+- **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views.
+- **Open questions**: None.
+
+---
+
+## 2026-06-18 - Difficulty summary in Progress
+
+- **Goal**: Make the difficulty-aware planner visible in Progress without adding charts.
+- **Summary**: Added hard-activity summary calculations for difficulty 4-5 planned items in the past 7 and past 30 days, counting planned, done, partly, and skipped statuses from existing `DayPlan` and `PlannedActivity.status` data. Progress now shows a compact "Higher effort activities" section only when `difficultyEnabled` is true. The section is hidden entirely when Difficulty is disabled. No charts, energy/social summaries, streaks/trends, AI, export, publishing, or sharing UI were added.
+- **Files changed**:
+  - `lib/models/progress_summary.dart`
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat difficulty 4 and 5 as "higher effort" for Progress, matching the planner's existing hard-activity threshold.
+  - Reuse the same recent-window boundaries as the general Progress summaries: today plus the previous 6 or 29 days.
+  - Keep hard unchecked items represented through the planned count rather than adding another difficulty-specific status column.
+- **Tests run**:
+  - `dart format lib/models/progress_summary.dart lib/screens/progress_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Progress now conditionally surfaces difficulty-aware planning context when Difficulty is enabled, with direct calculation tests and widget tests for hidden/visible behavior.
+- **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views.
+- **Open questions**: None.

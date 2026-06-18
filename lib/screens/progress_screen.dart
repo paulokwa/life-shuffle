@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/progress_summary.dart';
 import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
@@ -13,10 +14,10 @@ class ProgressScreen extends StatelessWidget {
   static _WeekStats _compute(List<DayPlan> week) {
     final all = week.expand((d) => d.activities).toList();
     final planned = all.length;
-    final done    = all.where((a) => a.status == CheckStatus.done).length;
-    final partly  = all.where((a) => a.status == CheckStatus.partly).length;
+    final done = all.where((a) => a.status == CheckStatus.done).length;
+    final partly = all.where((a) => a.status == CheckStatus.partly).length;
     final skipped = all.where((a) => a.status == CheckStatus.skipped).length;
-    final rate    = planned == 0 ? 0.0 : (done + partly * 0.5) / planned;
+    final rate = planned == 0 ? 0.0 : (done + partly * 0.5) / planned;
 
     final catCounts = <String, int>{};
     for (final a in all) {
@@ -37,11 +38,13 @@ class ProgressScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Registering via AppStateScope.of() ensures this screen rebuilds on
-    // check-in changes so the completion rate updates in real time.
-    final week = AppStateScope.of(context).weekPlan;
+    final state = AppStateScope.of(context);
+    final week = state.weekPlan;
     final stats = _compute(week);
-
+    final past7 = ProgressSummaryCalculator.recent(week, days: 7);
+    final past30 = ProgressSummaryCalculator.recent(week, days: 30);
+    final hardPast7 = ProgressSummaryCalculator.recentHard(week, days: 7);
+    final hardPast30 = ProgressSummaryCalculator.recentHard(week, days: 30);
     final rateLabel = '${(stats.rate * 100).round()}%';
 
     return SafeArea(
@@ -69,7 +72,18 @@ class ProgressScreen extends StatelessWidget {
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 20),
-                  // ─── Summary tiles ─────────────────────────────────────────
+                  _RecentSummarySection(
+                    past7: past7,
+                    past30: past30,
+                  ),
+                  const SizedBox(height: 20),
+                  if (state.difficultyEnabled) ...[
+                    _DifficultySummarySection(
+                      past7: hardPast7,
+                      past30: hardPast30,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   Row(
                     children: [
                       _SummaryTile(
@@ -111,12 +125,11 @@ class ProgressScreen extends StatelessWidget {
                           color: textMuted,
                         ),
                         const SizedBox(width: 10),
-                        Expanded(child: SizedBox.shrink()),
+                        const Expanded(child: SizedBox.shrink()),
                       ],
                     ),
                   ],
                   const SizedBox(height: 20),
-                  // ─── Category breakdown ────────────────────────────────────
                   if (stats.categories.isNotEmpty) ...[
                     Text(
                       'BY CATEGORY',
@@ -146,7 +159,6 @@ class ProgressScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  // ─── Status callout ────────────────────────────────────────
                   _StatusCallout(stats: stats),
                 ],
               ),
@@ -158,16 +170,7 @@ class ProgressScreen extends StatelessWidget {
   }
 }
 
-// ─── Data holder ─────────────────────────────────────────────────────────────
-
 class _WeekStats {
-  final int planned;
-  final int done;
-  final int partly;
-  final int skipped;
-  final double rate;
-  final List<MapEntry<String, int>> categories;
-
   const _WeekStats({
     required this.planned,
     required this.done,
@@ -177,10 +180,392 @@ class _WeekStats {
     required this.categories,
   });
 
+  final int planned;
+  final int done;
+  final int partly;
+  final int skipped;
+  final double rate;
+  final List<MapEntry<String, int>> categories;
+
   int get checked => done + partly;
 }
 
-// ─── Summary tile ─────────────────────────────────────────────────────────────
+class _RecentSummarySection extends StatelessWidget {
+  const _RecentSummarySection({
+    required this.past7,
+    required this.past30,
+  });
+
+  final ProgressSummary past7;
+  final ProgressSummary past30;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!past7.hasHistory && !past30.hasHistory) {
+      return LsCard(
+        key: const ValueKey('progress-recent-empty'),
+        color: const Color(0xFFF5FAF7),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0x1A6A9E88),
+              ),
+              child: const Icon(
+                Icons.history_rounded,
+                size: 18,
+                color: accentSage,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No recent history yet',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Recent summaries will appear after planned days pass or '
+                    'you check in for today.',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: textMuted,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'RECENT',
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _RecentSummaryCard(
+          key: const ValueKey('progress-summary-7'),
+          title: 'Past 7 days',
+          summary: past7,
+        ),
+        const SizedBox(height: 10),
+        _RecentSummaryCard(
+          key: const ValueKey('progress-summary-30'),
+          title: 'Past 30 days',
+          summary: past30,
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentSummaryCard extends StatelessWidget {
+  const _RecentSummaryCard({
+    super.key,
+    required this.title,
+    required this.summary,
+  });
+
+  final String title;
+  final ProgressSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                summary.hasHistory
+                    ? '${summary.checked} checked in'
+                    : 'No items yet',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  color: textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _RecentCount(
+                value: summary.planned,
+                label: 'Planned',
+                color: textPrimary,
+              ),
+              _RecentCount(
+                value: summary.done,
+                label: 'Done',
+                color: accentSage,
+              ),
+              _RecentCount(
+                value: summary.partly,
+                label: 'Partly',
+                color: sand,
+              ),
+              _RecentCount(
+                value: summary.skipped,
+                label: 'Skipped',
+                color: textMuted,
+              ),
+              _RecentCount(
+                value: summary.unchecked,
+                label: 'Unchecked',
+                color: primaryTerracotta,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentCount extends StatelessWidget {
+  const _RecentCount({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final int value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('recent-count-$label-$value'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: warmBeige.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$value',
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: textMuted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DifficultySummarySection extends StatelessWidget {
+  const _DifficultySummarySection({
+    required this.past7,
+    required this.past30,
+  });
+
+  final DifficultyProgressSummary past7;
+  final DifficultyProgressSummary past30;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('progress-difficulty-summary'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'DIFFICULTY',
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        LsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFFFF3EC),
+                    ),
+                    child: const Icon(
+                      Icons.fitness_center_rounded,
+                      size: 17,
+                      color: primaryTerracotta,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Higher effort activities',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Difficulty 4-5, spaced gently by the planner.',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: textMuted,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _DifficultyWindowRow(
+                key: const ValueKey('difficulty-summary-7'),
+                label: 'Past 7 days',
+                summary: past7,
+              ),
+              const SizedBox(height: 10),
+              _DifficultyWindowRow(
+                key: const ValueKey('difficulty-summary-30'),
+                label: 'Past 30 days',
+                summary: past30,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DifficultyWindowRow extends StatelessWidget {
+  const _DifficultyWindowRow({
+    super.key,
+    required this.label,
+    required this.summary,
+  });
+
+  final String label;
+  final DifficultyProgressSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
+            ),
+            Text(
+              summary.hasHardActivities
+                  ? '${summary.planned} planned'
+                  : 'None planned',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: textMuted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _RecentCount(
+              value: summary.planned,
+              label: 'Planned',
+              color: textPrimary,
+            ),
+            _RecentCount(
+              value: summary.done,
+              label: 'Done',
+              color: accentSage,
+            ),
+            _RecentCount(
+              value: summary.partly,
+              label: 'Partly',
+              color: sand,
+            ),
+            _RecentCount(
+              value: summary.skipped,
+              label: 'Skipped',
+              color: textMuted,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 class _SummaryTile extends StatelessWidget {
   const _SummaryTile({
@@ -226,8 +611,6 @@ class _SummaryTile extends StatelessWidget {
     );
   }
 }
-
-// ─── Category bar ─────────────────────────────────────────────────────────────
 
 class _CategoryBar extends StatelessWidget {
   const _CategoryBar({
@@ -293,8 +676,6 @@ class _CategoryBar extends StatelessWidget {
   }
 }
 
-// ─── Status callout ───────────────────────────────────────────────────────────
-
 class _StatusCallout extends StatelessWidget {
   const _StatusCallout({required this.stats});
 
@@ -324,16 +705,16 @@ class _StatusCallout extends StatelessWidget {
       icon = Icons.emoji_events_rounded;
       bg = const Color(0xFFF5FAF7);
       iconColor = accentSage;
-      title = 'Great week!';
-      body = '${stats.done} done and ${stats.partly} partly done — keep it up.';
+      title = 'Nice progress';
+      body = '${stats.done} done and ${stats.partly} partly done this week.';
     } else {
       icon = Icons.trending_up_rounded;
       bg = const Color(0xFFFFF8F5);
       iconColor = primaryTerracotta;
       title = '${stats.checked} of ${stats.planned} activities checked in';
       body = stats.planned - stats.checked > 0
-          ? '${stats.planned - stats.checked} still to go this week.'
-          : 'All checked in — great work!';
+          ? '${stats.planned - stats.checked} still unchecked this week.'
+          : 'All planned items have a check-in.';
     }
 
     return LsCard(

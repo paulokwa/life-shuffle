@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account, calendar info, planning style, and activity-default dimension toggles. Starter activity library and plan style choice are live. The Today screen's check-in prompt now opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account, calendar info, planning style, and activity-default dimension toggles. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, plus a Difficulty-only hard-activity summary when Difficulty is enabled.
 
-Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review/day-sheet check-in views, ICS publishing, print/export, and remaining Settings sections (publishing, export/print, privacy/help).
+Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, ICS publishing, print/export, and remaining Settings sections (publishing, export/print, privacy/help).
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -90,13 +90,13 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add quick catch-up check-in view
 - [ ] Add one-by-one check-in review
 - [ ] Add week review check-in view
-- [ ] Add day sheet check-in from agenda/calendar
+- [x] Add day sheet check-in from agenda/calendar
 - [ ] Add optional note action for check-ins, hidden by default
 - [x] Add basic progress/stats page scoped to selected calendar
-- [ ] Add past 7 days and past 30 days summaries
+- [x] Add past 7 days and past 30 days summaries
 - [x] Add planned vs done/partly/skipped counts
 - [x] Add category breakdown
-- [ ] Add difficulty summary if difficulty is enabled
+- [x] Add difficulty summary if difficulty is enabled
 - [ ] Add simple streaks or trends
 - [ ] Add looking-ahead summary for upcoming planned items
 - [ ] Add plain-language privacy/feed explanation
