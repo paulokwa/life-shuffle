@@ -627,3 +627,28 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Progress now conditionally surfaces difficulty-aware planning context when Difficulty is enabled, with direct calculation tests and widget tests for hidden/visible behavior.
 - **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Simple streaks and trends in Progress
+
+- **Goal**: Add one more gentle Progress insight without adding charts.
+- **Summary**: Added a compact Recent Rhythm section to Progress. It calculates the current streak of consecutive days ending today with at least one Done or Partly check-in, and compares Done/Partly counts from the past 7 days against the previous 7 days. The section uses friendly copy, shows a no-rhythm empty state when there is no planned/check-in history, and shows a helpful note when there is not enough previous-week history for comparison. No charts, AI, notifications, export/publishing, or sharing/member UI were added.
+- **Files changed**:
+  - `lib/models/progress_summary.dart`
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat the current streak as consecutive calendar days ending today with at least one Done or Partly check-in.
+  - Compare today plus the previous 6 days against the 7 days before that.
+  - Count Done and Partly equally for the rhythm comparison so the copy stays reflective rather than score-like.
+- **Tests run**:
+  - `dart format lib/models/progress_summary.dart lib/screens/progress_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Progress now shows a compact Recent Rhythm section with streak, 7-day comparison, and empty/history-waiting copy. Calculation and widget behavior are covered by tests.
+- **Next recommended step**: Add the looking-ahead summary for upcoming planned items or continue with planning-dimensions onboarding.
+- **Open questions**: None.

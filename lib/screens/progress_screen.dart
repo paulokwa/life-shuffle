@@ -45,6 +45,7 @@ class ProgressScreen extends StatelessWidget {
     final past30 = ProgressSummaryCalculator.recent(week, days: 30);
     final hardPast7 = ProgressSummaryCalculator.recentHard(week, days: 7);
     final hardPast30 = ProgressSummaryCalculator.recentHard(week, days: 30);
+    final rhythm = ProgressSummaryCalculator.rhythm(week);
     final rateLabel = '${(stats.rate * 100).round()}%';
 
     return SafeArea(
@@ -84,6 +85,8 @@ class ProgressScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
+                  _RhythmSummarySection(rhythm: rhythm),
+                  const SizedBox(height: 20),
                   Row(
                     children: [
                       _SummaryTile(
@@ -564,6 +567,158 @@ class _DifficultyWindowRow extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _RhythmSummarySection extends StatelessWidget {
+  const _RhythmSummarySection({required this.rhythm});
+
+  final RhythmProgressSummary rhythm;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasStreak = rhythm.currentStreakDays > 0;
+
+    return Column(
+      key: const ValueKey('progress-rhythm-summary'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'RECENT RHYTHM',
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.0,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        LsCard(
+          key: rhythm.hasAnyHistory
+              ? const ValueKey('progress-rhythm-card')
+              : const ValueKey('progress-rhythm-empty'),
+          color: rhythm.hasAnyHistory ? surfaceWhite : const Color(0xFFF5FAF7),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: hasStreak
+                          ? const Color(0x1A6A9E88)
+                          : warmBeige.withValues(alpha: 0.7),
+                    ),
+                    child: Icon(
+                      hasStreak ? Icons.repeat_rounded : Icons.history_rounded,
+                      size: 17,
+                      color: hasStreak ? accentSage : textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rhythm.hasAnyHistory
+                              ? 'A gentle pattern'
+                              : 'No rhythm yet',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _streakCopy(rhythm.currentStreakDays),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: textMuted,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (rhythm.hasAnyHistory) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _RecentCount(
+                      value: rhythm.currentStreakDays,
+                      label: rhythm.currentStreakDays == 1
+                          ? 'Streak day'
+                          : 'Streak days',
+                      color: accentSage,
+                    ),
+                    _RecentCount(
+                      value: rhythm.past7DonePartly,
+                      label: 'Past 7',
+                      color: primaryTerracotta,
+                    ),
+                    _RecentCount(
+                      value: rhythm.previous7DonePartly,
+                      label: 'Previous 7',
+                      color: textMuted,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _comparisonCopy(rhythm),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _streakCopy(int streakDays) {
+    if (streakDays <= 0) {
+      return 'A Done or Partly check-in can start a small streak.';
+    }
+    if (streakDays == 1) {
+      return 'Today has at least one Done or Partly check-in.';
+    }
+    return '$streakDays days in a row have at least one Done or Partly '
+        'check-in.';
+  }
+
+  static String _comparisonCopy(RhythmProgressSummary rhythm) {
+    if (!rhythm.hasComparisonHistory) {
+      return 'A 7-day comparison will appear after another week of planned '
+          'check-ins.';
+    }
+    final delta = rhythm.comparisonDelta;
+    if (delta > 0) {
+      return 'Past 7 days has $delta more Done or Partly check-in'
+          '${delta == 1 ? '' : 's'} than the previous 7.';
+    }
+    if (delta < 0) {
+      final quieter = delta.abs();
+      return 'Past 7 days has $quieter fewer Done or Partly check-in'
+          '${quieter == 1 ? '' : 's'} than the previous 7. That can be useful '
+          'to notice.';
+    }
+    return 'Past 7 days and the previous 7 have the same Done or Partly '
+        'count.';
   }
 }
 

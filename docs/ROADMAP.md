@@ -8,7 +8,7 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account, calendar info, planning style, and activity-default dimension toggles. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, plus a Difficulty-only hard-activity summary when Difficulty is enabled.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, and basic progress are all working. Settings shows account, calendar info, planning style, and activity-default dimension toggles. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, and a compact Recent Rhythm section for streaks and 7-day comparison.
 
 Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, ICS publishing, print/export, and remaining Settings sections (publishing, export/print, privacy/help).
 
@@ -97,7 +97,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add planned vs done/partly/skipped counts
 - [x] Add category breakdown
 - [x] Add difficulty summary if difficulty is enabled
-- [ ] Add simple streaks or trends
+- [x] Add simple streaks or trends
 - [ ] Add looking-ahead summary for upcoming planned items
 - [ ] Add plain-language privacy/feed explanation
 - [x] Save calendars, activities, generated plans, and check-in statuses in Firestore

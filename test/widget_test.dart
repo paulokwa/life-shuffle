@@ -1165,6 +1165,58 @@ void main() {
     expect(summary.hasHardActivities, isTrue);
   });
 
+  test('Progress rhythm summary calculates streak and comparison', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final plans = [
+      _summaryDay(DateTime(2026, 6, 18), [
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 17), [
+        CheckStatus.partly,
+      ]),
+      _summaryDay(DateTime(2026, 6, 16), [
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 15), [
+        CheckStatus.skipped,
+      ]),
+      _summaryDay(DateTime(2026, 6, 11), [
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 5), [
+        CheckStatus.partly,
+      ]),
+      _summaryDay(DateTime(2026, 6, 4), [
+        CheckStatus.done,
+      ]),
+      _summaryDay(DateTime(2026, 6, 19), [
+        CheckStatus.done,
+      ]),
+    ];
+
+    final rhythm = ProgressSummaryCalculator.rhythm(plans, now: now);
+
+    expect(rhythm.currentStreakDays, 3);
+    expect(rhythm.past7DonePartly, 3);
+    expect(rhythm.previous7DonePartly, 2);
+    expect(rhythm.comparisonDelta, 1);
+    expect(rhythm.hasAnyHistory, isTrue);
+    expect(rhythm.hasComparisonHistory, isTrue);
+  });
+
+  test('Progress rhythm summary reports empty history', () {
+    final rhythm = ProgressSummaryCalculator.rhythm(
+      const [],
+      now: DateTime(2026, 6, 18, 14),
+    );
+
+    expect(rhythm.currentStreakDays, 0);
+    expect(rhythm.past7DonePartly, 0);
+    expect(rhythm.previous7DonePartly, 0);
+    expect(rhythm.hasAnyHistory, isFalse);
+    expect(rhythm.hasComparisonHistory, isFalse);
+  });
+
   testWidgets('Progress displays past 7 and past 30 day summaries',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -1231,6 +1283,65 @@ void main() {
         'Recent summaries will appear after planned days pass or '
         'you check in for today.',
       ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Progress displays recent rhythm section',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final today = _today();
+    appState.weekPlan
+      ..clear()
+      ..addAll([
+        _summaryDay(today, [
+          CheckStatus.done,
+        ]),
+        _summaryDay(today.subtract(const Duration(days: 1)), [
+          CheckStatus.partly,
+        ]),
+        _summaryDay(today.subtract(const Duration(days: 7)), [
+          CheckStatus.done,
+        ]),
+      ]);
+    final expected = ProgressSummaryCalculator.rhythm(appState.weekPlan);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(
+        find.byKey(const ValueKey('progress-rhythm-summary')), findsOneWidget);
+    expect(find.byKey(const ValueKey('progress-rhythm-card')), findsOneWidget);
+    expect(find.text('RECENT RHYTHM'), findsOneWidget);
+    expect(find.text('A gentle pattern'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('progress-rhythm-card')),
+        matching: find.text('${expected.currentStreakDays}'),
+      ),
+      findsAtLeastNWidgets(1),
+    );
+    expect(
+      find.text(
+        'Past 7 days has 1 more Done or Partly check-in than the previous 7.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Progress shows recent rhythm empty state',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await _pumpProgressScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('progress-rhythm-empty')), findsOneWidget);
+    expect(find.text('No rhythm yet'), findsOneWidget);
+    expect(
+      find.text('A Done or Partly check-in can start a small streak.'),
       findsOneWidget,
     );
   });
