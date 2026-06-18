@@ -538,6 +538,107 @@ void main() {
     expect(metadata.feedRevokedAtMillis, 190);
   });
 
+  test('Enabling the feed caches generated ICS text', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.cachedIcsText, isNull);
+    expect(appState.cachedIcsUpdatedAtMillis, isNull);
+
+    appState.setFeedEnabled(true);
+
+    expect(appState.cachedIcsText, isNotNull);
+    expect(appState.cachedIcsText, contains('BEGIN:VCALENDAR'));
+    expect(appState.cachedIcsText, contains('END:VCALENDAR'));
+    expect(appState.cachedIcsUpdatedAtMillis, isNotNull);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.cachedIcsText, appState.cachedIcsText);
+    expect(saved.cachedIcsUpdatedAtMillis, appState.cachedIcsUpdatedAtMillis);
+  });
+
+  test(
+      'Cached ICS text updates when calendar title, plan, and feed token change',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setFeedEnabled(true);
+    final firstText = appState.cachedIcsText;
+    final firstUpdatedAt = appState.cachedIcsUpdatedAtMillis;
+    expect(firstText, isNot(contains('Weekend Crew')));
+
+    appState.confirmCalendarTitle('Weekend Crew');
+
+    expect(appState.cachedIcsText, isNot(firstText));
+    expect(appState.cachedIcsText, contains('Weekend Crew'));
+    expect(appState.cachedIcsUpdatedAtMillis,
+        greaterThanOrEqualTo(firstUpdatedAt!));
+
+    final beforeRegenerate = appState.cachedIcsText;
+    appState.regenerate();
+    expect(appState.cachedIcsText, isNotNull);
+
+    final beforeTokenChange = appState.cachedIcsText;
+    appState.regenerateFeedToken();
+    expect(appState.cachedIcsText, isNotNull);
+    expect(appState.cachedIcsUpdatedAtMillis, isNotNull);
+
+    // Sanity: every recompute keeps producing a valid calendar envelope,
+    // even when the rendered text happens to match the prior snapshot.
+    expect(beforeRegenerate, contains('BEGIN:VCALENDAR'));
+    expect(beforeTokenChange, contains('BEGIN:VCALENDAR'));
+  });
+
+  test('Disabling the feed clears cached ICS text', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setFeedEnabled(true);
+    expect(appState.cachedIcsText, isNotNull);
+
+    appState.setFeedEnabled(false);
+
+    expect(appState.cachedIcsText, isNull);
+    expect(appState.cachedIcsUpdatedAtMillis, isNull);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.cachedIcsText, isNull);
+    expect(saved.cachedIcsUpdatedAtMillis, isNull);
+  });
+
+  test('SavedState maps cached ICS fields for Firestore sync', () {
+    const state = SavedState(
+      activities: [],
+      seed: 0,
+      updatedAtMillis: 200,
+      cachedIcsText: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n',
+      cachedIcsUpdatedAtMillis: 200,
+      enabledMap: {},
+      checkinMap: {},
+      lockedMap: {},
+    );
+
+    final map = state.toMap();
+    expect(map['cachedIcsText'], 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n');
+    expect(map['cachedIcsUpdatedAtMillis'], 200);
+
+    final restored = SavedState.fromMap(map);
+    expect(restored.cachedIcsText, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n');
+    expect(restored.cachedIcsUpdatedAtMillis, 200);
+
+    final withoutCache = SavedState.fromMap({
+      ...map,
+      'cachedIcsText': null,
+      'cachedIcsUpdatedAtMillis': null,
+    });
+    expect(withoutCache.cachedIcsText, isNull);
+    expect(withoutCache.cachedIcsUpdatedAtMillis, isNull);
+  });
+
   test('Activity dimensions serialize with normalized defaults and values', () {
     final defaulted = Activity(
       id: 'dimension-defaults',

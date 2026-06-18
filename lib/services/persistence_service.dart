@@ -31,6 +31,8 @@ class PersistenceService {
   static const _keyFeedCreatedAtMillis = 'ls_feed_created_at_millis';
   static const _keyFeedUpdatedAtMillis = 'ls_feed_updated_at_millis';
   static const _keyFeedRevokedAtMillis = 'ls_feed_revoked_at_millis';
+  static const _keyCachedIcsText = 'ls_cached_ics_text';
+  static const _keyCachedIcsUpdatedAtMillis = 'ls_cached_ics_updated_at_millis';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -60,6 +62,9 @@ class PersistenceService {
     final feedCreatedAtMillis = _prefs.getInt(_keyFeedCreatedAtMillis);
     final feedUpdatedAtMillis = _prefs.getInt(_keyFeedUpdatedAtMillis);
     final feedRevokedAtMillis = _prefs.getInt(_keyFeedRevokedAtMillis);
+    final cachedIcsText = _prefs.getString(_keyCachedIcsText);
+    final cachedIcsUpdatedAtMillis =
+        _prefs.getInt(_keyCachedIcsUpdatedAtMillis);
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
@@ -100,6 +105,8 @@ class PersistenceService {
       feedCreatedAtMillis: feedCreatedAtMillis,
       feedUpdatedAtMillis: feedUpdatedAtMillis,
       feedRevokedAtMillis: feedRevokedAtMillis,
+      cachedIcsText: cachedIcsText,
+      cachedIcsUpdatedAtMillis: cachedIcsUpdatedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -176,6 +183,17 @@ class PersistenceService {
   static void saveFeedRevokedAtMillis(int? value) =>
       _saveNullableInt(_keyFeedRevokedAtMillis, value);
 
+  static void saveCachedIcsText(String? value) {
+    if (value == null || value.isEmpty) {
+      _prefs.remove(_keyCachedIcsText);
+      return;
+    }
+    _prefs.setString(_keyCachedIcsText, value);
+  }
+
+  static void saveCachedIcsUpdatedAtMillis(int? value) =>
+      _saveNullableInt(_keyCachedIcsUpdatedAtMillis, value);
+
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
 
@@ -243,6 +261,8 @@ class SavedState {
     this.feedCreatedAtMillis,
     this.feedUpdatedAtMillis,
     this.feedRevokedAtMillis,
+    this.cachedIcsText,
+    this.cachedIcsUpdatedAtMillis,
   });
 
   final List<Activity> activities;
@@ -264,6 +284,8 @@ class SavedState {
   final int? feedCreatedAtMillis;
   final int? feedUpdatedAtMillis;
   final int? feedRevokedAtMillis;
+  final String? cachedIcsText;
+  final int? cachedIcsUpdatedAtMillis;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -290,6 +312,8 @@ class SavedState {
       'feedCreatedAtMillis': feedCreatedAtMillis,
       'feedUpdatedAtMillis': feedUpdatedAtMillis,
       'feedRevokedAtMillis': feedRevokedAtMillis,
+      'cachedIcsText': cachedIcsText,
+      'cachedIcsUpdatedAtMillis': cachedIcsUpdatedAtMillis,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -333,6 +357,9 @@ class SavedState {
       feedCreatedAtMillis: _readNullableInt(map['feedCreatedAtMillis']),
       feedUpdatedAtMillis: _readNullableInt(map['feedUpdatedAtMillis']),
       feedRevokedAtMillis: _readNullableInt(map['feedRevokedAtMillis']),
+      cachedIcsText: _readRawNullableString(map['cachedIcsText']),
+      cachedIcsUpdatedAtMillis:
+          _readNullableInt(map['cachedIcsUpdatedAtMillis']),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
@@ -366,6 +393,13 @@ class SavedState {
     if (value is! String) return null;
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  // Unlike _readNullableString, this does not trim: cachedIcsText is literal
+  // ICS content whose required trailing CRLF would otherwise be stripped.
+  static String? _readRawNullableString(Object? value) {
+    if (value is! String) return null;
+    return value.isEmpty ? null : value;
   }
 
   static bool _readBool(Object? value) => value is bool ? value : false;

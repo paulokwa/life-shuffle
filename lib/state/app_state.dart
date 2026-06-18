@@ -6,6 +6,7 @@ import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../services/firestore_sync_service.dart';
+import '../services/ics_calendar_service.dart';
 import '../services/persistence_service.dart';
 import '../services/planner_service.dart'
     show PlannerGenerationResult, PlannerService, PlanStyle;
@@ -41,6 +42,8 @@ class AppState extends ChangeNotifier {
   int? _feedCreatedAtMillis;
   int? _feedUpdatedAtMillis;
   int? _feedRevokedAtMillis;
+  String? _cachedIcsText;
+  int? _cachedIcsUpdatedAtMillis;
 
   AppState({required List<Activity> activities, SavedState? savedState})
       : activities = activities.map((activity) => activity.copy()).toList() {
@@ -79,6 +82,8 @@ class AppState extends ChangeNotifier {
   int? get feedCreatedAtMillis => _feedCreatedAtMillis;
   int? get feedUpdatedAtMillis => _feedUpdatedAtMillis;
   int? get feedRevokedAtMillis => _feedRevokedAtMillis;
+  String? get cachedIcsText => _cachedIcsText;
+  int? get cachedIcsUpdatedAtMillis => _cachedIcsUpdatedAtMillis;
   String get feedTokenPreview {
     final token = _feedToken;
     if (token == null || token.isEmpty) return 'No token yet';
@@ -111,7 +116,10 @@ class AppState extends ChangeNotifier {
     if (remote != null &&
         remote.state.updatedAtMillis > local.updatedAtMillis) {
       _applySavedState(remote.state);
-      FirestoreSyncService.saveState(uid, remote.state);
+      // Re-derive rather than re-save remote.state verbatim: _applySavedState
+      // just rebuilt _weekPlan against "now", which may be a different
+      // calendar week than whatever remote.state's cached ICS reflected.
+      FirestoreSyncService.saveState(uid, _currentSavedState());
       notifyListeners();
       return;
     }
@@ -439,6 +447,7 @@ class AppState extends ChangeNotifier {
     }
     _weekPlan = _buildPlan();
     _applyOverlays(saved);
+    _refreshCachedIcs();
 
     if (persistLocal) {
       _persistLocal(saved);
@@ -474,6 +483,10 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveFeedCreatedAtMillis(state.feedCreatedAtMillis);
     PersistenceService.saveFeedUpdatedAtMillis(state.feedUpdatedAtMillis);
     PersistenceService.saveFeedRevokedAtMillis(state.feedRevokedAtMillis);
+    PersistenceService.saveCachedIcsText(state.cachedIcsText);
+    PersistenceService.saveCachedIcsUpdatedAtMillis(
+      state.cachedIcsUpdatedAtMillis,
+    );
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
@@ -513,6 +526,7 @@ class AppState extends ChangeNotifier {
   }
 
   SavedState _currentSavedState({int? updatedAtMillis}) {
+    _refreshCachedIcs();
     final enabledMap = <String, bool>{};
     for (final a in activities) {
       enabledMap[a.id] = a.enabled;
@@ -547,6 +561,8 @@ class AppState extends ChangeNotifier {
       feedCreatedAtMillis: _feedCreatedAtMillis,
       feedUpdatedAtMillis: _feedUpdatedAtMillis,
       feedRevokedAtMillis: _feedRevokedAtMillis,
+      cachedIcsText: _cachedIcsText,
+      cachedIcsUpdatedAtMillis: _cachedIcsUpdatedAtMillis,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -654,6 +670,20 @@ class AppState extends ChangeNotifier {
     _feedUpdatedAtMillis = now;
     _persist();
     notifyListeners();
+  }
+
+  void _refreshCachedIcs() {
+    if (!_feedEnabled) {
+      _cachedIcsText = null;
+      _cachedIcsUpdatedAtMillis = null;
+      return;
+    }
+    _cachedIcsText = IcsCalendarService.generate(
+      calendarId: _calendarId ?? _feedToken ?? 'local-calendar',
+      calendarTitle: _calendarTitle,
+      plan: _weekPlan,
+    );
+    _cachedIcsUpdatedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }
 
   static String _generateFeedToken() {

@@ -761,3 +761,49 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The selected calendar can hold local and synced private feed-token metadata and Settings can control that metadata, but there is still no public URL or endpoint.
 - **Next recommended step**: Add a public read-only feed endpoint later, after confirming the URL shape and token lookup strategy.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 (continued) - Public ICS feed endpoint plan
+
+- **Goal**: Plan the smallest safe way to expose published calendars as public read-only `.ics` feeds, without implementing the endpoint yet.
+- **Summary**: Read `IcsCalendarService`, the existing publishing metadata path (`AppState`, `PersistenceService`, `FirestoreSyncService.CalendarMetadata`), `firestore.rules`, and `netlify.toml`. Found two facts that shape the design: (1) `IcsCalendarService.generate()` exists but is never called anywhere in the app yet — it has no caller outside its own test file. (2) `AppState._buildPlan()` recomputes "this calendar week" fresh on every call from `PlannerService.mondayOf(DateTime.now())` plus the stored seed; Firestore only stores the planner *inputs* (activities, seed, planStyle, overlay maps), never a resolved list of dated events. A Node-based Netlify Function can't run that Dart planner, so the plan document records and recommends a specific design decision: cache the rendered ICS text in the calendar's Firestore doc whenever the signed-in client persists state with the feed enabled, and make the Netlify Function a dumb token-lookup-and-serve proxy rather than porting planner rules to JavaScript. Wrote `docs/ICS_FEED_ENDPOINT_PLAN.md` covering the endpoint shape, token lookup (direct query on the existing `calendars` collection by `feedToken`, no composite index or separate lookup collection needed), token-URL privacy risks, cache headers, disabled/revoked behavior, an error-response table, local testing steps (including Admin SDK service-account setup and a real calendar-app subscription test), required Netlify env vars (new `FIREBASE_SERVICE_ACCOUNT_JSON`), and a numbered implementation checklist for the next coding session.
+- **Files changed**:
+  - `docs/ICS_FEED_ENDPOINT_PLAN.md` (new)
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Recommend caching client-rendered ICS text in Firestore rather than reimplementing the rule-based planner in JavaScript inside the Netlify Function, accepting the same "may not refresh instantly" limitation already disclosed for external calendar apps elsewhere in the product.
+  - No separate token-lookup Firestore collection or manual composite index — a single equality query on `feedToken` against the existing `calendars` collection is sufficient and already auto-indexed.
+  - Filter `feedEnabled` in application code after fetching by token, not in the Firestore query, so legacy docs that only have the older `isPublished` field aren't silently excluded.
+  - All "feed not available" cases (never published, disabled, revoked, missing cached ICS) return an identical generic 404 so the response never reveals *why* a token doesn't work.
+- **Tests run**: None — planning/docs only, no code changed.
+- **Current state**: A complete implementation plan exists at `docs/ICS_FEED_ENDPOINT_PLAN.md`. No endpoint, no Netlify Function, no `package.json`/Node project, and no Firestore schema changes have been made yet.
+- **Next recommended step**: Follow the numbered checklist in `docs/ICS_FEED_ENDPOINT_PLAN.md` section 10, starting with confirming the cached-ICS design decision in section 0, then wiring `AppState`/`FirestoreSyncService` to write `icsFeed` to Firestore before building the actual `netlify/functions/calendar-feed.js` function.
+- **Open questions**:
+  - Is the cached-ICS staleness tradeoff (feed only refreshes when someone opens the app) acceptable, or does it need a stronger freshness guarantee before shipping?
+
+---
+
+## 2026-06-18 (continued) - Cache generated ICS text in Firestore for the future feed endpoint
+
+- **Goal**: Implement section 0/step 2-4 of `docs/ICS_FEED_ENDPOINT_PLAN.md` — cache rendered ICS text in the calendar's saved state so a future Netlify Function can serve it without running the planner server-side. No endpoint, no Netlify Function, no server-side planner logic.
+- **Summary**: Added `cachedIcsText` and `cachedIcsUpdatedAtMillis` to `SavedState` (constructor, `toMap()`, `fromMap()`) and to `PersistenceService` (SharedPreferences keys + save methods), mirroring the existing `feedToken`/`feedEnabled` pattern so the fields round-trip through both local storage and Firestore sync automatically (Firestore sync needed no changes — `FirestoreSyncService.saveState`/`loadDefaultCalendar` already spread `SavedState.toMap()`/`fromMap()` directly). Added a single private `AppState._refreshCachedIcs()` that recomputes `cachedIcsText` via the existing `IcsCalendarService.generate()` against the live `_weekPlan`/`_calendarTitle` whenever `feedEnabled` is true, and clears both fields to `null` when it's false. Wired that one method into the two places that matter: `_currentSavedState()` (so every `_persist()` call — regenerate, undo, lock/unlock, check-ins, calendar title, plan style, difficulty/energy/social toggles, feed enable/disable/regenerate/revoke — refreshes the cache) and the end of `_applySavedState()` (so loading state from Firestore or local storage, including at app boot, immediately refreshes the cache against whatever "now" actually is, rather than trusting a stale stored value). Also fixed a latent staleness bug this introduced: `syncWithFirestore()`'s "remote is newer" branch used to write `remote.state` back to Firestore verbatim after applying it; now it writes a freshly built `_currentSavedState()` instead, since `_applySavedState` just rebuilt `_weekPlan` against the current date and the old `remote.state.cachedIcsText` could reflect a different calendar week. The Flutter app never reads `cachedIcsText` back out of a loaded `SavedState` — it's treated as write-mostly data for external consumption (the future function), always rederived fresh from current truth rather than trusted from storage. One existing generic string reader (`PersistenceService._readNullableString`) trims whitespace, which is correct for short fields like titles/tokens but corrupts the meaningful trailing CRLF that terminates valid ICS text — added a separate non-trimming `_readRawNullableString` used only for `cachedIcsText`.
+- **Files changed**:
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - `cachedIcsText`/`cachedIcsUpdatedAtMillis` exist if and only if `feedEnabled` is true — disabling the feed clears both rather than leaving stale rendered content sitting in Firestore.
+  - Recompute unconditionally inside `_currentSavedState()`/`_applySavedState()` rather than diffing for changes first; `IcsCalendarService.generate()` is cheap pure string-building over a handful of events, so there's no need for dirty-checking at this scale.
+  - `AppState` never reads `cachedIcsText` back from a loaded `SavedState` into live state — it's always rederived from the current `_weekPlan`/`_calendarTitle`/`_feedEnabled`/`_feedToken`, which is simpler than reconciling a stored value against fresher local state and avoids ever serving accidentally-stale content.
+  - Did not update `ROADMAP.md`: this is internal plumbing for the future endpoint, not the "private/unguessable calendar feed URL" or "public endpoint" items those roadmap lines describe, so neither is genuinely complete yet.
+- **Tests run**:
+  - `dart format lib/services/persistence_service.dart lib/state/app_state.dart test/widget_test.dart`
+  - `flutter test` — all 68 tests passed, including four new tests: cache creation on enable, cache updates on calendar-title/plan/token changes, cache clears on disable, and `SavedState.toMap()`/`fromMap()` round-trip for the two new fields.
+  - `flutter analyze --no-fatal-infos` passed with the existing 23 pre-existing info-level lints, none new.
+  - `flutter build web` passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` passed with only CRLF normalization warnings.
+- **Current state**: When a calendar's feed is enabled, `AppState.cachedIcsText`/`cachedIcsUpdatedAtMillis` hold freshly generated ICS text that's persisted through the existing local/Firestore `SavedState` path on every relevant mutation. No Netlify Function or public endpoint exists yet — this only prepares the data the future endpoint will read.
+- **Next recommended step**: Follow `docs/ICS_FEED_ENDPOINT_PLAN.md` section 10 steps 5-10 — add the root `package.json`, create `netlify/functions/calendar-feed.js` to look up a calendar by `feedToken` and serve `cachedIcsText` when `feedEnabled` is true, update `netlify.toml`, add the `FIREBASE_SERVICE_ACCOUNT_JSON` Netlify env var, and replace the Settings `_FeedLinkPlaceholder` copy with a real copyable URL.
+- **Open questions**: None — the staleness tradeoff question from the previous entry is narrowed by this work (the cache now also refreshes on every app-open/sync, not only on explicit edits), but still depends on someone opening the app periodically, consistent with the accepted plan.
