@@ -677,3 +677,27 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Progress now shows a compact Looking Ahead section with the next 7-day planned count, up to three upcoming activities, and helpful empty copy. Calculation and widget behavior are covered by tests.
 - **Next recommended step**: Add the planning-dimensions onboarding screen or continue with one-by-one/week-review check-in views.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Settings privacy and feed explanation
+
+- **Goal**: Add MVP privacy/help explanation before building ICS publishing so users understand sharing and future feed links.
+- **Summary**: Added an informational Settings > Privacy/help section with plain-language copy explaining that Life Shuffle calendars are private to signed-in members, shared members can see/edit shared calendars, published calendar feeds will be read-only, anyone with a published feed link may be able to view that feed, feed links can later be revoked/regenerated, and external calendar apps may not refresh immediately. No ICS feed, invite/member UI, feed URL generation, export/print, AI, or notifications were added.
+- **Files changed**:
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the Privacy/help section informational only until publishing and sharing controls are built.
+  - Place feed-link risk copy before ICS publishing so the future feature has user-facing context.
+  - Use existing Settings card styling rather than introducing a new help route.
+- **Tests run**:
+  - `dart format lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test` passed.
+  - `flutter analyze --no-fatal-infos` passed with existing info-level lint noise.
+  - `flutter build web` passed. Build showed the existing icon-font warning and wasm dry-run note.
+- **Current state**: Settings renders the new Privacy/help card and the roadmap now marks the privacy/feed explanation complete.
+- **Next recommended step**: Continue with planning-dimensions onboarding, shared-edit/sync conflict messages, or ICS publishing when ready.
+- **Open questions**: None.

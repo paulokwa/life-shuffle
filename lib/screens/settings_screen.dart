@@ -241,7 +241,11 @@ class SettingsScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _SectionLabel(label: 'ABOUT'),
+                  const _SectionLabel(label: 'PRIVACY / HELP'),
+                  const SizedBox(height: 10),
+                  const _PrivacyHelpCard(),
+                  const SizedBox(height: 16),
+                  const _SectionLabel(label: 'ABOUT'),
                   const SizedBox(height: 10),
                   _SettingsGroup(
                     children: const [
@@ -285,6 +289,92 @@ class SettingsScreen extends StatelessWidget {
     final labels =
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
+  }
+}
+
+class _PrivacyHelpCard extends StatelessWidget {
+  const _PrivacyHelpCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const LsCard(
+      key: ValueKey('settings-privacy-help'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PrivacyHelpItem(
+            icon: Icons.lock_outline_rounded,
+            text: 'Life Shuffle calendars are private to signed-in members.',
+          ),
+          SizedBox(height: 12),
+          _PrivacyHelpItem(
+            icon: Icons.group_outlined,
+            text: 'Shared members can see and edit the shared calendar.',
+          ),
+          SizedBox(height: 12),
+          _PrivacyHelpItem(
+            icon: Icons.rss_feed_rounded,
+            text: 'Published calendar feeds will be read-only.',
+          ),
+          SizedBox(height: 12),
+          _PrivacyHelpItem(
+            icon: Icons.link_rounded,
+            text:
+                'Anyone with a published feed link may be able to view that feed.',
+          ),
+          SizedBox(height: 12),
+          _PrivacyHelpItem(
+            icon: Icons.refresh_rounded,
+            text: 'Feed links can be revoked or regenerated later.',
+          ),
+          SizedBox(height: 12),
+          _PrivacyHelpItem(
+            icon: Icons.schedule_rounded,
+            text: 'External calendar apps may not refresh immediately.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyHelpItem extends StatelessWidget {
+  const _PrivacyHelpItem({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: const BoxDecoration(
+            color: warmBeige,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 16, color: primaryTerracotta),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              height: 1.35,
+              color: textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

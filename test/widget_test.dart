@@ -276,6 +276,54 @@ void main() {
     expect(find.text('On'), findsOneWidget);
   });
 
+  testWidgets('Settings displays privacy and feed explanation',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('PRIVACY / HELP'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-privacy-help')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Life Shuffle calendars are private to signed-in members.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Shared members can see and edit the shared calendar.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Published calendar feeds will be read-only.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Anyone with a published feed link may be able to view that feed.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Feed links can be revoked or regenerated later.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('External calendar apps may not refresh immediately.'),
+      findsOneWidget,
+    );
+  });
+
   test('Activity dimensions serialize with normalized defaults and values', () {
     final defaulted = Activity(
       id: 'dimension-defaults',
