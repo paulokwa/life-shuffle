@@ -701,3 +701,32 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings renders the new Privacy/help card and the roadmap now marks the privacy/feed explanation complete.
 - **Next recommended step**: Continue with planning-dimensions onboarding, shared-edit/sync conflict messages, or ICS publishing when ready.
 - **Open questions**: None.
+
+---
+
+## 2026-06-18 - Local ICS publishing foundation
+
+- **Goal**: Add a local/in-app ICS generation foundation for the selected Life Shuffle calendar without exposing public feed URLs yet.
+- **Summary**: Added `IcsCalendarService`, a pure Dart service that turns generated `DayPlan`/`PlannedActivity` data into a read-only iCalendar string. Events include stable UIDs, DTSTAMP, DTSTART, DTEND from the planned date/time plus activity duration, SUMMARY, CATEGORIES, and DESCRIPTION with duration/category details. ICS text escaping and line folding are handled locally. Settings now has a Publishing placeholder that says the calendar feed is not enabled yet while noting that the in-app ICS foundation exists. No Netlify Functions, public feed URLs, revoke/regenerate controls, Google Calendar API, sharing/member UI, export/print, or AI were added.
+- **Files changed**:
+  - `lib/services/ics_calendar_service.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/ics_calendar_service_test.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep ICS generation as a pure local service for now, not a network endpoint.
+  - Use floating local iCalendar date-times because the app does not yet have calendar-level timezone settings.
+  - Treat public publishing controls as future work separate from this foundation.
+- **Tests run**:
+  - `dart format lib/services/ics_calendar_service.dart lib/screens/settings_screen.dart test/ics_calendar_service_test.dart test/widget_test.dart`
+  - `flutter test test/ics_calendar_service_test.dart --plain-name "generates a valid calendar envelope and VEVENT count"`
+  - `flutter test test/ics_calendar_service_test.dart`
+  - `flutter test test/widget_test.dart --plain-name "Settings displays publishing placeholder"`
+  - `flutter test`
+  - `flutter analyze --no-fatal-infos` passed with 23 info-level lints.
+  - `flutter build web` passed with the existing icon-font warning and wasm dry-run note.
+- **Current state**: The app can generate a valid local ICS feed string for the current generated plan, and Settings exposes a non-enabled Publishing placeholder.
+- **Next recommended step**: Add private published feed URL infrastructure later, likely after the selected-calendar/multiple-calendar model is firmer.
+- **Open questions**: None.

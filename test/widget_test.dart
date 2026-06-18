@@ -324,6 +324,36 @@ void main() {
     );
   });
 
+  testWidgets('Settings displays publishing placeholder',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('PUBLISHING'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-publishing-placeholder')),
+      findsOneWidget,
+    );
+    expect(find.text('Calendar feed'), findsOneWidget);
+    expect(find.text('Not enabled yet'), findsOneWidget);
+    expect(
+      find.text(
+        'Life Shuffle can now generate a read-only ICS calendar feed inside the app. Public feed links, copying, revoking, and regenerating are still off.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   test('Activity dimensions serialize with normalized defaults and values', () {
     final defaulted = Activity(
       id: 'dimension-defaults',

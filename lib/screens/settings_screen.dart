@@ -223,23 +223,9 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _SectionLabel(label: 'SHARING'),
+                  _SectionLabel(label: 'PUBLISHING'),
                   const SizedBox(height: 10),
-                  _SettingsGroup(
-                    children: const [
-                      _SettingsRow(
-                        icon: Icons.rss_feed_rounded,
-                        label: 'ICS feed',
-                        value: 'Not published',
-                        valueColor: textMuted,
-                      ),
-                      _SettingsRow(
-                        icon: Icons.picture_as_pdf_rounded,
-                        label: 'Export PDF',
-                        value: 'Tap to export',
-                      ),
-                    ],
-                  ),
+                  const _PublishingPlaceholderCard(),
                   const SizedBox(height: 16),
                   const _SectionLabel(label: 'PRIVACY / HELP'),
                   const SizedBox(height: 10),
@@ -289,6 +275,75 @@ class SettingsScreen extends StatelessWidget {
     final labels =
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
+  }
+}
+
+class _PublishingPlaceholderCard extends StatelessWidget {
+  const _PublishingPlaceholderCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('settings-publishing-placeholder'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: warmBeige,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.rss_feed_rounded,
+                  size: 18,
+                  color: primaryTerracotta,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Calendar feed',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Not enabled yet',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Life Shuffle can now generate a read-only ICS calendar feed inside the app. Public feed links, copying, revoking, and regenerating are still off.',
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              height: 1.35,
+              color: textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -600,14 +655,12 @@ class _SettingsRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor,
     this.hasChevron = true,
   });
 
   final IconData icon;
   final String label;
   final String value;
-  final Color? valueColor;
   final bool hasChevron;
 
   @override
@@ -633,7 +686,7 @@ class _SettingsRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: valueColor ?? textMuted,
+                color: textMuted,
               ),
             ),
           ),
