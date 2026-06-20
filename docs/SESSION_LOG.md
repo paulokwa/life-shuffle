@@ -1135,3 +1135,40 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Plan `Export` copies week text, and Plan `Publish feed` now gives visible feedback pointing users to Settings.
 - **Next recommended step**: If this affordance needs to become stronger later, add an explicit Settings tab/deep link to the Publishing section as a separate navigation slice.
 - **Open questions**: None.
+
+---
+
+## 2026-06-20 - Shared calendar access foundation for Laura
+
+- **Goal**: Start V1 shared calendar access so Laura can sign in with her own Google account and edit the same calendar as Kwame, without public invites, public profiles, roles, AI, or ICS endpoint changes.
+- **Summary**: Added `docs/SHARED_CALENDAR_PLAN.md` before code. Implemented minimal signed-in `userProfiles/{uid}` upsert, accessible calendar loading with `memberUserIds arrayContains uid`, selected-calendar-safe save targeting, owner-only Settings > Calendar Add member by email, helpful unknown-email copy, and a simple Settings/header switcher when multiple calendars are accessible. Updated Firestore rules locally for minimal profiles and owner-only membership changes, but did not deploy rules. Diagnostics now report feed-token presence only, not token previews.
+- **Files changed**:
+  - `docs/SHARED_CALENDAR_PLAN.md`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+  - `firestore.rules`
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `lib/screens/settings_screen.dart`
+  - `lib/widgets/life_shuffle_header.dart`
+  - `tool/diagnostics/check_firestore_calendar.js`
+  - `test/widget_test.dart`
+- **Decisions made**:
+  - Laura must sign in once before she can be added by email, so a minimal profile exists.
+  - Keep profiles minimal and signed-in lookup-only; no public profile system, email invitations, or roles beyond owner/member.
+  - Prefer selected-calendar save targeting over any data migration, so existing `{uid}_default` calendars remain intact.
+  - Do not deploy Firestore rules without Kwame approval.
+- **Tests run**:
+  - `dart format` on touched Dart files - passed.
+  - `flutter test test/widget_test.dart` - passed, 91/91 widget tests.
+  - `flutter test` - passed, 100/100 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 16 info-level lints.
+  - `npm test` - passed, 12/12 Netlify function tests.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - Firestore rules check/deploy not run because rules changed locally and deploy/check approval was not provided in this turn.
+- **Current state**: The code now supports the first local/tested V1 sharing slice. Rules changes are local only until approved/deployed, and no production Firestore data was reset or deleted.
+- **Next recommended step**: Review and approve the Firestore rules change for deploy, then smoke-test with Laura's account: Laura signs in once, Kwame adds her by email, Laura selects the shared calendar, and an edit saves to the shared calendar.
+- **Open questions**:
+  - Should calendar create/leave/delete lifecycle stay after the Laura smoke test, or come before broader manual testing?

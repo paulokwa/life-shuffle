@@ -24,6 +24,20 @@ service cloud.firestore {
       return isSignedIn() && calendarId == request.auth.uid + '_default';
     }
 
+    function keepsCalendarIdentity(data) {
+      return request.resource.data.ownerUserId == data.ownerUserId &&
+        request.resource.data.calendarId == data.calendarId;
+    }
+
+    function keepsMembersOrIsOwner(data) {
+      return isOwner(data) ||
+        request.resource.data.memberUserIds == data.memberUserIds;
+    }
+
+    function isOwnProfile(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     match /calendars/{calendarId} {
       // MVP owner/member access only. This is not final invite or role logic.
       allow read: if isOwner(resource.data) ||
@@ -37,8 +51,17 @@ service cloud.firestore {
         request.resource.data.memberUserIds.hasAny([request.auth.uid]);
 
       allow update: if (isOwner(resource.data) || isMember(resource.data)) &&
-        request.resource.data.ownerUserId == resource.data.ownerUserId &&
-        request.resource.data.calendarId == resource.data.calendarId;
+        keepsCalendarIdentity(resource.data) &&
+        keepsMembersOrIsOwner(resource.data);
+    }
+
+    match /userProfiles/{userId} {
+      // Minimal private-app lookup profile. Do not store secrets or broad
+      // public profile data here.
+      allow read: if isSignedIn();
+
+      allow create, update: if isOwnProfile(userId) &&
+        request.resource.data.uid == userId;
     }
   }
 }

@@ -21,6 +21,7 @@ class SettingsScreen extends StatelessWidget {
     final displayName = state.displayName?.trim();
     final googleDisplayName = user?.displayName?.trim();
     final email = user?.email?.trim();
+    final currentUserId = user?.uid ?? state.userId;
     final accountName = displayName?.isNotEmpty == true
         ? displayName!
         : googleDisplayName?.isNotEmpty == true
@@ -31,10 +32,11 @@ class SettingsScreen extends StatelessWidget {
     final profileInitial = _profileInitial(accountName, email);
     final ownerLabel = state.calendarOwnerUserId == null
         ? 'Local only'
-        : state.calendarOwnerUserId == user?.uid
+        : state.calendarOwnerUserId == currentUserId
             ? 'You'
             : _shortId(state.calendarOwnerUserId!);
-    final memberLabel = _memberLabel(state.calendarMemberUserIds, user?.uid);
+    final memberLabel =
+        _memberLabel(state.calendarMemberUserIds, currentUserId);
 
     return SafeArea(
       child: Column(
@@ -148,6 +150,19 @@ class SettingsScreen extends StatelessWidget {
                           state,
                         ),
                       ),
+                      if (state.hasMultipleAccessibleCalendars)
+                        _SettingsRow(
+                          key: const ValueKey('settings-switch-calendar-row'),
+                          icon: Icons.swap_horiz_rounded,
+                          label: 'Switch calendar',
+                          value:
+                              '${state.accessibleCalendars.length} available',
+                          hasChevron: true,
+                          onTap: () => _showCalendarSwitcherDialog(
+                            context,
+                            state,
+                          ),
+                        ),
                       _SettingsRow(
                         icon: Icons.person_outline_rounded,
                         label: 'Owner',
@@ -160,13 +175,27 @@ class SettingsScreen extends StatelessWidget {
                         value: memberLabel,
                         hasChevron: false,
                       ),
+                      if (state.canAddCalendarMembers)
+                        _SettingsRow(
+                          key: const ValueKey('settings-add-member-row'),
+                          icon: Icons.person_add_alt_1_rounded,
+                          label: 'Add member',
+                          value: '',
+                          hasChevron: true,
+                          onTap: () => _showAddMemberDialog(
+                            context,
+                            state,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   LsCard(
                     color: warmBeige,
                     child: Text(
-                      'Sharing with Laura is coming later. For now this is your default calendar foundation.',
+                      state.canAddCalendarMembers
+                          ? 'Members can view and edit this calendar. Add Laura after she has signed in once.'
+                          : 'Members can view and edit calendars they have access to.',
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         height: 1.35,
@@ -386,6 +415,30 @@ Future<void> _showRenameCalendarDialog(
       ),
     );
 
+Future<void> _showAddMemberDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _AddMemberDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
+Future<void> _showCalendarSwitcherDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _CalendarSwitcherDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
 class _RenameCalendarDialog extends StatefulWidget {
   const _RenameCalendarDialog({
     required this.state,
@@ -459,6 +512,133 @@ class _RenameCalendarDialogState extends State<_RenameCalendarDialog> {
           child: const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+class _AddMemberDialog extends StatefulWidget {
+  const _AddMemberDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  State<_AddMemberDialog> createState() => _AddMemberDialogState();
+}
+
+class _AddMemberDialogState extends State<_AddMemberDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+    final result = await widget.state.addMemberByEmail(_controller.text);
+    if (!mounted) return;
+    if (result.succeeded) {
+      widget.onClose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Member added')),
+      );
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _errorText = result.status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add member'),
+      content: TextField(
+        key: const ValueKey('add-member-email-field'),
+        controller: _controller,
+        autofocus: true,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'Email address',
+          errorText: _errorText,
+        ),
+        onChanged: (_) {
+          if (_errorText == null) return;
+          setState(() {
+            _errorText = null;
+          });
+        },
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : widget.onClose,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('add-member-save'),
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Adding...' : 'Add'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CalendarSwitcherDialog extends StatelessWidget {
+  const _CalendarSwitcherDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final calendars = state.accessibleCalendars;
+    return AlertDialog(
+      title: const Text('Switch calendar'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: calendars
+            .map(
+              (calendar) => ListTile(
+                key:
+                    ValueKey('settings-calendar-option-${calendar.calendarId}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(calendar.title),
+                subtitle: Text('${calendar.memberUserIds.length} members'),
+                trailing: calendar.calendarId == state.calendarId
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () {
+                  state.selectCalendar(calendar.calendarId);
+                  onClose();
+                },
+              ),
+            )
+            .toList(),
+      ),
     );
   }
 }

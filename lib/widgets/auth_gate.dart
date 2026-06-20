@@ -38,7 +38,11 @@ class _AuthGateState extends State<AuthGate> {
     widget.appState.addListener(_handleAppStateChanged);
     if (AuthService.isReady) {
       _authSubscription = _authStateChanges!.listen((user) {
-        widget.appState.setUserId(user?.uid);
+        widget.appState.setUserId(
+          user?.uid,
+          email: user?.email,
+          displayName: user?.displayName,
+        );
       });
     }
   }

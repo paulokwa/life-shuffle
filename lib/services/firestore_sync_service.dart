@@ -29,6 +29,12 @@ class FirestoreSyncService {
     return _db.collection('calendars').doc(defaultCalendarId(userId));
   }
 
+  static DocumentReference<Map<String, dynamic>> _getCalendarDoc(
+    String calendarId,
+  ) {
+    return _db.collection('calendars').doc(calendarId);
+  }
+
   static DocumentReference<Map<String, dynamic>> _getLegacyCalendarDoc(
     String userId,
   ) {
@@ -41,11 +47,17 @@ class FirestoreSyncService {
 
   static Future<FirestoreSyncResult> saveState(
     String userId,
-    SavedState state,
-  ) async {
+    SavedState state, {
+    String? calendarId,
+  }) async {
     try {
-      final calendarDoc = _getDefaultCalendarDoc(userId);
+      final targetCalendarId =
+          _normalizeCalendarId(calendarId) ?? defaultCalendarId(userId);
+      final calendarDoc = _getCalendarDoc(targetCalendarId);
       final existing = await calendarDoc.get();
+      if (!existing.exists && targetCalendarId != defaultCalendarId(userId)) {
+        return FirestoreSyncResult.failure('Selected calendar unavailable');
+      }
       final now = state.updatedAtMillis == 0
           ? DateTime.now().millisecondsSinceEpoch
           : state.updatedAtMillis;
@@ -63,7 +75,6 @@ class FirestoreSyncService {
       if (existing.exists) {
         data['title'] = calendarTitle;
         data['name'] = calendarTitle;
-        data['memberUserIds'] = FieldValue.arrayUnion([userId]);
       } else {
         data.addAll({
           'title': calendarTitle,
@@ -96,6 +107,44 @@ class FirestoreSyncService {
     return calendar?.state;
   }
 
+  static Future<List<FirestoreCalendar>> loadAccessibleCalendars(
+    String userId,
+  ) async {
+    try {
+      final snapshot = await _db
+          .collection('calendars')
+          .where('memberUserIds', arrayContains: userId)
+          .get();
+      final calendars = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return FirestoreCalendar(
+          state: SavedState.fromMap(
+            data,
+            fallbackActivities: PlannerService.defaultActivities,
+          ),
+          metadata: CalendarMetadata.fromMap(
+            data,
+            fallback: defaultMetadata(userId),
+          ),
+        );
+      }).toList()
+        ..sort((a, b) {
+          final defaultId = defaultCalendarId(userId);
+          if (a.metadata.calendarId == defaultId) return -1;
+          if (b.metadata.calendarId == defaultId) return 1;
+          return a.metadata.title
+              .toLowerCase()
+              .compareTo(b.metadata.title.toLowerCase());
+        });
+      return calendars;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore loadAccessibleCalendars failed: $e');
+      }
+      return const [];
+    }
+  }
+
   static Future<FirestoreCalendar?> loadDefaultCalendar(String userId) async {
     try {
       var doc = await _getDefaultCalendarDoc(userId).get();
@@ -121,6 +170,107 @@ class FirestoreSyncService {
       }
       return null;
     }
+  }
+
+  static Future<FirestoreSyncResult> upsertUserProfile({
+    required String userId,
+    String? email,
+    String? displayName,
+  }) async {
+    try {
+      final emailLower = _normalizeEmail(email);
+      final trimmedDisplayName = displayName?.trim();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await _db.collection('userProfiles').doc(userId).set(
+        <String, dynamic>{
+          'uid': userId,
+          if (emailLower != null) 'emailLower': emailLower,
+          if (trimmedDisplayName != null && trimmedDisplayName.isNotEmpty)
+            'displayName': trimmedDisplayName,
+          'updatedAtMillis': now,
+        },
+        SetOptions(merge: true),
+      );
+      return FirestoreSyncResult.success();
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore upsertUserProfile failed: ${e.code}');
+      }
+      return FirestoreSyncResult.failure(_safeErrorMessage(e));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore upsertUserProfile failed: $e');
+      }
+      return FirestoreSyncResult.failure('Unknown sync error');
+    }
+  }
+
+  static Future<UserProfile?> findUserProfileByEmail(String email) async {
+    final emailLower = _normalizeEmail(email);
+    if (emailLower == null) return null;
+    try {
+      final snapshot = await _db
+          .collection('userProfiles')
+          .where('emailLower', isEqualTo: emailLower)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      final profile = UserProfile.fromMap(snapshot.docs.first.data());
+      return profile.uid.isEmpty ? null : profile;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore findUserProfileByEmail failed: $e');
+      }
+      return null;
+    }
+  }
+
+  static Future<AddCalendarMemberResult> addMemberByEmail({
+    required String calendarId,
+    required String email,
+  }) async {
+    final normalizedEmail = _normalizeEmail(email);
+    if (normalizedEmail == null) {
+      return AddCalendarMemberResult.failure('Enter an email address.');
+    }
+
+    final profile = await findUserProfileByEmail(normalizedEmail);
+    if (profile == null) {
+      return AddCalendarMemberResult.notFound(
+        'Laura needs to sign in once before she can be added.',
+      );
+    }
+
+    try {
+      await _getCalendarDoc(calendarId).update({
+        'memberUserIds': FieldValue.arrayUnion([profile.uid]),
+        'updatedAtMillis': DateTime.now().millisecondsSinceEpoch,
+      });
+      return AddCalendarMemberResult.success(profile);
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore addMemberByEmail failed: ${e.code}');
+      }
+      return AddCalendarMemberResult.failure(_safeErrorMessage(e));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore addMemberByEmail failed: $e');
+      }
+      return AddCalendarMemberResult.failure('Unknown sync error');
+    }
+  }
+
+  static String? _normalizeCalendarId(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String? _normalizeEmail(String? value) {
+    final trimmed = value?.trim().toLowerCase();
+    if (trimmed == null || trimmed.isEmpty || !trimmed.contains('@')) {
+      return null;
+    }
+    return trimmed;
   }
 }
 
@@ -151,6 +301,40 @@ class FirestoreSyncResult {
   final String? errorMessage;
 }
 
+class AddCalendarMemberResult {
+  const AddCalendarMemberResult._({
+    required this.succeeded,
+    required this.status,
+    this.profile,
+  });
+
+  factory AddCalendarMemberResult.success(UserProfile profile) {
+    return AddCalendarMemberResult._(
+      succeeded: true,
+      status: 'Member added',
+      profile: profile,
+    );
+  }
+
+  factory AddCalendarMemberResult.notFound(String safeMessage) {
+    return AddCalendarMemberResult._(
+      succeeded: false,
+      status: safeMessage,
+    );
+  }
+
+  factory AddCalendarMemberResult.failure(String safeMessage) {
+    return AddCalendarMemberResult._(
+      succeeded: false,
+      status: safeMessage,
+    );
+  }
+
+  final bool succeeded;
+  final String status;
+  final UserProfile? profile;
+}
+
 String _safeErrorMessage(FirebaseException error) {
   switch (error.code) {
     case 'permission-denied':
@@ -172,6 +356,26 @@ class FirestoreCalendar {
 
   final SavedState state;
   final CalendarMetadata metadata;
+}
+
+class UserProfile {
+  const UserProfile({
+    required this.uid,
+    required this.emailLower,
+    this.displayName,
+  });
+
+  final String uid;
+  final String emailLower;
+  final String? displayName;
+
+  factory UserProfile.fromMap(Map<String, dynamic> map) {
+    return UserProfile(
+      uid: CalendarMetadata._readString(map['uid'], ''),
+      emailLower: CalendarMetadata._readString(map['emailLower'], ''),
+      displayName: CalendarMetadata._readNullableString(map['displayName']),
+    );
+  }
 }
 
 class CalendarMetadata {
@@ -200,6 +404,34 @@ class CalendarMetadata {
   final int? feedCreatedAtMillis;
   final int? feedUpdatedAtMillis;
   final int? feedRevokedAtMillis;
+
+  CalendarMetadata copyWith({
+    String? calendarId,
+    String? title,
+    String? ownerUserId,
+    List<String>? memberUserIds,
+    int? createdAtMillis,
+    int? updatedAtMillis,
+    bool? feedEnabled,
+    String? feedToken,
+    int? feedCreatedAtMillis,
+    int? feedUpdatedAtMillis,
+    int? feedRevokedAtMillis,
+  }) {
+    return CalendarMetadata(
+      calendarId: calendarId ?? this.calendarId,
+      title: title ?? this.title,
+      ownerUserId: ownerUserId ?? this.ownerUserId,
+      memberUserIds: memberUserIds ?? this.memberUserIds,
+      createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+      updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
+      feedEnabled: feedEnabled ?? this.feedEnabled,
+      feedToken: feedToken ?? this.feedToken,
+      feedCreatedAtMillis: feedCreatedAtMillis ?? this.feedCreatedAtMillis,
+      feedUpdatedAtMillis: feedUpdatedAtMillis ?? this.feedUpdatedAtMillis,
+      feedRevokedAtMillis: feedRevokedAtMillis ?? this.feedRevokedAtMillis,
+    );
+  }
 
   factory CalendarMetadata.fromMap(
     Map<String, dynamic> map, {

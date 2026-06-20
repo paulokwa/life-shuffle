@@ -24,13 +24,21 @@ class LifeShuffleHeader extends StatelessWidget {
     final resolvedProfileInitial = _nonEmpty(profileInitial) ??
         _initialFrom(_nonEmpty(state?.displayName)) ??
         'K';
+    final calendars = state?.accessibleCalendars ?? const <CalendarMetadata>[];
+    final canSwitch = state != null && calendars.length > 1;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _CalendarPill(calendarName: resolvedCalendarName),
+          _CalendarPill(
+            calendarName: resolvedCalendarName,
+            canSwitch: canSwitch,
+            onTap: canSwitch
+                ? () => _showCalendarSwitcher(context, state, calendars)
+                : null,
+          ),
           _ProfileCircle(initial: resolvedProfileInitial),
         ],
       ),
@@ -47,39 +55,85 @@ class LifeShuffleHeader extends StatelessWidget {
     if (value == null || value.isEmpty) return null;
     return value.characters.first.toUpperCase();
   }
+
+  static void _showCalendarSwitcher(
+    BuildContext context,
+    AppState state,
+    List<CalendarMetadata> calendars,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Switch calendar'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: calendars
+              .map(
+                (calendar) => ListTile(
+                  key:
+                      ValueKey('header-calendar-option-${calendar.calendarId}'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(calendar.title),
+                  subtitle: Text('${calendar.memberUserIds.length} members'),
+                  trailing: calendar.calendarId == state.calendarId
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () {
+                    state.selectCalendar(calendar.calendarId);
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
 }
 
 class _CalendarPill extends StatelessWidget {
-  const _CalendarPill({required this.calendarName});
+  const _CalendarPill({
+    required this.calendarName,
+    required this.canSwitch,
+    this.onTap,
+  });
 
   final String calendarName;
+  final bool canSwitch;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: warmBeige,
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            calendarName,
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: textPrimary,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: warmBeige,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              calendarName,
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(width: 4),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            size: 16,
-            color: textMuted,
-          ),
-        ],
+            if (canSwitch) ...[
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: textMuted,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

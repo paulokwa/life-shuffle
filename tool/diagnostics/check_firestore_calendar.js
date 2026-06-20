@@ -49,19 +49,18 @@ function readMemberCount(data) {
   return Array.isArray(data.memberUserIds) ? data.memberUserIds.length : 0;
 }
 
-function previewToken(token) {
-  if (typeof token !== 'string' || token.length === 0) return 'no';
-  if (token.length <= 10) return 'yes (short token hidden)';
-  return `yes (${token.slice(0, 6)}...${token.slice(-4)})`;
-}
-
 function hasString(value) {
   return typeof value === 'string' && value.length > 0;
+}
+
+function hasMember(data, userId) {
+  return Array.isArray(data.memberUserIds) && data.memberUserIds.includes(userId);
 }
 
 async function main() {
   const db = initializeFirestore();
   const snapshot = await db.collection('calendars').get();
+  const inspectedUserId = process.env.INSPECT_USER_ID || '';
 
   if (snapshot.empty) {
     console.log('No calendars found. The web app has not successfully written to Firestore yet.');
@@ -69,6 +68,9 @@ async function main() {
   }
 
   console.log(`Calendars found: ${snapshot.size}`);
+  if (inspectedUserId) {
+    console.log('Inspected account: provided');
+  }
   for (const doc of snapshot.docs) {
     const data = doc.data() || {};
     console.log('---');
@@ -81,8 +83,12 @@ async function main() {
     console.log(`introOnboardingCompleted: ${data.introOnboardingCompleted === true ? 'true' : 'false'}`);
     console.log(`ownerUserId present: ${hasString(data.ownerUserId) ? 'yes' : 'no'}`);
     console.log(`member count: ${readMemberCount(data)}`);
+    if (inspectedUserId) {
+      console.log(`inspected account is owner: ${data.ownerUserId === inspectedUserId ? 'yes' : 'no'}`);
+      console.log(`inspected account is member: ${hasMember(data, inspectedUserId) ? 'yes' : 'no'}`);
+    }
     console.log(`feedEnabled: ${data.feedEnabled === true ? 'true' : 'false'}`);
-    console.log(`hasFeedToken: ${previewToken(data.feedToken)}`);
+    console.log(`hasFeedToken: ${hasString(data.feedToken) ? 'yes' : 'no'}`);
     console.log(`hasCachedIcsText: ${hasString(data.cachedIcsText) ? 'yes' : 'no'}`);
     console.log(`cachedIcsUpdatedAtMillis: ${data.cachedIcsUpdatedAtMillis || '(missing)'}`);
     console.log(`updatedAtMillis: ${data.updatedAtMillis || '(missing)'}`);
