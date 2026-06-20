@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
@@ -153,11 +155,22 @@ class PlanScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Row(
+                  Row(
                     children: [
-                      Expanded(child: _OutlineButton(label: 'Export')),
-                      SizedBox(width: 10),
-                      Expanded(child: _OutlineButton(label: 'Publish feed')),
+                      Expanded(
+                        child: _OutlineButton(
+                          key: const ValueKey('plan-export-button'),
+                          label: 'Export',
+                          onTap: () => _copyWeekPlanText(context, state),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: _OutlineButton(
+                          key: ValueKey('plan-publish-feed-button'),
+                          label: 'Publish feed',
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -165,6 +178,41 @@ class PlanScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  static Future<void> _copyWeekPlanText(
+    BuildContext context,
+    AppState state,
+  ) async {
+    final hasPlannedActivities =
+        state.weekPlan.any((day) => day.activities.isNotEmpty);
+    final text = TextWeekExportService.generate(
+      calendarTitle: state.calendarTitle,
+      plan: state.weekPlan,
+    );
+
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not copy the week plan. Try again.'),
+        ),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          hasPlannedActivities
+              ? 'Week plan copied'
+              : 'No planned activities this week. Empty week copied.',
+        ),
       ),
     );
   }
@@ -821,25 +869,30 @@ class _PlanRow extends StatelessWidget {
 }
 
 class _OutlineButton extends StatelessWidget {
-  const _OutlineButton({required this.label});
+  const _OutlineButton({super.key, required this.label, this.onTap});
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: borderWarmStrong),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: GoogleFonts.dmSans(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: textMuted,
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 42,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: borderWarmStrong),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: onTap == null ? textMuted : primaryTerracotta,
+          ),
         ),
       ),
     );

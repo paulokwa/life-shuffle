@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
@@ -1881,6 +1882,53 @@ void main() {
     expect(find.text('Unchecked'), findsOneWidget);
   });
 
+  testWidgets('Plan Export copies current week text',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmCalendarTitle('Weekend ideas');
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(find.text('Week plan copied'), findsOneWidget);
+    expect(copiedText, isNotNull);
+    expect(copiedText, contains('Weekend ideas week'));
+    expect(copiedText, contains('Category:'));
+    expect(copiedText, contains('Check-in:'));
+    expect(copiedText, contains('Locked:'));
+  });
+
+  testWidgets('Plan Export handles an empty week', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final appState = AppState(activities: const []);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(
+      find.text('No planned activities this week. Empty week copied.'),
+      findsOneWidget,
+    );
+    expect(copiedText, contains('No planned activities this week.'));
+  });
+
   testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -2532,6 +2580,25 @@ Future<void> _pumpPlanScreen(WidgetTester tester, AppState appState) async {
         ),
       ),
     ),
+  );
+}
+
+void _captureClipboardText(ValueChanged<String?> onCopied) {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (
+    MethodCall methodCall,
+  ) async {
+    if (methodCall.method == 'Clipboard.setData') {
+      final arguments = methodCall.arguments;
+      if (arguments is Map) {
+        onCopied(arguments['text'] as String?);
+      }
+    }
+    return null;
+  });
+  addTearDown(
+    () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
   );
 }
 
