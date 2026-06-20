@@ -39,4 +39,4 @@ npm install
 npm test
 ```
 
-`npm test` runs `netlify/functions/calendar-feed.test.js` with Node's built-in test runner — no credentials needed, since it only exercises the pure decision logic and the no-credentials/wrong-method/missing-token error paths. Testing against a real calendar requires `netlify dev` plus a real `FIREBASE_SERVICE_ACCOUNT_JSON` — see `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8.
+`npm test` runs `netlify/tests/calendar-feed.test.js` with Node's built-in test runner — no credentials needed, since it only exercises the pure decision logic and the no-credentials/wrong-method/missing-token error paths. Tests intentionally live outside `netlify/functions` so Netlify does not deploy them as serverless functions. Testing against a real calendar requires `netlify dev` plus a real `FIREBASE_SERVICE_ACCOUNT_JSON` — see `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8.

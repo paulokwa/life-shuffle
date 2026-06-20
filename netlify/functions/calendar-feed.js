@@ -9,7 +9,7 @@
 //
 // I/O (Firestore access) lives only in `findCalendarByFeedToken` and
 // `handler`. Every other exported function below is pure and can be
-// unit-tested without Firebase credentials - see calendar-feed.test.js.
+// unit-tested without Firebase credentials - see netlify/tests/calendar-feed.test.js.
 
 // firebase-admin v14 dropped the old namespaced `admin.firestore()` /
 // `admin.credential.cert()` / `admin.apps` API in favor of these modular

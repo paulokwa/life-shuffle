@@ -180,3 +180,19 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Don't re-attempt fixing this without checking whether flutter/flutter#184233 has been closed upstream first. If revisiting, the next untested step would be a vanilla (non-puro) Flutter SDK install to a clean path, to confirm whether puro's installation method (not just its symlinks) is implicated at all, or whether this reproduces on any Windows Flutter install.
 
 ---
+
+## 2026-06-20 - Netlify tried to deploy a function test file
+
+- **Context**: Production Netlify deploy after adding the public ICS feed function.
+- **Symptoms**: Flutter web build succeeded, functions bundling succeeded, secrets scan passed, but deploy failed with: `The following serverless functions failed to deploy: calendar-feed.test`. Netlify said function names can contain only alphanumeric characters, hyphens, or underscores.
+- **Cause**: `calendar-feed.test.js` lived under `netlify/functions`. Netlify treats every `.js` file in the configured functions directory as a deployable function, so it attempted to deploy the test file as a function named `calendar-feed.test`, and the dot made that function name invalid.
+- **Fix**: Move function tests out of the deployable directory to `netlify/tests/calendar-feed.test.js`, update `npm test` to run `node --test "netlify/tests/**/*.test.js"`, and keep `netlify/functions` for real serverless functions only.
+- **Files affected**:
+  - `package.json`
+  - `netlify/functions/calendar-feed.js`
+  - `netlify/tests/calendar-feed.test.js`
+  - `README.md`
+  - `docs/ICS_FEED_ENDPOINT_PLAN.md`
+- **Prevention / future note**: Do not place `.test.js`, fixtures, helpers, or non-function scripts directly under `netlify/functions`. Put tests under `netlify/tests` or another non-deploy directory and import the function module from there.
+
+---

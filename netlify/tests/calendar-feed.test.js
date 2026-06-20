@@ -13,7 +13,7 @@ const {
   extractToken,
   isFeedEnabled,
   buildFeedResponse,
-} = require('./calendar-feed');
+} = require('../functions/calendar-feed');
 
 test('extractToken reads and trims the token query param', () => {
   assert.equal(extractToken({ token: ' abc123 ' }), 'abc123');

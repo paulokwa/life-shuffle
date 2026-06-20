@@ -104,7 +104,7 @@ Error bodies are plain JSON for easy debugging; calendar clients fetching a work
 
 ## 8. Local testing steps
 
-**Automated (done, run anytime, no credentials needed):** `npm test` (`node --test "netlify/functions/**/*.test.js"`) runs `netlify/functions/calendar-feed.test.js` against the pure helper functions (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) and the parts of `handler` that don't need live Firestore access (missing token, wrong method, missing credentials). This is fast unit coverage, not a substitute for the steps below against a real calendar.
+**Automated (done, run anytime, no credentials needed):** `npm test` (`node --test "netlify/tests/**/*.test.js"`) runs `netlify/tests/calendar-feed.test.js` against the pure helper functions (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) and the parts of `handler` that don't need live Firestore access (missing token, wrong method, missing credentials). This is fast unit coverage, not a substitute for the steps below against a real calendar. Tests intentionally live outside `netlify/functions` so Netlify does not package them as deployable serverless functions.
 
 **Manual, against a real calendar (still pending — needs a real Firebase service-account key, which this implementation session didn't have access to):**
 
@@ -135,7 +135,7 @@ No changes needed to the existing `[build]` command in `netlify.toml`. Netlify's
 3. [x] `cachedIcsText`/`cachedIcsUpdatedAtMillis` flow into Firestore automatically because `FirestoreSyncService.saveState()` already spreads `SavedState.toMap()` — no changes to `firestore_sync_service.dart` were needed (the original step 3 here, written before that prior session ran, turned out to be unnecessary).
 4. [x] `_refreshCachedIcs()` clears `cachedIcsText`/`cachedIcsUpdatedAtMillis` to `null` whenever `feedEnabled` is false, so disabling always clears the cache (stronger than the "optional hygiene" originally sketched here).
 5. [x] Added root-level `package.json` with `firebase-admin` as a dependency (`npm install` run; `package-lock.json` committed).
-6. [x] Created `netlify/functions/calendar-feed.js` — GET-only, token lookup via `findCalendarByFeedToken`, status/error behavior from §6/§7, headers from §5. Pure decision logic (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) is split out and covered by `netlify/functions/calendar-feed.test.js` (Node's built-in test runner, `npm test`).
+6. [x] Created `netlify/functions/calendar-feed.js` — GET-only, token lookup via `findCalendarByFeedToken`, status/error behavior from §6/§7, headers from §5. Pure decision logic (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) is split out and covered by `netlify/tests/calendar-feed.test.js` (Node's built-in test runner, `npm test`).
 7. [x] `netlify.toml` now has `[functions]\n  directory = "netlify/functions"`.
 8. [ ] **Still pending** — add `FIREBASE_SERVICE_ACCOUNT_JSON` to the Netlify dashboard env vars. This requires dashboard access this implementation session didn't have.
 9. [ ] **Still pending** — the real-calendar manual testing steps in §8 (everything past the automated `npm test` run), including at least one real calendar-app subscription test. Needs a live service-account key and a deployed/tunneled URL.
