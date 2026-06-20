@@ -75,6 +75,9 @@ async function main() {
     console.log(`documentId: ${doc.id}`);
     console.log(`calendarId: ${typeof data.calendarId === 'string' ? data.calendarId : '(missing)'}`);
     console.log(`title/name: ${readTitle(data)}`);
+    console.log(`displayNameConfirmed: ${data.displayNameConfirmed === true ? 'true' : 'false'}`);
+    console.log(`hasDisplayName: ${hasString(data.displayName) ? 'yes' : 'no'}`);
+    console.log(`calendarNameConfirmed: ${data.calendarNameConfirmed === true ? 'true' : 'false'}`);
     console.log(`ownerUserId present: ${hasString(data.ownerUserId) ? 'yes' : 'no'}`);
     console.log(`member count: ${readMemberCount(data)}`);
     console.log(`feedEnabled: ${data.feedEnabled === true ? 'true' : 'false'}`);

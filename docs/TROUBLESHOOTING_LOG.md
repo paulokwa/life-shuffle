@@ -216,3 +216,18 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Follow-up**: Refresh the deployed app, make a fresh signed-in state change, then rerun the Firestore calendar diagnostic. If it still reports permission denied, add a temporary local rules unit test or emulator repro for the exact initial calendar payload and first `get()` call.
 
 ---
+
+## 2026-06-20 - Onboarding screens could route before initial Firestore sync
+
+- **Context**: After browser/client data was cleared but Firestore data remained, signing back in showed the display-name prompt and mini onboarding, while the calendar-name prompt was skipped.
+- **Symptoms**: Firestore diagnostic showed the remote calendar already had `displayNameConfirmed: true`, a display name present, and `calendarNameConfirmed: true`, so both name prompts should have been skipped after remote state loaded.
+- **Cause**: `AuthGate` made onboarding routing decisions immediately from local/default `AppState` before `syncWithFirestore()` completed. It also did not listen to `AppState` changes, so remote sync could update `displayNameConfirmed` and `calendarNameConfirmed` without rebuilding the route until another UI action happened.
+- **Fix**: Added signed-in initial-sync flags to `AppState`, made `AuthGate` show the existing splash state while the first remote sync is pending, and registered `AuthGate` as an `AppState` listener so remote state changes rebuild the routing decision.
+- **Files affected**:
+  - `lib/state/app_state.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `test/widget_test.dart`
+  - `tool/diagnostics/check_firestore_calendar.js`
+- **Prevention / future note**: Any future signed-in routing gate should wait for initial remote restore before deciding setup/onboarding steps. Local-only mode should continue without waiting because it has no signed-in user ID.
+
+---

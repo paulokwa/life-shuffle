@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
@@ -8,6 +10,7 @@ import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
+import 'package:life_shuffle/screens/onboarding_screen.dart';
 import 'package:life_shuffle/screens/plan_screen.dart';
 import 'package:life_shuffle/screens/progress_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
@@ -17,6 +20,7 @@ import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
 import 'package:life_shuffle/theme/app_colors.dart';
+import 'package:life_shuffle/widgets/auth_gate.dart';
 import 'package:life_shuffle/widgets/life_shuffle_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -135,6 +139,183 @@ void main() {
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.calendarTitle, 'Weekend ideas');
     expect(saved.calendarNameConfirmed, isTrue);
+  });
+
+  testWidgets(
+      'Fresh user flow asks display name, calendar name, then onboarding',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    expect(find.byType(DisplayNameScreen), findsOneWidget);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'Kwame');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+  });
+
+  testWidgets('Returning remote user skips both name screens',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final remoteLoad = Completer<FirestoreCalendar?>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) => remoteLoad.future,
+      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('returning_user');
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+
+    remoteLoad.complete(
+      _remoteCalendar(
+        userId: 'returning_user',
+        displayNameConfirmed: true,
+        calendarNameConfirmed: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'Partial remote state with only calendar confirmed asks display name only',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final remoteLoad = Completer<FirestoreCalendar?>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) => remoteLoad.future,
+      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('partial_display_user');
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    remoteLoad.complete(
+      _remoteCalendar(
+        userId: 'partial_display_user',
+        displayNameConfirmed: false,
+        calendarNameConfirmed: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DisplayNameScreen), findsOneWidget);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'Kwame');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'Partial remote state with only display confirmed asks calendar name only',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final remoteLoad = Completer<FirestoreCalendar?>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) => remoteLoad.future,
+      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('partial_calendar_user');
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    remoteLoad.complete(
+      _remoteCalendar(
+        userId: 'partial_calendar_user',
+        displayNameConfirmed: true,
+        calendarNameConfirmed: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+  });
+
+  testWidgets('Delayed remote sync updates AuthGate routing after app boot',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final remoteLoad = Completer<FirestoreCalendar?>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) => remoteLoad.future,
+      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('delayed_sync_user');
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+    await tester.pump();
+
+    expect(appState.isSyncingInitialState, isTrue);
+    expect(appState.isInitialSyncComplete, isFalse);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(DisplayNameScreen), findsNothing);
+
+    remoteLoad.complete(
+      _remoteCalendar(
+        userId: 'delayed_sync_user',
+        displayNameConfirmed: true,
+        calendarNameConfirmed: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(appState.isSyncingInitialState, isFalse);
+    expect(appState.isInitialSyncComplete, isTrue);
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
   });
 
   testWidgets('Settings displays confirmed display name',
@@ -1979,6 +2160,37 @@ void main() {
       summary: expected30,
     );
   });
+}
+
+FirestoreCalendar _remoteCalendar({
+  required String userId,
+  required bool displayNameConfirmed,
+  required bool calendarNameConfirmed,
+}) {
+  const updatedAtMillis = 2000;
+  const calendarTitle = 'Kwame and Laura';
+  return FirestoreCalendar(
+    state: SavedState(
+      activities: PlannerService.defaultActivities,
+      seed: 0,
+      updatedAtMillis: updatedAtMillis,
+      displayName: displayNameConfirmed ? 'Remote User' : null,
+      displayNameConfirmed: displayNameConfirmed,
+      calendarTitle: calendarTitle,
+      calendarNameConfirmed: calendarNameConfirmed,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    ),
+    metadata: CalendarMetadata(
+      calendarId: FirestoreSyncService.defaultCalendarId(userId),
+      title: calendarTitle,
+      ownerUserId: userId,
+      memberUserIds: [userId],
+      createdAtMillis: updatedAtMillis,
+      updatedAtMillis: updatedAtMillis,
+    ),
+  );
 }
 
 Future<void> _pumpPlanScreen(WidgetTester tester, AppState appState) async {

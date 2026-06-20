@@ -1,0 +1,40 @@
+# V1 Roadmap Audit
+
+Date: 2026-06-20
+
+Scope: concise audit of MVP 1 roadmap items currently marked done, checked against code and tests. This does not start new product work.
+
+## Marked-Done Items
+
+| Roadmap item | Marked done? | Evidence file/test | Mismatch or manual verification needed | Recommended next action |
+| --- | --- | --- | --- | --- |
+| Flutter project structure, mobile app shell, five-tab bottom navigation | Yes | `lib/main.dart`, `lib/widgets/bottom_nav_shell.dart`, `test/widget_test.dart` app smoke test | Wider responsive/sidebar work remains separately unchecked | Keep as done |
+| Header with selected calendar name | Yes | `lib/widgets/life_shuffle_header.dart`, `test/widget_test.dart` header calendar-name test | Roadmap wording also says "calendar switcher"; no real switcher exists yet | Split/clarify roadmap item or leave switcher tracked by the separate unchecked switcher item |
+| Keep Export, Publish, Check-in, Calendar switcher, AI out of main bottom nav | Yes | `lib/widgets/bottom_nav_shell.dart` | Manual UX check still useful on mobile viewport | Keep as done |
+| Firebase setup, Google sign-in, basic auth gate | Yes | `lib/firebase_options.dart`, `lib/services/auth_service.dart`, `lib/screens/sign_in_screen.dart`, `lib/widgets/auth_gate.dart` | Needs periodic deployed sign-in smoke test after API key/domain changes | Keep as done |
+| Short onboarding/setup flow, welcome explanation | Yes | `lib/screens/onboarding_screen.dart`, `lib/widgets/auth_gate.dart`, onboarding routing tests in `test/widget_test.dart` | Display/calendar prompts now wait for initial Firestore sync; reduced-motion work remains unchecked | Keep as done |
+| Confirm/edit display name after Google sign-in | Yes | `lib/screens/display_name_screen.dart`, `lib/state/app_state.dart`, `lib/services/persistence_service.dart`, `test/widget_test.dart` display-name and remote-sync tests | Firestore diagnostic now verifies safe booleans only | Keep as done |
+| Calendar data model with title/name and first-calendar naming prompt | Yes | `lib/screens/calendar_name_screen.dart`, `lib/state/app_state.dart`, `lib/services/firestore_sync_service.dart`, onboarding routing tests | Calendar naming is one-time per Firestore calendar; clearing browser storage should not reset it | Keep as done |
+| Structured Settings plus Account, Calendar display, Planning style, Activity defaults, Publishing, Privacy/help | Yes | `lib/screens/settings_screen.dart`, `test/widget_test.dart` Settings tests | Calendar section is display-only; switcher/members/roles/leave/delete remain unchecked | Keep as done |
+| Activity, rule, planned item, and check-in status models | Yes | `lib/models/activity.dart`, `lib/models/day_plan.dart`, `lib/models/mock_data.dart`, `test/widget_test.dart` planner/check-in tests | Current storage is still flat selected-calendar state, not multi-calendar subcollections | Keep as done for one-calendar MVP foundation |
+| Optional planning dimension settings and defaults | Yes | `lib/state/app_state.dart`, `lib/screens/settings_screen.dart`, `test/widget_test.dart` dimension tests | Planning-dimensions onboarding remains unchecked | Keep as done |
+| Starter activity library, categories, limited picker, custom activities, starter metadata/rules | Yes | `lib/services/starter_activity_library.dart`, `lib/screens/activities_screen.dart`, `test/widget_test.dart` starter/activity tests | Manual UX check recommended for starter picker on small mobile screens | Keep as done |
+| First plan style choice | Yes | `lib/services/planner_service.dart`, `lib/state/app_state.dart`, `lib/screens/settings_screen.dart` | Week start/time window/default activity count settings remain unchecked | Keep as done |
+| Activity creation/editing, category/colour/icon, enabled state, difficulty/energy/social fields | Yes | `lib/screens/activities_screen.dart`, `lib/models/activity.dart`, activity form tests | Disabled dimensions are hidden from forms/cards; planner/export handling remains tracked as incomplete | Keep as done |
+| Allowed day/time, max-per-week, no-consecutive-days, difficulty-aware planner rules | Yes | `lib/services/planner_service.dart`, planner tests in `test/widget_test.dart` | Manual testing still useful for confusing rule combinations | Keep as done |
+| 7-day agenda generator and agenda-first plan view | Yes | `lib/services/planner_service.dart`, `lib/screens/plan_screen.dart`, planner/plan tests | No full day/month/year views, which are later direction | Keep as done |
+| Today/Home screen and helpful empty states | Yes | `lib/screens/today_screen.dart`, `lib/screens/activities_screen.dart`, `lib/screens/plan_screen.dart`, `lib/screens/progress_screen.dart` | No-calendar, offline, and sync-problem empty states remain partially unfinished per roadmap note | Keep done items, leave unfinished states tracked |
+| Lock/unlock, regeneration undo, regenerate unlocked only, generation conflict messages | Yes | `lib/state/app_state.dart`, `lib/screens/plan_screen.dart`, planner/regeneration tests | Shared-edit/sync conflict messages remain unchecked | Keep as done |
+| Skippable app-open check-in prompt, quick catch-up, day sheet check-in | Yes | `lib/screens/today_screen.dart`, `lib/screens/check_in_catchup_screen.dart`, `lib/screens/plan_screen.dart`, check-in tests | One-by-one review, week review, and optional notes remain unchecked | Keep as done |
+| Basic progress/stats with 7/30 day summaries, counts, category breakdown, difficulty summary, rhythm, looking ahead | Yes | `lib/screens/progress_screen.dart`, `lib/models/progress_summary.dart`, progress tests | Manual review recommended after real user history accumulates | Keep as done |
+| Plain-language privacy/feed explanation | Yes | `lib/screens/settings_screen.dart`, privacy/help tests | Copy may need review before broader launch | Keep as done |
+| Firestore persistence for calendars, activities, generated plans, and check-ins | Yes | `lib/state/app_state.dart`, `lib/services/firestore_sync_service.dart`, `lib/services/persistence_service.dart`, Firestore diagnostic | Important nuance: current Firestore state persists activities, seed, settings, locks, and check-ins, then re-derives the generated week. It does not store a full immutable plan snapshot. | Decide later whether seed-based plan persistence is sufficient or whether generated plan snapshots are needed before sharing/export hardening |
+| Firestore security rules for shared calendar access | Yes | `firestore.rules`, `tool/diagnostics/check_firebase_rules.ps1`, session log | Needs emulator/rules tests before expanding member roles | Add rules tests when invite/member work starts |
+| Local ICS string, feed token metadata, enable/disable, revoke/regenerate, private feed URL, public endpoint behavior | Yes | `lib/services/ics_calendar_service.dart`, `lib/screens/settings_screen.dart`, `netlify/functions/calendar-feed.js`, `netlify/tests/calendar-feed.test.js`, `test/ics_calendar_service_test.dart` | Real external calendar subscription test still recommended | Do Apple/Google/Outlook subscription smoke test |
+
+## Current Onboarding Finding
+
+Firestore currently has `displayNameConfirmed: true`, a display name present, `calendarNameConfirmed: true`, and title `Kwame and Laura` for the inspected calendar. Clearing browser/client data does not reset those remote onboarding fields.
+
+Expected behavior after this fix: when signed in and Firestore data exists, the app shows a small loading state while initial remote sync completes, then skips display-name and calendar-name prompts if Firestore already confirms them.
+

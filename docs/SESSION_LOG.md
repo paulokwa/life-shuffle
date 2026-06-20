@@ -964,3 +964,34 @@ Use it when a session ends or when enough context has changed that the next assi
   - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_ics_feed.ps1 -FeedUrl <redacted>` - passed; HTTP 200, calendar content type, `BEGIN:VCALENDAR`, and `END:VCALENDAR`.
 - **Current state**: Firestore sync is working in production, the deployed public ICS feed endpoint serves a valid cached calendar response, and the repo records the diagnostics and rules changes needed to reproduce the fix.
 - **Next recommended step**: Subscribe to the deployed feed URL in Apple Calendar, Google Calendar, or Outlook to confirm external calendar-app import behavior.
+
+---
+
+## 2026-06-20 - Onboarding persistence audit and V1 roadmap audit
+
+- **Goal**: Audit display-name and first-calendar-name onboarding after browser/client data is cleared while Firestore data remains, then check marked-done V1 roadmap items against actual app behavior.
+- **Summary**: Confirmed the inspected Firestore calendar has `displayNameConfirmed: true`, a display name present, `calendarNameConfirmed: true`, and title `Kwame and Laura`. Clearing browser storage should therefore skip both name prompts for that signed-in user after remote state loads; calendar naming is one-time per Firestore calendar, not per browser. Found and fixed a real routing race: `AuthGate` could decide setup screens from local/default state before `syncWithFirestore()` finished, and it was not listening to later `AppState` changes. Added signed-in initial-sync flags to `AppState`, made `AuthGate` show the existing splash state while initial remote sync is pending, and made `AuthGate` rebuild when `AppState` changes. Extended the Firestore calendar diagnostic with safe onboarding booleans/title output. Added `docs/V1_AUDIT.md` with evidence and mismatches for marked-done roadmap items.
+- **Files changed**:
+  - `lib/state/app_state.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `test/widget_test.dart`
+  - `tool/diagnostics/check_firestore_calendar.js`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Decisions made**:
+  - Signed-in initial onboarding routing must wait for the first Firestore restore attempt.
+  - Local-only mode should keep working without waiting because there is no signed-in user ID.
+  - Diagnostics may show safe booleans and calendar title, but not raw display names, feed tokens, cached ICS text, service account JSON, or private keys.
+- **Tests run**:
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed; found one calendar with both onboarding confirmations true and safe display-name presence.
+  - `dart format lib/state/app_state.dart lib/widgets/auth_gate.dart test/widget_test.dart`
+  - Focused onboarding routing tests in `test/widget_test.dart` - passed.
+  - `flutter test` - passed, 75/75 tests.
+  - `npm test` - passed, 12/12 Netlify function tests.
+  - `flutter analyze --no-fatal-infos` - completed with the existing 23 info-level lints.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+- **Current state**: Returning signed-in users with remote onboarding state should now see a small loading state until initial Firestore sync completes, then route to the correct setup/onboarding step. For the inspected production calendar, both name prompts should be skipped.
+- **Next recommended step**: Deploy and manually verify the cleared-browser sign-in flow once: after sign-in, expect splash while syncing, then mini onboarding or the main app depending on session onboarding state, with no display-name or calendar-name prompt for the existing Firestore calendar.
+- **Open questions**:
+  - Should the mini onboarding completion itself eventually persist remotely, or stay per-session/local as it is today?

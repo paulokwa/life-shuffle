@@ -12,6 +12,13 @@ import '../services/persistence_service.dart';
 import '../services/planner_service.dart'
     show PlannerGenerationResult, PlannerService, PlanStyle;
 
+typedef LoadDefaultCalendar = Future<FirestoreCalendar?> Function(
+    String userId);
+typedef SaveFirestoreState = Future<FirestoreSyncResult> Function(
+  String userId,
+  SavedState state,
+);
+
 /// Holds all mutable in-session state: activity pool, current week plan.
 /// Persists changes to [PersistenceService] and [FirestoreSyncService] (if signed in) on every mutation.
 /// Screens read from it via [AppStateScope.of(context)].
@@ -48,9 +55,21 @@ class AppState extends ChangeNotifier {
   String _lastSyncStatus = 'Sync pending';
   String? _lastSyncErrorMessage;
   int? _lastSyncAttemptAtMillis;
+  bool _isInitialSyncComplete = true;
+  bool _isSyncingInitialState = false;
+  final LoadDefaultCalendar _loadDefaultCalendar;
+  final SaveFirestoreState _saveFirestoreState;
 
-  AppState({required List<Activity> activities, SavedState? savedState})
-      : activities = activities.map((activity) => activity.copy()).toList() {
+  AppState({
+    required List<Activity> activities,
+    SavedState? savedState,
+    LoadDefaultCalendar? loadDefaultCalendar,
+    SaveFirestoreState? saveFirestoreState,
+  })  : activities = activities.map((activity) => activity.copy()).toList(),
+        _loadDefaultCalendar =
+            loadDefaultCalendar ?? FirestoreSyncService.loadDefaultCalendar,
+        _saveFirestoreState =
+            saveFirestoreState ?? FirestoreSyncService.saveState {
     if (savedState != null) {
       _applySavedState(savedState, persistLocal: false);
     } else {
@@ -91,6 +110,10 @@ class AppState extends ChangeNotifier {
   String get lastSyncStatus => _lastSyncStatus;
   String? get lastSyncErrorMessage => _lastSyncErrorMessage;
   int? get lastSyncAttemptAtMillis => _lastSyncAttemptAtMillis;
+  bool get isInitialSyncComplete => _isInitialSyncComplete;
+  bool get isSyncingInitialState => _isSyncingInitialState;
+  bool get shouldWaitForInitialSync =>
+      _userId != null && !_isInitialSyncComplete;
   String get feedTokenPreview {
     final token = _feedToken;
     if (token == null || token.isEmpty) return 'No token yet';
@@ -102,47 +125,67 @@ class AppState extends ChangeNotifier {
     if (_userId == uid) return;
     _userId = uid;
     if (uid != null) {
+      _isInitialSyncComplete = false;
+      _isSyncingInitialState = true;
       _applyCalendarMetadata(FirestoreSyncService.defaultMetadata(uid));
-      syncWithFirestore();
+      notifyListeners();
+      unawaited(syncWithFirestore());
     } else {
+      _isInitialSyncComplete = true;
+      _isSyncingInitialState = false;
       _clearCalendarMetadata();
+      notifyListeners();
     }
   }
 
   Future<void> syncWithFirestore() async {
     final uid = _userId;
     if (uid == null) return;
-    final remote = await FirestoreSyncService.loadDefaultCalendar(uid);
-    if (_userId != uid) return;
-
-    final local = _currentSavedState();
-    var metadataChanged = false;
-    if (remote != null) {
-      metadataChanged = _applyCalendarMetadata(remote.metadata);
-    }
-    if (remote != null &&
-        remote.state.updatedAtMillis > local.updatedAtMillis) {
-      _applySavedState(remote.state);
-      // Re-derive rather than re-save remote.state verbatim: _applySavedState
-      // just rebuilt _weekPlan against "now", which may be a different
-      // calendar week than whatever remote.state's cached ICS reflected.
-      await _saveStateToFirestore(uid, _currentSavedState());
+    final wasInitialSync = !_isInitialSyncComplete;
+    if (wasInitialSync && !_isSyncingInitialState) {
+      _isSyncingInitialState = true;
       notifyListeners();
-      return;
     }
 
-    final stateToSave = local.updatedAtMillis == 0
-        ? _currentSavedState(
-            updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
-          )
-        : local;
-    if (stateToSave.updatedAtMillis != _updatedAtMillis) {
-      _updatedAtMillis = stateToSave.updatedAtMillis;
-      _persistLocal(stateToSave);
-    }
-    await _saveStateToFirestore(uid, stateToSave);
-    if (metadataChanged) {
-      notifyListeners();
+    try {
+      final remote = await _loadDefaultCalendar(uid);
+      if (_userId != uid) return;
+
+      final local = _currentSavedState();
+      var metadataChanged = false;
+      if (remote != null) {
+        metadataChanged = _applyCalendarMetadata(remote.metadata);
+      }
+
+      if (remote != null &&
+          remote.state.updatedAtMillis > local.updatedAtMillis) {
+        _applySavedState(remote.state);
+        // Re-derive rather than re-save remote.state verbatim:
+        // _applySavedState just rebuilt _weekPlan against "now", which may
+        // be a different calendar week than the cached ICS in remote.state.
+        await _saveStateToFirestore(uid, _currentSavedState());
+        notifyListeners();
+      } else {
+        final stateToSave = local.updatedAtMillis == 0
+            ? _currentSavedState(
+                updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+              )
+            : local;
+        if (stateToSave.updatedAtMillis != _updatedAtMillis) {
+          _updatedAtMillis = stateToSave.updatedAtMillis;
+          _persistLocal(stateToSave);
+        }
+        await _saveStateToFirestore(uid, stateToSave);
+        if (metadataChanged) {
+          notifyListeners();
+        }
+      }
+    } finally {
+      if (_userId == uid && wasInitialSync) {
+        _isInitialSyncComplete = true;
+        _isSyncingInitialState = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -472,7 +515,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _saveStateToFirestore(String uid, SavedState state) async {
     _markSyncPending();
-    final result = await FirestoreSyncService.saveState(uid, state);
+    final result = await _saveFirestoreState(uid, state);
     _applySyncResult(result);
   }
 

@@ -26,6 +26,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
+    widget.appState.addListener(_handleAppStateChanged);
     if (AuthService.isReady) {
       _authSubscription =
           FirebaseAuth.instance.authStateChanges().listen((user) {
@@ -36,41 +37,60 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   void dispose() {
+    widget.appState.removeListener(_handleAppStateChanged);
     _authSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(AuthGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.appState == widget.appState) return;
+    oldWidget.appState.removeListener(_handleAppStateChanged);
+    widget.appState.addListener(_handleAppStateChanged);
+  }
+
+  void _handleAppStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Widget _mainApp({User? user}) {
     return AppStateScope(
       state: widget.appState,
-      child: !widget.appState.displayNameConfirmed
-          ? DisplayNameScreen(
-              initialName: _defaultDisplayName(user),
-              onConfirm: (displayName) {
-                final saved = widget.appState.confirmDisplayName(displayName);
-                if (saved) {
-                  setState(() {});
-                }
-                return saved;
-              },
-            )
-          : !widget.appState.calendarNameConfirmed
-              ? CalendarNameScreen(
-                  initialName: _defaultCalendarName(),
-                  onConfirm: (calendarName) {
+      child: widget.appState.shouldWaitForInitialSync
+          ? const _SplashScreen()
+          : !widget.appState.displayNameConfirmed
+              ? DisplayNameScreen(
+                  initialName: _defaultDisplayName(user),
+                  onConfirm: (displayName) {
                     final saved =
-                        widget.appState.confirmCalendarTitle(calendarName);
+                        widget.appState.confirmDisplayName(displayName);
                     if (saved) {
                       setState(() {});
                     }
                     return saved;
                   },
                 )
-              : _onboardingDone
-                  ? const BottomNavShell()
-                  : OnboardingScreen(
-                      onComplete: () => setState(() => _onboardingDone = true),
-                    ),
+              : !widget.appState.calendarNameConfirmed
+                  ? CalendarNameScreen(
+                      initialName: _defaultCalendarName(),
+                      onConfirm: (calendarName) {
+                        final saved =
+                            widget.appState.confirmCalendarTitle(calendarName);
+                        if (saved) {
+                          setState(() {});
+                        }
+                        return saved;
+                      },
+                    )
+                  : _onboardingDone
+                      ? const BottomNavShell()
+                      : OnboardingScreen(
+                          onComplete: () =>
+                              setState(() => _onboardingDone = true),
+                        ),
     );
   }
 
