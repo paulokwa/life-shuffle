@@ -904,3 +904,21 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Deploy this change, sign in on the deployed site, make one small state change, then check Settings for the sync diagnostics card and rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1`.
 - **Open questions**:
   - After deploy, does Settings show a sync error, or does it stay quiet while Firestore still has no calendars?
+
+---
+
+## 2026-06-20 - Firestore permission-denied diagnostic follow-up
+
+- **Goal**: Respond to the deployed Settings sync diagnostic showing `Firestore permission denied`.
+- **Summary**: Confirmed the deployed app is reaching Firebase and attempting a Firestore save, but rules are rejecting the flow before any `calendars` document is created. Updated `firestore.rules` to use Firestore Rules list helper membership checks with `memberUserIds.hasAny([request.auth.uid])` for owner/member access and initial calendar creation. After the deployed app still reported permission denied, identified that `FirestoreSyncService.saveState` first reads `calendars/{uid}_default` before creating it; the read rule denied that initial existence check while the document was absent. Added a narrow read allowance for the signed-in user's own `{uid}_default` calendar path, then deployed Firestore rules only.
+- **Files changed**:
+  - `firestore.rules`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the fix rules-only and preserve the existing `calendars/{uid}_default` schema and feed endpoint behavior.
+  - Keep owner/member-only MVP access; do not broaden reads or writes beyond authenticated calendar members.
+- **Tests run**:
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1` - passed; rules compiled and deployed to `life-shuffle-8d3bd`.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed as a script but still reported `No calendars found`, which is expected until the deployed browser app retries a write after the rules deploy.
+- **Current state**: Firestore rules are deployed with explicit array membership checks and a narrow own-default-calendar read allowance for the first save existence check. The deployed app needs one fresh signed-in state change to retry saving and clear or update the sync diagnostic.
+- **Next recommended step**: In the deployed app, refresh the page, stay signed in, make a small state change that triggers save, then rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1`.

@@ -196,3 +196,23 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Do not place `.test.js`, fixtures, helpers, or non-function scripts directly under `netlify/functions`. Put tests under `netlify/tests` or another non-deploy directory and import the function module from there.
 
 ---
+
+## 2026-06-20 - Deployed sync diagnostic shows `Firestore permission denied`
+
+- **Context**: The deployed app showed the temporary Settings sync diagnostics card with `Firestore permission denied`, and the admin calendar diagnostic still found zero documents in the top-level `calendars` collection.
+- **Symptoms**:
+  - Settings > Account displayed `Sync diagnostics` with `Firestore permission denied`.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` authenticated with Admin credentials but reported `No calendars found`.
+- **Likely cause**: The first browser write flow reached Firestore but was denied before any document was created. `FirestoreSyncService.saveState` reads `calendars/{uid}_default` to check whether the document exists before it writes. With zero documents present, the original read rule only allowed owners/members based on `resource.data`, so the initial existence check for the signed-in user's own default calendar path was denied. The rules also used `request.auth.uid in memberUserIds`; this was changed to the explicit list helper form `memberUserIds.hasAny([request.auth.uid])`.
+- **Fix applied**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1
+  ```
+  The rules compiled and deployed successfully to `life-shuffle-8d3bd`. A second rules deploy added `isOwnDefaultCalendarPath(calendarId)` and allows reads of only `request.auth.uid + '_default'` for the signed-in user, so the first-save existence check can complete without broadening access to other calendars.
+- **Files affected**:
+  - `firestore.rules`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Follow-up**: Refresh the deployed app, make a fresh signed-in state change, then rerun the Firestore calendar diagnostic. If it still reports permission denied, add a temporary local rules unit test or emulator repro for the exact initial calendar payload and first `get()` call.
+
+---
