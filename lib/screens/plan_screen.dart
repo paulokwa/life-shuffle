@@ -165,10 +165,13 @@ class PlanScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: _OutlineButton(
-                          key: ValueKey('plan-publish-feed-button'),
+                          key: const ValueKey('plan-publish-feed-button'),
                           label: 'Publish feed',
+                          onTap: () => _showPublishingInSettingsMessage(
+                            context,
+                          ),
                         ),
                       ),
                     ],
@@ -214,6 +217,12 @@ class PlanScreen extends StatelessWidget {
               : 'No planned activities this week. Empty week copied.',
         ),
       ),
+    );
+  }
+
+  static void _showPublishingInSettingsMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Publishing controls are in Settings.')),
     );
   }
 

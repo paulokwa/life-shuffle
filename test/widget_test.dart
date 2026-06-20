@@ -1929,6 +1929,25 @@ void main() {
     expect(copiedText, contains('No planned activities this week.'));
   });
 
+  testWidgets('Plan Publish feed points users to Settings',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-publish-feed-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-publish-feed-button')));
+    await tester.pump();
+
+    expect(
+      find.text('Publishing controls are in Settings.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});

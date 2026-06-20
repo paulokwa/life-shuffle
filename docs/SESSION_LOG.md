@@ -1113,3 +1113,25 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Manually sign into the deployed app in a normal browser profile, rename the current calendar from Settings > Calendar, verify the header updates, then rerun the Firestore diagnostic to confirm the new title and current feed/cache state. After that, consider a small Plan-screen Copy text action or output-detail toggles as the next export slice.
 - **Open questions**:
   - Should publishing be re-enabled on the inspected production calendar before checking cached ICS persistence, or is the current disabled/no-cache state intentional?
+
+---
+
+## 2026-06-20 - Plan Publish feed affordance
+
+- **Goal**: Make the visible Plan page `Publish feed` button non-dead without changing Settings publishing controls or the ICS endpoint.
+- **Summary**: Wired the Plan screen `Publish feed` secondary action to show a minimal SnackBar: `Publishing controls are in Settings.` This keeps the Plan action useful while leaving the existing Settings > Publishing controls as the real publishing surface.
+- **Files changed**:
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Use a small SnackBar instead of a tab/deep-link jump because `BottomNavShell` owns tab state and the requested fix should stay narrow.
+  - Do not change ICS/feed behavior, Settings publishing controls, print/PDF/export toggles, or multiple-calendar behavior.
+- **Tests run**:
+  - `dart format lib/screens/plan_screen.dart test/widget_test.dart` - completed; no formatting changes needed.
+  - `flutter test` - passed, 92/92 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 16 info-level lints.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+- **Current state**: Plan `Export` copies week text, and Plan `Publish feed` now gives visible feedback pointing users to Settings.
+- **Next recommended step**: If this affordance needs to become stronger later, add an explicit Settings tab/deep link to the Publishing section as a separate navigation slice.
+- **Open questions**: None.
