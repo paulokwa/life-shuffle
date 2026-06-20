@@ -137,10 +137,15 @@ class SettingsScreen extends StatelessWidget {
                   _SettingsGroup(
                     children: [
                       _SettingsRow(
+                        key: const ValueKey('settings-current-calendar-row'),
                         icon: Icons.calendar_today_rounded,
                         label: 'Current calendar',
                         value: state.calendarTitle,
-                        hasChevron: false,
+                        hasChevron: true,
+                        onTap: () => _showRenameCalendarDialog(
+                          context,
+                          state,
+                        ),
                       ),
                       _SettingsRow(
                         icon: Icons.person_outline_rounded,
@@ -281,6 +286,95 @@ class SettingsScreen extends StatelessWidget {
     final labels =
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
+  }
+}
+
+Future<void> _showRenameCalendarDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _RenameCalendarDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
+class _RenameCalendarDialog extends StatefulWidget {
+  const _RenameCalendarDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  State<_RenameCalendarDialog> createState() => _RenameCalendarDialogState();
+}
+
+class _RenameCalendarDialogState extends State<_RenameCalendarDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.state.calendarTitle);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final renamed = widget.state.renameCalendarTitle(_controller.text);
+    if (!renamed) {
+      setState(() {
+        _errorText = 'Enter a calendar name.';
+      });
+      return;
+    }
+    widget.onClose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename calendar'),
+      content: TextField(
+        key: const ValueKey('rename-calendar-text-field'),
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'Calendar name',
+          errorText: _errorText,
+        ),
+        onChanged: (_) {
+          if (_errorText == null) return;
+          setState(() {
+            _errorText = null;
+          });
+        },
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: widget.onClose,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('rename-calendar-save'),
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 
@@ -932,16 +1026,19 @@ class _SettingsGroup extends StatelessWidget {
 
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
+    super.key,
     required this.icon,
     required this.label,
     required this.value,
     this.hasChevron = true,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final bool hasChevron;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -980,7 +1077,13 @@ class _SettingsRow extends StatelessWidget {
         ],
       ],
     );
-    return row;
+    if (onTap == null) return row;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: row,
+    );
   }
 }
 

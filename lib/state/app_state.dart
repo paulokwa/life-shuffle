@@ -327,6 +327,10 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  bool renameCalendarTitle(String value) {
+    return confirmCalendarTitle(value);
+  }
+
   void completeIntroOnboarding() {
     if (_introOnboardingCompleted) return;
     _introOnboardingCompleted = true;

@@ -1022,3 +1022,32 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Code now persists mini onboarding completion locally and through Firestore sync. A new remote boolean will be written on the next state save after completing/skipping the intro in the updated app.
 - **Next recommended step**: Deploy, complete or skip the mini intro once on the signed-in calendar, then rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` and confirm `introOnboardingCompleted: true`.
 - **Open questions**: None.
+
+---
+
+## 2026-06-20 - Settings current calendar rename
+
+- **Goal**: Let the current/default Life Shuffle calendar be renamed from Settings without adding multiple-calendar support.
+- **Summary**: Added an editable `Current calendar` row in Settings. Tapping it opens a simple rename dialog prefilled with the current calendar title. Saving trims/collapses whitespace, rejects empty names inline, updates `AppState.calendarTitle`, persists through the existing local/Firestore saved-state path, and updates headers immediately. Feed token lifecycle is unchanged; renaming does not regenerate or revoke the feed token.
+- **Files changed**:
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the feature scoped to renaming the existing default calendar only.
+  - Add `AppState.renameCalendarTitle()` as a clearer wrapper around the existing `confirmCalendarTitle()` persistence path.
+  - Use a small dialog rather than adding a calendar management screen before multi-calendar work exists.
+- **Tests run**:
+  - `dart format lib/state/app_state.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test test/widget_test.dart --plain-name "Settings current calendar row opens rename dialog"` - passed.
+  - `flutter test test/widget_test.dart --plain-name "Saving calendar rename updates Settings header and AppState"` - passed.
+  - `flutter test test/widget_test.dart --plain-name "Empty calendar rename is rejected"` - passed.
+  - `flutter test test/widget_test.dart --plain-name "AppState rename syncs calendar title without changing feed token"` - passed.
+  - `flutter test` - passed, 84/84 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 23 info-level lints.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+- **Current state**: Settings can rename the current calendar, and the name updates in Settings/header state without changing feed token behavior. No multiple-calendar, switcher, sharing/member, ICS endpoint, or Firestore data-reset work was added.
+- **Next recommended step**: Continue with the planned text export / print foundation after deploying or manually smoke-checking the rename in the browser.
+- **Open questions**: None.

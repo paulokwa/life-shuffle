@@ -142,6 +142,44 @@ void main() {
     expect(saved.calendarNameConfirmed, isTrue);
   });
 
+  test('AppState rename syncs calendar title without changing feed token',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final renamedSync = Completer<SavedState>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) async => null,
+      saveFirestoreState: (_, state) async {
+        if (state.calendarTitle == 'Renamed calendar' &&
+            !renamedSync.isCompleted) {
+          renamedSync.complete(state);
+        }
+        return FirestoreSyncResult.success();
+      },
+    );
+
+    appState.setFeedEnabled(true);
+    final originalToken = appState.feedToken;
+    expect(originalToken, isNotNull);
+
+    appState.setUserId('rename_user');
+    expect(appState.renameCalendarTitle('  Renamed   calendar  '), isTrue);
+
+    final syncedState = await renamedSync.future.timeout(
+      const Duration(seconds: 1),
+    );
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+
+    expect(appState.calendarTitle, 'Renamed calendar');
+    expect(appState.feedToken, originalToken);
+    expect(appState.feedEnabled, isTrue);
+    expect(syncedState.calendarTitle, 'Renamed calendar');
+    expect(syncedState.feedToken, originalToken);
+    expect(saved.calendarTitle, 'Renamed calendar');
+    expect(saved.feedToken, originalToken);
+  });
+
   test('AppState completes and persists intro onboarding', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -476,6 +514,102 @@ void main() {
 
     expect(find.text('Weekend ideas'), findsWidgets);
     expect(find.text('Kwame and Laura'), findsNothing);
+  });
+
+  testWidgets('Settings current calendar row opens rename dialog',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmCalendarTitle('Weekend ideas');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rename calendar'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Weekend ideas'), findsOneWidget);
+  });
+
+  testWidgets('Saving calendar rename updates Settings header and AppState',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmCalendarTitle('Weekend ideas');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(
+            body: Column(
+              children: [
+                LifeShuffleHeader(),
+                Expanded(child: SettingsScreen()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('rename-calendar-text-field')),
+      '  Solo   getting out  ',
+    );
+    await tester.tap(find.byKey(const ValueKey('rename-calendar-save')));
+    await tester.pumpAndSettle();
+
+    expect(appState.calendarTitle, 'Solo getting out');
+    expect(find.text('Solo getting out'), findsWidgets);
+    expect(find.text('Weekend ideas'), findsNothing);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.calendarTitle, 'Solo getting out');
+    expect(saved.calendarNameConfirmed, isTrue);
+  });
+
+  testWidgets('Empty calendar rename is rejected', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.confirmCalendarTitle('Weekend ideas');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('rename-calendar-text-field')),
+      '   ',
+    );
+    await tester.tap(find.byKey(const ValueKey('rename-calendar-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter a calendar name.'), findsOneWidget);
+    expect(find.text('Rename calendar'), findsOneWidget);
+    expect(appState.calendarTitle, 'Weekend ideas');
   });
 
   testWidgets('Settings hides sync diagnostics when there is no sync error',
