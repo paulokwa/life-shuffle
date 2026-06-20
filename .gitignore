@@ -5,6 +5,7 @@
 .env.local
 tool/local_run.ps1
 tool/serviceAccountKey.json
+*firebase-adminsdk*.json
 
 # Node (Netlify Functions)
 node_modules/
