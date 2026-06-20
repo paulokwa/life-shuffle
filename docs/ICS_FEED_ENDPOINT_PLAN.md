@@ -1,6 +1,6 @@
 # Public ICS Feed Endpoint — Implementation Plan
 
-Status: **Implemented** (`netlify/functions/calendar-feed.js`, 2026-06-18 — see `docs/SESSION_LOG.md`). The sections below are kept as the design record; a few details were adjusted during implementation and are called out inline where they diverge from what was originally proposed.
+Status: **Implemented and deployed-verified** (`netlify/functions/calendar-feed.js`, implemented 2026-06-18; deployed feed verified 2026-06-20 - see `docs/SESSION_LOG.md`). The sections below are kept as the design record; a few details were adjusted during implementation and are called out inline where they diverge from what was originally proposed.
 
 This plan covers the smallest safe way to let Apple Calendar, Google Calendar, Outlook, and similar apps subscribe to a Life Shuffle calendar's read-only `.ics` feed, using the private feed-token metadata that already exists (`docs/SESSION_LOG.md`, 2026-06-18 — "Private feed token metadata and publishing toggle").
 
@@ -106,7 +106,7 @@ Error bodies are plain JSON for easy debugging; calendar clients fetching a work
 
 **Automated (done, run anytime, no credentials needed):** `npm test` (`node --test "netlify/tests/**/*.test.js"`) runs `netlify/tests/calendar-feed.test.js` against the pure helper functions (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) and the parts of `handler` that don't need live Firestore access (missing token, wrong method, missing credentials). This is fast unit coverage, not a substitute for the steps below against a real calendar. Tests intentionally live outside `netlify/functions` so Netlify does not package them as deployable serverless functions.
 
-**Manual, against a real calendar (still pending — needs a real Firebase service-account key, which this implementation session didn't have access to):**
+**Manual, against a real calendar (deployed endpoint verification passed 2026-06-20; real calendar-app subscription still pending):**
 
 1. Get a Firebase service-account key for local-only use: Firebase Console → Project Settings → Service Accounts → "Generate new private key" for project `life-shuffle-8d3bd`. Save it outside the repo or to a gitignored path (e.g. `tool/serviceAccountKey.json` — already added to `.gitignore`, never commit it).
 2. Export it for local function runs as `FIREBASE_SERVICE_ACCOUNT_JSON` (the function reads this exact env var — see §9). On Windows PowerShell: `$env:FIREBASE_SERVICE_ACCOUNT_JSON = Get-Content tool/serviceAccountKey.json -Raw`.
@@ -116,6 +116,13 @@ Error bodies are plain JSON for easy debugging; calendar clients fetching a work
 6. Exercise the negative paths: no `token` param (expect 404), a made-up token (expect 404), a token for a disabled feed (expect 404, after toggling off in Settings), a POST request (expect 405).
 7. Recommended before considering this fully verified: use `netlify dev --live` (or any HTTPS tunnel) to get a public HTTPS URL, then actually add it as a subscribed calendar in Apple Calendar or Google Calendar and confirm it imports without errors — this is the only way to catch ICS formatting issues that `curl` won't surface.
 8. Optional: run against the Firebase Local Emulator Suite (`firebase emulators:start --only firestore`, with `FIRESTORE_EMULATOR_HOST=localhost:8080` set for the function process) to avoid touching the real project's data while iterating. Seed a fake calendar doc with a known token via the Emulator UI.
+
+**Deployed verification completed 2026-06-20:**
+
+- Netlify env diagnostics confirmed `FIREBASE_SERVICE_ACCOUNT_JSON` is present.
+- Firestore diagnostics confirmed one real `calendars/{uid}_default` document with `feedEnabled: true`, a feed token, and cached ICS text.
+- The deployed Netlify endpoint returned HTTP 200 with `Content-Type: text/calendar; charset=utf-8; method=PUBLISH`.
+- The response body contained both `BEGIN:VCALENDAR` and `END:VCALENDAR`.
 
 ## 9. Netlify env vars needed
 
@@ -137,10 +144,11 @@ No changes needed to the existing `[build]` command in `netlify.toml`. Netlify's
 5. [x] Added root-level `package.json` with `firebase-admin` as a dependency (`npm install` run; `package-lock.json` committed).
 6. [x] Created `netlify/functions/calendar-feed.js` — GET-only, token lookup via `findCalendarByFeedToken`, status/error behavior from §6/§7, headers from §5. Pure decision logic (`extractToken`, `isFeedEnabled`, `buildFeedResponse`) is split out and covered by `netlify/tests/calendar-feed.test.js` (Node's built-in test runner, `npm test`).
 7. [x] `netlify.toml` now has `[functions]\n  directory = "netlify/functions"`.
-8. [ ] **Still pending** — add `FIREBASE_SERVICE_ACCOUNT_JSON` to the Netlify dashboard env vars. This requires dashboard access this implementation session didn't have.
-9. [ ] **Still pending** — the real-calendar manual testing steps in §8 (everything past the automated `npm test` run), including at least one real calendar-app subscription test. Needs a live service-account key and a deployed/tunneled URL.
+8. [x] `FIREBASE_SERVICE_ACCOUNT_JSON` is present in Netlify env vars and the deployed function can use it to read real Firestore calendar data.
+9. [x] Deployed real-calendar endpoint verification passed: Firestore has a published calendar with cached ICS text, and the Netlify feed endpoint returns HTTP 200 with a valid VCALENDAR response.
 10. [x] `lib/screens/settings_screen.dart`: `_FeedLinkPlaceholder` → `_FeedLinkDisplay`, now renders the real `/.netlify/functions/calendar-feed?token=<feedToken>` URL (via `Uri.base`, with a safe fallback when not running under http/https — e.g. `flutter test`) plus a working "Copy link" button.
 11. [x] `docs/ROADMAP.md` and `docs/SESSION_LOG.md` updated for this implementation session.
+12. [ ] Recommended follow-up: subscribe to the deployed feed URL in Apple Calendar, Google Calendar, or Outlook to confirm external calendar-app import behavior.
 
 ## 11. Explicitly out of scope (do not build these now)
 

@@ -922,3 +922,45 @@ Use it when a session ends or when enough context has changed that the next assi
   - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed as a script but still reported `No calendars found`, which is expected until the deployed browser app retries a write after the rules deploy.
 - **Current state**: Firestore rules are deployed with explicit array membership checks and a narrow own-default-calendar read allowance for the first save existence check. The deployed app needs one fresh signed-in state change to retry saving and clear or update the sync diagnostic.
 - **Next recommended step**: In the deployed app, refresh the page, stay signed in, make a small state change that triggers save, then rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1`.
+
+---
+
+## 2026-06-20 - Final deployed ICS feed validation and commit prep
+
+- **Goal**: Validate today's Firestore sync, diagnostics, and public ICS feed work before committing and pushing.
+- **Summary**: Confirmed the Firestore permission-denied fix worked end to end: the deployed app created a real top-level `calendars/{uid}_default` document, publishing is enabled, the feed token exists, and cached ICS text is present. Confirmed the deployed Netlify ICS endpoint returns HTTP 200 with `Content-Type: text/calendar; charset=utf-8; method=PUBLISH` and a valid VCALENDAR envelope. The diagnostics toolkit was added and used to verify Netlify env vars, Firestore rules, Firestore calendar data, and the deployed feed. Temporary safe sync diagnostics were added to the app to expose coarse Firestore sync status without printing tokens, private keys, service-account values, or cached ICS text.
+- **Files changed**:
+  - `.gitignore`
+  - `.vscode/tasks.json`
+  - `README.md`
+  - `docs/ICS_FEED_ENDPOINT_PLAN.md`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+  - `docs/dev/DIAGNOSTICS.md`
+  - `firestore.rules`
+  - `lib/screens/settings_screen.dart`
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+  - `tool/diagnostics/check_firebase_rules.ps1`
+  - `tool/diagnostics/check_firestore_calendar.js`
+  - `tool/diagnostics/check_firestore_calendar.ps1`
+  - `tool/diagnostics/check_ics_feed.ps1`
+  - `tool/diagnostics/check_netlify_env.ps1`
+- **Decisions made**:
+  - Keep diagnostics secret-safe and local/operator-focused.
+  - Keep Firestore schema and feed endpoint behavior unchanged.
+  - Fix the initial-save Firestore permission issue in rules by allowing the signed-in user to read only their own `{uid}_default` calendar path for the pre-create existence check.
+- **Tests run**:
+  - `git status` - checked before validation.
+  - `git diff --stat` - checked before validation.
+  - Secret tracking check - `tool/serviceAccountKey.json` is gitignored and not tracked; no `firebase-adminsdk` JSON files are tracked; no real Firebase private keys or service-account JSON were found in tracked files.
+  - `npm test` - passed, 12/12 Netlify function tests.
+  - `flutter test` - passed, 70/70 Flutter tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 23 info-level lints.
+  - `flutter build web` - passed with the known icon-font warning.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed; found one calendar, `feedEnabled: true`, feed token present, cached ICS text present.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_ics_feed.ps1 -FeedUrl <redacted>` - passed; HTTP 200, calendar content type, `BEGIN:VCALENDAR`, and `END:VCALENDAR`.
+- **Current state**: Firestore sync is working in production, the deployed public ICS feed endpoint serves a valid cached calendar response, and the repo records the diagnostics and rules changes needed to reproduce the fix.
+- **Next recommended step**: Subscribe to the deployed feed URL in Apple Calendar, Google Calendar, or Outlook to confirm external calendar-app import behavior.
