@@ -53,4 +53,12 @@ powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.p
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1
 ```
 
-The scripts check Netlify env var names, deploy/check Firestore rules, and inspect safe Firestore calendar fields. They must not print secret values, full feed tokens, private keys, or cached ICS bodies.
+The scripts check Netlify env var names, check local Firestore rules deployment prerequisites without deploying, and inspect safe Firestore calendar fields. They must not print secret values, full feed tokens, private keys, or cached ICS bodies.
+
+Production Firestore rules deployment is intentionally separate:
+
+```
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/deploy_firebase_rules.ps1
+```
+
+Only run the deploy script after the rules change has been reviewed and approved for production.

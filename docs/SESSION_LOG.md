@@ -1172,3 +1172,28 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Review and approve the Firestore rules change for deploy, then smoke-test with Laura's account: Laura signs in once, Kwame adds her by email, Laura selects the shared calendar, and an edit saves to the shared calendar.
 - **Open questions**:
   - Should calendar create/leave/delete lifecycle stay after the Laura smoke test, or come before broader manual testing?
+
+---
+
+## 2026-06-20 - Split Firestore rules check and deploy scripts
+
+- **Goal**: Remove the misleading Firestore rules deployment footgun before approving or deploying the shared-calendar rules.
+- **Summary**: Split the previous `check_firebase_rules.ps1` behavior so the check script no longer deploys production Firestore rules. Added an explicit `deploy_firebase_rules.ps1` script for the actual production Firestore rules deploy, with warnings before deployment. Updated diagnostics docs and README to point to the separate check/deploy workflow.
+- **Files changed**:
+  - `tool/diagnostics/check_firebase_rules.ps1`
+  - `tool/diagnostics/deploy_firebase_rules.ps1`
+  - `docs/dev/DIAGNOSTICS.md`
+  - `README.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat Firebase CLI deploy/dry-run as deployment-adjacent, not as the default check path.
+  - Keep the non-deploying check focused on local prerequisites because no standalone local Firestore rules validator is available in this project.
+  - Require the explicitly named deploy script for production rules deployment.
+- **Tests run**:
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1` - passed; prints Firebase CLI version, confirms `firestore.rules` exists, and explicitly says it does not deploy.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - `flutter test` - not run because no Dart files were touched.
+  - `npm test` - not run because no JavaScript files were touched.
+- **Current state**: Shared-calendar Firestore rules remain local and undeployed until the explicit production deploy script is run after approval. The old check script can no longer deploy production rules.
+- **Next recommended step**: Review the local shared-calendar `firestore.rules`, then run `deploy_firebase_rules.ps1` only after explicit production rules deploy approval.
+- **Open questions**: None.

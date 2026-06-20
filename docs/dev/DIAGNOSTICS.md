@@ -52,7 +52,15 @@ Checks Netlify login/link status and confirms whether `FIREBASE_WEB_API_KEY` and
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1
 ```
 
-Checks Firebase project access and deploys `firestore.rules` to project `life-shuffle-8d3bd`.
+Checks local Firestore rules deployment prerequisites. It does not deploy rules or contact the Firebase project.
+
+The Firebase CLI available for this project does not provide a standalone local Firestore rules validation command. Rules deployment is intentionally split into a separate, explicit production deploy script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/deploy_firebase_rules.ps1
+```
+
+This deploys production Firestore rules to project `life-shuffle-8d3bd`. Do not run it unless the rules change has been reviewed and approved for production.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1
@@ -81,6 +89,7 @@ Use the diagnostics in this order:
 
 1. `check_netlify_env.ps1`
 2. `check_firebase_rules.ps1`
-3. Sign in to the deployed app and make a small calendar change.
-4. `check_firestore_calendar.ps1`
-5. `check_ics_feed.ps1` with the copied feed URL.
+3. If rules deployment has been explicitly approved, run `deploy_firebase_rules.ps1`.
+4. Sign in to the deployed app and make a small calendar change.
+5. `check_firestore_calendar.ps1`
+6. `check_ics_feed.ps1` with the copied feed URL.

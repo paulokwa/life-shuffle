@@ -1,17 +1,26 @@
 $ErrorActionPreference = 'Stop'
 
 $projectId = 'life-shuffle-8d3bd'
+$rulesPath = 'firestore.rules'
 
-Write-Host "Checking Firebase access for project $projectId..."
-& firebase projects:list
-if ($LASTEXITCODE -ne 0) {
-  Write-Error 'Firebase project listing failed. Run: firebase login'
+Write-Host "Checking local Firestore rules deployment prerequisites for project $projectId..."
+
+if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
+  Write-Error 'Firebase CLI was not found. Install it with: npm install -g firebase-tools'
 }
 
-Write-Host "Deploying Firestore rules to $projectId..."
-& firebase deploy --only firestore:rules --project $projectId
+$firebaseVersion = (& firebase --version)
 if ($LASTEXITCODE -ne 0) {
-  Write-Error 'Firestore rules deploy failed. Review Firebase CLI output above.'
+  Write-Error 'Firebase CLI version check failed. Reinstall or repair firebase-tools.'
 }
 
-Write-Host 'Firestore rules deploy completed successfully.'
+if (-not (Test-Path $rulesPath)) {
+  Write-Error "Missing $rulesPath. Run this script from the repo root."
+}
+
+Write-Host "Firebase CLI version: $firebaseVersion"
+Write-Host "Found $rulesPath."
+Write-Host ''
+Write-Host 'This check script does NOT deploy Firestore rules.'
+Write-Host 'Firebase CLI does not provide a standalone local Firestore rules validation command in this project.'
+Write-Host "To deploy PRODUCTION Firestore rules, run: powershell -ExecutionPolicy Bypass -File tool/diagnostics/deploy_firebase_rules.ps1"
