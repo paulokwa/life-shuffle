@@ -126,6 +126,10 @@ class SettingsScreen extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (state.lastSyncErrorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    _SyncDiagnosticsCard(state: state),
+                  ],
                   const SizedBox(height: 20),
                   _SectionLabel(label: 'CALENDAR'),
                   const SizedBox(height: 10),
@@ -276,6 +280,77 @@ class SettingsScreen extends StatelessWidget {
     final labels =
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
+  }
+}
+
+class _SyncDiagnosticsCard extends StatelessWidget {
+  const _SyncDiagnosticsCard({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final attemptedAt = state.lastSyncAttemptAtMillis;
+    return LsCard(
+      key: const ValueKey('settings-sync-diagnostics-card'),
+      color: const Color(0xFFFAF0EC),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: primaryTerracotta.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.sync_problem_rounded,
+              size: 17,
+              color: primaryTerracotta,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sync diagnostics',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  state.lastSyncErrorMessage ?? state.lastSyncStatus,
+                  key: const ValueKey('settings-sync-error-message'),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: primaryTerracotta,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  attemptedAt == null
+                      ? 'No sync attempt timestamp yet.'
+                      : 'Last attempt: $attemptedAt',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    height: 1.3,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

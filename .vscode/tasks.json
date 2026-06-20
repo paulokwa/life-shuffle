@@ -1,0 +1,79 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Diagnostics: Netlify env",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tool/diagnostics/check_netlify_env.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Diagnostics: Firebase rules deploy",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tool/diagnostics/check_firebase_rules.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Diagnostics: Firestore calendars",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tool/diagnostics/check_firestore_calendar.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Diagnostics: ICS feed test",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tool/diagnostics/check_ics_feed.ps1",
+        "${input:icsFeedUrl}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: Flutter",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "test"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: Netlify functions",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "test"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "icsFeedUrl",
+      "type": "promptString",
+      "description": "Paste the full Life Shuffle ICS feed URL"
+    }
+  ]
+}

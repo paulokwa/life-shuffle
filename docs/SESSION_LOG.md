@@ -845,3 +845,62 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Add `FIREBASE_SERVICE_ACCOUNT_JSON` to the Netlify dashboard for the Production context, then run through `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8's manual steps end-to-end, finishing with a real calendar-app subscription test (Apple Calendar or Google Calendar) to catch anything `curl`/unit tests can't.
 - **Open questions**:
   - Should there be a smoke-test script that exercises the deployed function against a real (test) calendar as part of future deploys, or is the current unit-test-only coverage acceptable given the two-person scale?
+
+---
+
+## 2026-06-20 - Local deployment diagnostics toolkit
+
+- **Goal**: Add safe local diagnostics for Netlify env vars, Firebase rules, Firestore calendar documents, and the public ICS feed so the empty-Firestore/feed-404 issue can be checked without dashboard guessing.
+- **Summary**: Added PowerShell and Node diagnostics under `tool/diagnostics`, a diagnostics guide at `docs/dev/DIAGNOSTICS.md`, and VS Code tasks for common checks. The scripts avoid printing secret values, full feed tokens, service account JSON, or cached ICS bodies. Netlify CLI is logged in and linked to the `life-shuffle` project. Firebase CLI is logged in and can access `life-shuffle-8d3bd`. Netlify env diagnostics confirm both `FIREBASE_WEB_API_KEY` and `FIREBASE_SERVICE_ACCOUNT_JSON` exist in production, deploy-preview, branch-deploy, and dev contexts. Firestore rules were deployed successfully to `life-shuffle-8d3bd`. After Kwame saved a local gitignored service account file at `tool/serviceAccountKey.json`, Firestore document inspection authenticated successfully and found zero documents in the `calendars` collection.
+- **Files changed**:
+  - `.gitignore`
+  - `.vscode/tasks.json`
+  - `README.md`
+  - `docs/dev/DIAGNOSTICS.md`
+  - `docs/SESSION_LOG.md`
+  - `tool/diagnostics/check_netlify_env.ps1`
+  - `tool/diagnostics/check_firebase_rules.ps1`
+  - `tool/diagnostics/check_firestore_calendar.js`
+  - `tool/diagnostics/check_firestore_calendar.ps1`
+  - `tool/diagnostics/check_ics_feed.ps1`
+- **Decisions made**:
+  - Keep diagnostics local and secret-safe; do not add product behavior, schema changes, or new dependencies beyond the existing `firebase-admin`.
+  - Track `.vscode/tasks.json` while keeping other `.vscode` files ignored.
+- **Tests run**:
+  - `firebase projects:list` - passed; project `life-shuffle-8d3bd` accessible.
+  - `netlify status` - passed; local repo linked to Netlify project `life-shuffle`.
+  - `npm test` - passed, 12/12 Netlify function tests.
+  - `flutter test` - passed, 68/68 Flutter tests.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_netlify_env.ps1` - passed; both required env vars present in production, deploy-preview, branch-deploy, and dev contexts.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1` - passed; `firestore.rules` compiled and deployed.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - initially blocked safely because local Admin credentials were missing; after `tool/serviceAccountKey.json` was saved, it passed and reported `No calendars found. The web app has not successfully written to Firestore yet.`
+- **Current state**: The current strongest diagnosis is that Netlify env vars and Firestore rules are not the obvious blocker anymore. Firestore exists and is reachable with Admin credentials, but the browser app has not created any `calendars/{uid}_default` documents yet. The ICS endpoint 404 is expected while the `calendars` collection is empty.
+- **Next recommended step**: Sign in to the deployed app with Google, make a small persisted state change such as confirming/renaming the calendar or toggling publishing, then rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1`. If it still shows no calendars, inspect the browser console/network panel for Firebase Auth or Firestore write errors.
+- **Open questions**:
+  - Is the deployed browser currently signed in with a Firebase-enabled build, or is it showing "Feed is live" from local-only persisted state?
+
+---
+
+## 2026-06-20 - Temporary visible Firestore sync diagnostics
+
+- **Goal**: Surface safe Firestore sync failures in the deployed app so the empty `calendars` collection can be diagnosed without relying only on browser console output.
+- **Summary**: Changed `FirestoreSyncService.saveState` to return a `FirestoreSyncResult` instead of swallowing save failures. `AppState` now tracks `lastSyncStatus`, `lastSyncErrorMessage`, and `lastSyncAttemptAtMillis`; Firestore saves mark `Sync pending`, then update to `Last sync succeeded`, `Firestore permission denied`, `Firebase unavailable`, or `Unknown sync error`. Settings now shows a small `Sync diagnostics` card under Account only when a sync error exists. The card intentionally shows only safe status text and a timestamp; it does not show feed tokens, private keys, service account values, or cached ICS text. No Firestore schema or feed endpoint behavior changed.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the diagnostic UI quiet unless a sync error exists, so normal users are not shown a debug panel after successful syncs.
+  - Keep the error categories coarse and safe; raw Firebase exception messages/codes are not shown in production UI.
+- **Tests run**:
+  - `dart format lib/services/firestore_sync_service.dart lib/state/app_state.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test test/widget_test.dart --plain-name "Settings hides sync diagnostics when there is no sync error"` - passed.
+  - `flutter test test/widget_test.dart --plain-name "Settings shows safe sync diagnostics after a sync error"` - passed.
+  - `flutter test` - passed, 70/70 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 23 info-level lints.
+- **Current state**: A deployed build from this code should reveal a safe sync diagnostic in Settings if Firestore writes fail. If no diagnostic card appears and no `calendars` document is created, that points toward Firebase not being initialized/signed in or the deployed app not running this build.
+- **Next recommended step**: Deploy this change, sign in on the deployed site, make one small state change, then check Settings for the sync diagnostics card and rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1`.
+- **Open questions**:
+  - After deploy, does Settings show a sync error, or does it stay quiet while Firestore still has no calendars?

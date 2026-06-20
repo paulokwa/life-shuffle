@@ -39,7 +39,10 @@ class FirestoreSyncService {
         .doc('default');
   }
 
-  static Future<void> saveState(String userId, SavedState state) async {
+  static Future<FirestoreSyncResult> saveState(
+    String userId,
+    SavedState state,
+  ) async {
     try {
       final calendarDoc = _getDefaultCalendarDoc(userId);
       final existing = await calendarDoc.get();
@@ -72,10 +75,19 @@ class FirestoreSyncService {
       }
 
       await calendarDoc.set(data, SetOptions(merge: true));
+      return FirestoreSyncResult.success();
+    } on FirebaseException catch (e) {
+      final result = FirestoreSyncResult.failure(_safeErrorMessage(e));
+      if (kDebugMode) {
+        debugPrint('Firestore saveState failed: ${e.code}');
+      }
+      return result;
     } catch (e) {
+      final result = FirestoreSyncResult.failure('Unknown sync error');
       if (kDebugMode) {
         debugPrint('Firestore saveState failed: $e');
       }
+      return result;
     }
   }
 
@@ -109,6 +121,46 @@ class FirestoreSyncService {
       }
       return null;
     }
+  }
+}
+
+class FirestoreSyncResult {
+  const FirestoreSyncResult._({
+    required this.succeeded,
+    required this.status,
+    this.errorMessage,
+  });
+
+  factory FirestoreSyncResult.success() {
+    return const FirestoreSyncResult._(
+      succeeded: true,
+      status: 'Last sync succeeded',
+    );
+  }
+
+  factory FirestoreSyncResult.failure(String safeMessage) {
+    return FirestoreSyncResult._(
+      succeeded: false,
+      status: safeMessage,
+      errorMessage: safeMessage,
+    );
+  }
+
+  final bool succeeded;
+  final String status;
+  final String? errorMessage;
+}
+
+String _safeErrorMessage(FirebaseException error) {
+  switch (error.code) {
+    case 'permission-denied':
+      return 'Firestore permission denied';
+    case 'unauthenticated':
+      return 'Firebase unavailable';
+    case 'unavailable':
+      return 'Firebase unavailable';
+    default:
+      return 'Unknown sync error';
   }
 }
 

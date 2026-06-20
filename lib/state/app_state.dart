@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -44,6 +45,9 @@ class AppState extends ChangeNotifier {
   int? _feedRevokedAtMillis;
   String? _cachedIcsText;
   int? _cachedIcsUpdatedAtMillis;
+  String _lastSyncStatus = 'Sync pending';
+  String? _lastSyncErrorMessage;
+  int? _lastSyncAttemptAtMillis;
 
   AppState({required List<Activity> activities, SavedState? savedState})
       : activities = activities.map((activity) => activity.copy()).toList() {
@@ -84,6 +88,9 @@ class AppState extends ChangeNotifier {
   int? get feedRevokedAtMillis => _feedRevokedAtMillis;
   String? get cachedIcsText => _cachedIcsText;
   int? get cachedIcsUpdatedAtMillis => _cachedIcsUpdatedAtMillis;
+  String get lastSyncStatus => _lastSyncStatus;
+  String? get lastSyncErrorMessage => _lastSyncErrorMessage;
+  int? get lastSyncAttemptAtMillis => _lastSyncAttemptAtMillis;
   String get feedTokenPreview {
     final token = _feedToken;
     if (token == null || token.isEmpty) return 'No token yet';
@@ -119,7 +126,7 @@ class AppState extends ChangeNotifier {
       // Re-derive rather than re-save remote.state verbatim: _applySavedState
       // just rebuilt _weekPlan against "now", which may be a different
       // calendar week than whatever remote.state's cached ICS reflected.
-      FirestoreSyncService.saveState(uid, _currentSavedState());
+      await _saveStateToFirestore(uid, _currentSavedState());
       notifyListeners();
       return;
     }
@@ -133,7 +140,7 @@ class AppState extends ChangeNotifier {
       _updatedAtMillis = stateToSave.updatedAtMillis;
       _persistLocal(stateToSave);
     }
-    FirestoreSyncService.saveState(uid, stateToSave);
+    await _saveStateToFirestore(uid, stateToSave);
     if (metadataChanged) {
       notifyListeners();
     }
@@ -459,8 +466,39 @@ class AppState extends ChangeNotifier {
     final state = _currentSavedState(updatedAtMillis: _updatedAtMillis);
     _persistLocal(state);
     if (_userId != null) {
-      FirestoreSyncService.saveState(_userId!, state);
+      unawaited(_saveStateToFirestore(_userId!, state));
     }
+  }
+
+  Future<void> _saveStateToFirestore(String uid, SavedState state) async {
+    _markSyncPending();
+    final result = await FirestoreSyncService.saveState(uid, state);
+    _applySyncResult(result);
+  }
+
+  void _markSyncPending() {
+    _lastSyncStatus = 'Sync pending';
+    _lastSyncErrorMessage = null;
+    _lastSyncAttemptAtMillis = DateTime.now().millisecondsSinceEpoch;
+    notifyListeners();
+  }
+
+  void _applySyncResult(FirestoreSyncResult result) {
+    _lastSyncStatus = result.status;
+    _lastSyncErrorMessage = result.errorMessage;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setSyncDiagnosticForTesting({
+    required String status,
+    String? errorMessage,
+    int? attemptedAtMillis,
+  }) {
+    _lastSyncStatus = status;
+    _lastSyncErrorMessage = errorMessage;
+    _lastSyncAttemptAtMillis = attemptedAtMillis;
+    notifyListeners();
   }
 
   void _persistLocal(SavedState state) {

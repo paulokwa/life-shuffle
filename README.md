@@ -40,3 +40,17 @@ npm test
 ```
 
 `npm test` runs `netlify/tests/calendar-feed.test.js` with Node's built-in test runner — no credentials needed, since it only exercises the pure decision logic and the no-credentials/wrong-method/missing-token error paths. Tests intentionally live outside `netlify/functions` so Netlify does not deploy them as serverless functions. Testing against a real calendar requires `netlify dev` plus a real `FIREBASE_SERVICE_ACCOUNT_JSON` — see `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8.
+
+## Diagnostics
+
+Local deployment diagnostics live in `docs/dev/DIAGNOSTICS.md` and `tool/diagnostics/`.
+
+Start with:
+
+```
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_netlify_env.ps1
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1
+```
+
+The scripts check Netlify env var names, deploy/check Firestore rules, and inspect safe Firestore calendar fields. They must not print secret values, full feed tokens, private keys, or cached ICS bodies.

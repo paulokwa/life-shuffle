@@ -178,6 +178,58 @@ void main() {
     expect(find.text('Kwame and Laura'), findsNothing);
   });
 
+  testWidgets('Settings hides sync diagnostics when there is no sync error',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings-sync-diagnostics-card')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Settings shows safe sync diagnostics after a sync error',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities)
+      ..setSyncDiagnosticForTesting(
+        status: 'Firestore permission denied',
+        errorMessage: 'Firestore permission denied',
+        attemptedAtMillis: 12345,
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings-sync-diagnostics-card')),
+      findsOneWidget,
+    );
+    expect(find.text('Sync diagnostics'), findsOneWidget);
+    expect(find.text('Firestore permission denied'), findsOneWidget);
+    expect(find.text('Last attempt: 12345'), findsOneWidget);
+    expect(find.textContaining('BEGIN:VCALENDAR'), findsNothing);
+    expect(find.textContaining('private_key'), findsNothing);
+  });
+
   testWidgets('Header displays confirmed calendar name',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
