@@ -248,3 +248,15 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Setup flow gates should be stored in `SavedState` when they should survive reload, sign-out/sign-in, or cleared browser storage for signed-in users.
 
 ---
+
+## 2026-06-20 - Settings/Activities toggles flashed and bounced to Today (signed-in only)
+
+- **Context**: After `AuthGate` was made an `AppState` listener (the initial-sync fix above), every Settings/Activities control that mutates `AppState` — Plan style, Difficulty/Energy/Social toggles, the Publishing toggle, Activities page toggles — started briefly flashing and returning the signed-in user to the Today tab. Did not reproduce in local-only mode or in widget tests, only on the deployed Netlify build while signed in.
+- **Symptoms**: No console errors, no full-page network reload (ruled out a stale service-worker/page reload). Reproduced consistently across every toggle, not just the one being actively tested, since they all funnel through the same `AppState.notifyListeners()`.
+- **Cause**: `AuthGate.build()` called `FirebaseAuth.instance.authStateChanges()` fresh inside `build()`, creating a new `Stream<User?>` instance every rebuild. Once `AuthGate` rebuilt on every `AppState` change (not just real auth changes), `StreamBuilder` saw a "new" stream each time and resubscribed, briefly dropping to `ConnectionState.waiting` (showing `_SplashScreen`) before Firebase immediately re-emitted the current user to the new subscription. That `BottomNavShell` -> `_SplashScreen` -> `BottomNavShell` swap unmounted and remounted `BottomNavShell`, resetting its selected tab index back to 0 (Today). Only manifests when `AuthService.isReady` is true (real Firebase signed-in session), which is why local-only mode and widget tests (no real Firebase init) never hit the buggy branch.
+- **Fix**: Cache `FirebaseAuth.instance.authStateChanges()` once per `_AuthGateState` (a `final` field set at construction) instead of calling it inside `build()`, so `StreamBuilder` always receives the same stream identity across rebuilds.
+- **Files affected**:
+  - `lib/widgets/auth_gate.dart`
+- **Prevention / future note**: Any `Stream`/`Future` passed to a `StreamBuilder`/`FutureBuilder` must be created once (field/`initState`), never inline in `build()`, especially on a widget that rebuilds in response to a broad listener like a whole-app `ChangeNotifier`. Diagnosing this took longer than necessary because of a missing `netlify.toml` Flutter version pin (separate, real issue, but not the actual cause) — when local repro fails but production repro is consistent, check what code paths are gated behind environment flags like `AuthService.isReady` before assuming an infra/version mismatch.
+
+---

@@ -1051,3 +1051,27 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings can rename the current calendar, and the name updates in Settings/header state without changing feed token behavior. No multiple-calendar, switcher, sharing/member, ICS endpoint, or Firestore data-reset work was added.
 - **Next recommended step**: Continue with the planned text export / print foundation after deploying or manually smoke-checking the rename in the browser.
 - **Open questions**: None.
+
+---
+
+## 2026-06-20 - Fix Settings/Activities toggles bouncing to Today on Netlify
+
+- **Goal**: Fix a reported bug where tapping any Settings or Activities toggle (Plan style, Difficulty/Energy/Social, Publishing, Activities page toggles) briefly flashed and returned the signed-in user to the Today tab on the deployed Netlify build.
+- **Summary**: Ruled out an app-logic bug first by driving the exact reported scenarios (Plan style buttons, all Settings switches, Activities toggle, a simulated signed-in user with Firestore saves firing) directly against `AuthGate`/`BottomNavShell` in widget tests — all passed on local Flutter 3.41.9, and the user confirmed the local web build was also clean, narrowing the cause to something signed-in/production-specific. First pinned `netlify.toml`'s Flutter clone to tag `3.41.9` (was cloning `stable` fresh on every deploy, a real but unrelated risk) — did not fix the bug. User reported the bug appeared sometime after the Publishing/ICS feed feature work and affected every toggle, not just Publishing, which pointed at a single shared mechanism. Found that commit `5d65457` made `AuthGate` listen to all `AppState` changes via `addListener`, and `AuthGate.build()` called `FirebaseAuth.instance.authStateChanges()` fresh inside `build()` each time — creating a new `Stream` instance per rebuild. Once `AuthGate` rebuilt on every `AppState.notifyListeners()` (i.e. every toggle anywhere in the app), `StreamBuilder` resubscribed and briefly showed the splash screen before Firebase re-emitted the current user, unmounting/remounting `BottomNavShell` and resetting its tab index to 0. Fixed by caching the auth stream once per `_AuthGateState` instance instead of recreating it in `build()`.
+- **Files changed**:
+  - `netlify.toml` (Flutter version pin; kept as a general reproducibility improvement even though it wasn't the root cause)
+  - `lib/widgets/auth_gate.dart`
+  - `docs/TROUBLESHOOTING_LOG.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Investigate empirically (widget tests reproducing the exact reported controls) before guessing at fixes, since the bug didn't reproduce locally or in tests.
+  - Keep the Flutter version pin in `netlify.toml` even after finding the real cause, since an unpinned `stable` clone on every deploy is a legitimate reproducibility risk independent of this bug.
+  - Fix at the `AuthGate` stream-identity level rather than touching any individual toggle/control, since the bug affected all of them via one shared listener.
+- **Tests run**:
+  - `flutter test test/nav_bug_repro_test.dart` (temporary, since removed) - passed for Plan style, all Settings switches, Activities toggle, and a simulated signed-in scenario; none reproduced the bug, confirming it wasn't in app logic reachable from tests (no real Firebase init in test/local-only builds, so the buggy `StreamBuilder` branch was never exercised).
+  - `flutter test` - passed, 84/84 tests, after the `auth_gate.dart` fix.
+  - `flutter analyze lib/widgets/auth_gate.dart` - no issues.
+  - User confirmed on the redeployed Netlify build: bug is fixed.
+- **Current state**: Settings and Activities toggles no longer bounce signed-in users back to Today. `netlify.toml` now pins Flutter to 3.41.9 for reproducible builds.
+- **Next recommended step**: None pending for this bug. General note: this exposed a test-coverage gap — no widget test exercises the real `StreamBuilder<User?>` / `AuthService.isReady` branch in `AuthGate`, since Firebase is never initialized in the test environment.
+- **Open questions**: None.
