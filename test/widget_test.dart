@@ -945,6 +945,39 @@ void main() {
         findsNothing);
   });
 
+  testWidgets('Settings exposes week text export copy action',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('EXPORT / PRINT'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-export-print-card')),
+      findsOneWidget,
+    );
+    expect(find.text('Week text export'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-copy-week-text-export')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-copy-week-text-export')),
+    );
+    await tester.pump();
+
+    expect(find.text('Week text copied'), findsOneWidget);
+  });
+
   test('Publishing metadata enables disables regenerates and persists',
       () async {
     SharedPreferences.setMockInitialValues({});

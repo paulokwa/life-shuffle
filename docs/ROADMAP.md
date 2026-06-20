@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, local ICS/iCalendar feed-string generation, and private feed token metadata are all working. Settings shows account, calendar info, planning style, activity-default dimension toggles, Publishing controls for local feed metadata, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items. A public read-only ICS feed endpoint now exists (`netlify/functions/calendar-feed.js`): Settings > Publishing shows the real subscribable link with a working copy button, and the function serves the calendar's cached ICS text by `feedToken`, gated to the same enabled/disabled/revoked behavior already in the app. Production endpoint verification passed against real Firestore data; a real Apple Calendar, Google Calendar, or Outlook subscription test is still recommended.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, local ICS/iCalendar feed-string generation, and private feed token metadata are all working. Settings shows account, calendar info, planning style, activity-default dimension toggles, Publishing controls for local feed metadata, a simple Export / print text-copy action, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items. A public read-only ICS feed endpoint now exists (`netlify/functions/calendar-feed.js`): Settings > Publishing shows the real subscribable link with a working copy button, and the function serves the calendar's cached ICS text by `feedToken`, gated to the same enabled/disabled/revoked behavior already in the app. Production endpoint verification passed against real Firestore data; a real Apple Calendar, Google Calendar, or Outlook subscription test is still recommended.
 
-Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, print/export, remaining Settings controls (export/print), and a real calendar-app subscription test for the public feed.
+Still to build for MVP 1: multiple calendars + switcher, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, printable/PDF export, output detail toggles, and a real calendar-app subscription test for the public feed.
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -50,6 +50,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add Settings > Publishing placeholder showing feed is not enabled yet but local ICS foundation exists
 - [x] Add Settings > Publishing local metadata controls: feed enable/disable, no-endpoint copy/link placeholder, token preview, regenerate token, revoke token, feed explanation
 - [x] Add Settings > Publishing public feed controls: copy link and public endpoint-backed explanation
+- [x] Add Settings > Export/print text export section with Copy text
 - [ ] Add Settings > Export/print: default output details and note/status/dimension visibility
 - [x] Add Settings > Privacy/help: privacy explanation, feed explanation, help/about
 - [ ] Add calendar-level plan settings: week start, earliest/latest time, default activity count
@@ -112,7 +113,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add public endpoint support for revoked/regenerated feed URLs
 - [ ] Add printable calendar view
 - [ ] Add PDF export if practical
-- [ ] Add simple text/share export if practical
+- [x] Add simple text/share export if practical
 - [ ] Add output detail toggles for print/export
 
 ### MVP 1 export/output detail options

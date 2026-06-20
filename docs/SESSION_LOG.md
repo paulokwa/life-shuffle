@@ -1075,3 +1075,41 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings and Activities toggles no longer bounce signed-in users back to Today. `netlify.toml` now pins Flutter to 3.41.9 for reproducible builds.
 - **Next recommended step**: None pending for this bug. General note: this exposed a test-coverage gap — no widget test exercises the real `StreamBuilder<User?>` / `AuthService.isReady` branch in `AuthGate`, since Firebase is never initialized in the test environment.
 - **Open questions**: None.
+
+---
+
+## 2026-06-20 - Deployed onboarding diagnostic check and text export foundation
+
+- **Goal**: Smoke-check the latest deployed onboarding/calendar rename work, then start the simple text/share export foundation without adding PDF, printable layouts, calendar switching, sharing, or ICS endpoint changes.
+- **Summary**: Confirmed local `main` was clean at the start of the session and matched `origin/main` at `6ca838e1a827c651197fe9985e92db7d93ad63ce`. Netlify production was already deployed and ready for that same commit, so no new deploy was needed. Ran the safe Firestore calendar diagnostic against production data without resetting or directly editing Firestore. It found two calendar documents with `displayNameConfirmed: true`, display name present, `calendarNameConfirmed: true`, and `introOnboardingCompleted: true`. Feed tokens were present, but publishing was disabled and cached ICS text was absent in the inspected records. Browser automation could load the deployed sign-in screen, but the available Playwright MCP tools could not target Flutter web controls because the app exposed no text selectors and the tool set had no coordinate/evaluate action; the deployed sign-in and Settings rename UI path was therefore not completed in this session. Added a deterministic plain-text week export service and a Settings > Export / print card with Copy text. The service includes title, date/time, duration, category, check-in status, and locked status, and excludes optional private notes by default.
+- **Files changed**:
+  - `lib/services/text_week_export_service.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/text_week_export_service_test.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep export foundation to Copy text only for now; no share sheet, PDF, printable calendar layout, output-detail toggles, calendar switcher, sharing/member system, or ICS endpoint changes.
+  - Add optional private-note input to the export service for future compatibility, but do not add notes persistence or UI because notes do not exist in current app state.
+  - Update roadmap only for completed text export items; leave output-detail toggles and print/PDF unchecked.
+- **Tests run**:
+  - `git fetch origin main --prune`
+  - `git status --short --branch`
+  - `git rev-parse HEAD`
+  - `git rev-parse origin/main`
+  - `npx netlify status`
+  - `npx netlify api listSiteDeploys --data ...` - confirmed production deploy commit matched current `HEAD`.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed; safe fields only, no full feed URLs or secret values.
+  - `dart format lib/services/text_week_export_service.dart lib/screens/settings_screen.dart test/text_week_export_service_test.dart test/widget_test.dart`
+  - `flutter test test/text_week_export_service_test.dart` - passed.
+  - `flutter test test/widget_test.dart --plain-name "Settings exposes week text export copy action"` - passed on serial rerun; the first parallel attempt hit Flutter's startup lock.
+  - `flutter test` - passed, 89/89 tests.
+  - `flutter analyze --no-fatal-infos` - passed with 16 existing info-level lints.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - `npm test` - not run because no JavaScript files were touched.
+- **Current state**: The app has a tested plain-text selected-week export foundation reachable from Settings > Export / print via Copy text. Production diagnostics show onboarding booleans are now true, but the live browser sign-in/rename smoke path remains manually unverified from this harness. Production Firestore data was not reset.
+- **Next recommended step**: Manually sign into the deployed app in a normal browser profile, rename the current calendar from Settings > Calendar, verify the header updates, then rerun the Firestore diagnostic to confirm the new title and current feed/cache state. After that, consider a small Plan-screen Copy text action or output-detail toggles as the next export slice.
+- **Open questions**:
+  - Should publishing be re-enabled on the inspected production calendar before checking cached ICS persistence, or is the current disabled/no-cache state intentional?

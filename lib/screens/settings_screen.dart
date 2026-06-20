@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/planner_service.dart' show PlanStyle;
+import '../services/text_week_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
@@ -59,7 +60,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _SectionLabel(label: 'ACCOUNT'),
+                  const _SectionLabel(label: 'ACCOUNT'),
                   const SizedBox(height: 10),
                   LsCard(
                     child: Column(
@@ -132,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
                     _SyncDiagnosticsCard(state: state),
                   ],
                   const SizedBox(height: 20),
-                  _SectionLabel(label: 'CALENDAR'),
+                  const _SectionLabel(label: 'CALENDAR'),
                   const SizedBox(height: 10),
                   _SettingsGroup(
                     children: [
@@ -174,15 +175,15 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _SectionLabel(label: 'PLANNING'),
+                  const _SectionLabel(label: 'PLANNING'),
                   const SizedBox(height: 10),
                   _PlanStyleCard(state: state),
                   const SizedBox(height: 16),
-                  _SectionLabel(label: 'ACTIVITY DEFAULTS'),
+                  const _SectionLabel(label: 'ACTIVITY DEFAULTS'),
                   const SizedBox(height: 10),
                   _ActivityDefaultsCard(state: state),
                   const SizedBox(height: 16),
-                  _SectionLabel(label: 'CATEGORIES'),
+                  const _SectionLabel(label: 'CATEGORIES'),
                   const SizedBox(height: 10),
                   LsCard(
                     child: Column(
@@ -234,9 +235,13 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _SectionLabel(label: 'PUBLISHING'),
+                  const _SectionLabel(label: 'PUBLISHING'),
                   const SizedBox(height: 10),
                   _PublishingCard(state: state),
+                  const SizedBox(height: 16),
+                  const _SectionLabel(label: 'EXPORT / PRINT'),
+                  const SizedBox(height: 10),
+                  _ExportPrintCard(state: state),
                   const SizedBox(height: 16),
                   const _SectionLabel(label: 'PRIVACY / HELP'),
                   const SizedBox(height: 10),
@@ -244,8 +249,8 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   const _SectionLabel(label: 'ABOUT'),
                   const SizedBox(height: 10),
-                  _SettingsGroup(
-                    children: const [
+                  const _SettingsGroup(
+                    children: [
                       _SettingsRow(
                         icon: Icons.info_outline_rounded,
                         label: 'Version',
@@ -287,6 +292,86 @@ class SettingsScreen extends StatelessWidget {
         ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
     return labels;
   }
+}
+
+class _ExportPrintCard extends StatelessWidget {
+  const _ExportPrintCard({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('settings-export-print-card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: warmBeige,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.ios_share_rounded,
+                  size: 18,
+                  color: primaryTerracotta,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Week text export',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Copies this week as plain text. Private notes are not included.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _PublishingActionButton(
+            key: const ValueKey('settings-copy-week-text-export'),
+            icon: Icons.copy_rounded,
+            label: 'Copy text',
+            onTap: () => _copyWeekTextExport(context, state),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _copyWeekTextExport(BuildContext context, AppState state) {
+  final text = TextWeekExportService.generate(
+    calendarTitle: state.calendarTitle,
+    plan: state.weekPlan,
+  );
+  Clipboard.setData(ClipboardData(text: text));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Week text copied')),
+  );
 }
 
 Future<void> _showRenameCalendarDialog(
