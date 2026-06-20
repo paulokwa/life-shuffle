@@ -22,13 +22,22 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   StreamSubscription<User?>? _authSubscription;
 
+  // Cached once so `StreamBuilder` in build() always sees the same stream
+  // identity. Calling FirebaseAuth.instance.authStateChanges() fresh inside
+  // build() creates a new Stream instance every rebuild, which makes
+  // StreamBuilder resubscribe and briefly drop to ConnectionState.waiting
+  // (showing _SplashScreen) on every AppState change, not just real auth
+  // changes -- that flash unmounts and remounts BottomNavShell, resetting
+  // its selected tab back to Today.
+  final Stream<User?>? _authStateChanges =
+      AuthService.isReady ? FirebaseAuth.instance.authStateChanges() : null;
+
   @override
   void initState() {
     super.initState();
     widget.appState.addListener(_handleAppStateChanged);
     if (AuthService.isReady) {
-      _authSubscription =
-          FirebaseAuth.instance.authStateChanges().listen((user) {
+      _authSubscription = _authStateChanges!.listen((user) {
         widget.appState.setUserId(user?.uid);
       });
     }
@@ -121,7 +130,7 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: _authStateChanges,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
