@@ -33,6 +33,7 @@ class AppState extends ChangeNotifier {
   String? _displayName;
   bool _displayNameConfirmed = false;
   bool _calendarNameConfirmed = false;
+  bool _introOnboardingCompleted = false;
   bool _checkInPromptDismissed = false;
   String? _userId;
   String? _calendarId;
@@ -88,6 +89,7 @@ class AppState extends ChangeNotifier {
   String? get calendarId => _calendarId;
   String get calendarTitle => _calendarTitle;
   bool get calendarNameConfirmed => _calendarNameConfirmed;
+  bool get introOnboardingCompleted => _introOnboardingCompleted;
   String? get calendarOwnerUserId => _calendarOwnerUserId;
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
@@ -325,6 +327,13 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  void completeIntroOnboarding() {
+    if (_introOnboardingCompleted) return;
+    _introOnboardingCompleted = true;
+    _persist();
+    notifyListeners();
+  }
+
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
@@ -472,6 +481,7 @@ class AppState extends ChangeNotifier {
     }
     _calendarNameConfirmed = saved.calendarNameConfirmed &&
         (savedCalendarTitle != null || _calendarTitle.trim().isNotEmpty);
+    _introOnboardingCompleted = saved.introOnboardingCompleted;
     _difficultyEnabled = saved.difficultyEnabled;
     _energyEnabled = saved.energyEnabled;
     _socialEnabled = saved.socialEnabled;
@@ -553,6 +563,9 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     PersistenceService.saveCalendarTitle(state.calendarTitle);
     PersistenceService.saveCalendarNameConfirmed(state.calendarNameConfirmed);
+    PersistenceService.saveIntroOnboardingCompleted(
+      state.introOnboardingCompleted,
+    );
     PersistenceService.saveDifficultyEnabled(state.difficultyEnabled);
     PersistenceService.saveEnergyEnabled(state.energyEnabled);
     PersistenceService.saveSocialEnabled(state.socialEnabled);
@@ -631,6 +644,7 @@ class AppState extends ChangeNotifier {
       displayNameConfirmed: _displayNameConfirmed,
       calendarTitle: _calendarTitle,
       calendarNameConfirmed: _calendarNameConfirmed,
+      introOnboardingCompleted: _introOnboardingCompleted,
       difficultyEnabled: _difficultyEnabled,
       energyEnabled: _energyEnabled,
       socialEnabled: _socialEnabled,

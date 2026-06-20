@@ -20,7 +20,6 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  bool _onboardingDone = false;
   StreamSubscription<User?>? _authSubscription;
 
   @override
@@ -85,11 +84,10 @@ class _AuthGateState extends State<AuthGate> {
                         return saved;
                       },
                     )
-                  : _onboardingDone
+                  : widget.appState.introOnboardingCompleted
                       ? const BottomNavShell()
                       : OnboardingScreen(
-                          onComplete: () =>
-                              setState(() => _onboardingDone = true),
+                          onComplete: widget.appState.completeIntroOnboarding,
                         ),
     );
   }

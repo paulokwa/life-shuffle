@@ -20,6 +20,7 @@ class PersistenceService {
   static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
   static const _keyCalendarTitle = 'ls_calendar_title';
   static const _keyCalendarNameConfirmed = 'ls_calendar_name_confirmed';
+  static const _keyIntroOnboardingCompleted = 'ls_intro_onboarding_completed';
   static const _keyDifficultyEnabled = 'ls_difficulty_enabled';
   static const _keyEnergyEnabled = 'ls_energy_enabled';
   static const _keySocialEnabled = 'ls_social_enabled';
@@ -51,6 +52,8 @@ class PersistenceService {
     final calendarTitle = _prefs.getString(_keyCalendarTitle);
     final calendarNameConfirmed =
         _prefs.getBool(_keyCalendarNameConfirmed) ?? false;
+    final introOnboardingCompleted =
+        _prefs.getBool(_keyIntroOnboardingCompleted) ?? false;
     final difficultyEnabled = _prefs.getBool(_keyDifficultyEnabled) ?? false;
     final energyEnabled = _prefs.getBool(_keyEnergyEnabled) ?? false;
     final socialEnabled = _prefs.getBool(_keySocialEnabled) ?? false;
@@ -94,6 +97,7 @@ class PersistenceService {
       displayNameConfirmed: displayNameConfirmed,
       calendarTitle: calendarTitle,
       calendarNameConfirmed: calendarNameConfirmed,
+      introOnboardingCompleted: introOnboardingCompleted,
       difficultyEnabled: difficultyEnabled,
       energyEnabled: energyEnabled,
       socialEnabled: socialEnabled,
@@ -144,6 +148,9 @@ class PersistenceService {
 
   static void saveCalendarNameConfirmed(bool value) =>
       _prefs.setBool(_keyCalendarNameConfirmed, value);
+
+  static void saveIntroOnboardingCompleted(bool value) =>
+      _prefs.setBool(_keyIntroOnboardingCompleted, value);
 
   static void saveDifficultyEnabled(bool value) =>
       _prefs.setBool(_keyDifficultyEnabled, value);
@@ -250,6 +257,7 @@ class SavedState {
     this.displayNameConfirmed = false,
     this.calendarTitle,
     this.calendarNameConfirmed = false,
+    this.introOnboardingCompleted = false,
     this.difficultyEnabled = false,
     this.energyEnabled = false,
     this.socialEnabled = false,
@@ -273,6 +281,7 @@ class SavedState {
   final bool displayNameConfirmed;
   final String? calendarTitle;
   final bool calendarNameConfirmed;
+  final bool introOnboardingCompleted;
   final bool difficultyEnabled;
   final bool energyEnabled;
   final bool socialEnabled;
@@ -300,6 +309,7 @@ class SavedState {
       'displayNameConfirmed': displayNameConfirmed,
       'calendarTitle': calendarTitle,
       'calendarNameConfirmed': calendarNameConfirmed,
+      'introOnboardingCompleted': introOnboardingCompleted,
       'difficultyEnabled': difficultyEnabled,
       'energyEnabled': energyEnabled,
       'socialEnabled': socialEnabled,
@@ -333,6 +343,7 @@ class SavedState {
       displayNameConfirmed: _readBool(map['displayNameConfirmed']),
       calendarTitle: _readNullableString(map['calendarTitle']),
       calendarNameConfirmed: _readBool(map['calendarNameConfirmed']),
+      introOnboardingCompleted: _readBool(map['introOnboardingCompleted']),
       difficultyEnabled: _readBool(map['difficultyEnabled']),
       energyEnabled: _readBool(map['energyEnabled']),
       socialEnabled: _readBool(map['socialEnabled']),

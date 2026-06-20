@@ -231,3 +231,20 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Any future signed-in routing gate should wait for initial remote restore before deciding setup/onboarding steps. Local-only mode should continue without waiting because it has no signed-in user ID.
 
 ---
+
+## 2026-06-20 - Mini onboarding completion was widget-local only
+
+- **Context**: The mini onboarding intro appeared again after login/reload even though display-name and calendar-name setup were already persisted.
+- **Symptoms**: `AuthGate` held completion in `_onboardingDone`, so recreating the widget reset the intro state. Firestore diagnostic showed no remote `introOnboardingCompleted` flag yet.
+- **Cause**: Mini onboarding completion had not been included in `SavedState`, SharedPreferences, or the flat Firestore calendar document.
+- **Fix**: Added `introOnboardingCompleted` to `SavedState`, local persistence, Firestore mapping, and `AppState.completeIntroOnboarding()`. `AuthGate` now routes from `appState.introOnboardingCompleted`, and Settings > Privacy/help can replay the intro without resetting the stored flag.
+- **Files affected**:
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `tool/diagnostics/check_firestore_calendar.js`
+- **Prevention / future note**: Setup flow gates should be stored in `SavedState` when they should survive reload, sign-out/sign-in, or cleared browser storage for signed-in users.
+
+---

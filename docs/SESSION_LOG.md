@@ -995,3 +995,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Deploy and manually verify the cleared-browser sign-in flow once: after sign-in, expect splash while syncing, then mini onboarding or the main app depending on session onboarding state, with no display-name or calendar-name prompt for the existing Firestore calendar.
 - **Open questions**:
   - Should the mini onboarding completion itself eventually persist remotely, or stay per-session/local as it is today?
+
+---
+
+## 2026-06-20 - Persist mini onboarding completion
+
+- **Goal**: Show the mini onboarding intro once per signed-in user/calendar, then persist completion locally and remotely so cleared browser/client data does not make returning users see it again after Firestore sync.
+- **Summary**: Added `introOnboardingCompleted` to `SavedState`, SharedPreferences persistence, Firestore `toMap`/`fromMap`, and `AppState`. Replaced `AuthGate`'s widget-local `_onboardingDone` with `appState.introOnboardingCompleted`, preserving the initial-sync splash behavior so signed-in returning users do not see the intro before remote state lands. Added `AppState.completeIntroOnboarding()` and wired the intro completion/skip action to it. Added Settings > Privacy/help `Replay intro`, which pushes the existing `OnboardingScreen` manually without resetting the persisted completion flag. Extended the Firestore calendar diagnostic with a safe `introOnboardingCompleted` boolean. Current diagnostic result for the inspected remote calendar is `introOnboardingCompleted: false`, so that calendar will need one completion/skip on the deployed build before returning users skip the intro remotely.
+- **Files changed**:
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/widgets/auth_gate.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `tool/diagnostics/check_firestore_calendar.js`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Decisions made**:
+  - Treat mini onboarding completion as selected-calendar app state, stored in the same flat `SavedState` path as display/calendar confirmation.
+  - Use replay, not reset, in Settings so users can manually view the intro without changing completion state.
+  - Keep the intro flow itself unchanged; no new walkthrough system, animation work, or feature-tour complexity was added.
+- **Tests run**:
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed; safe diagnostic now reports `introOnboardingCompleted`.
+  - Focused widget tests for fresh onboarding completion, remote completed restore, and Settings replay - passed.
+- **Current state**: Code now persists mini onboarding completion locally and through Firestore sync. A new remote boolean will be written on the next state save after completing/skipping the intro in the updated app.
+- **Next recommended step**: Deploy, complete or skip the mini intro once on the signed-in calendar, then rerun `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` and confirm `introOnboardingCompleted: true`.
+- **Open questions**: None.

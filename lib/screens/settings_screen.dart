@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
+import 'onboarding_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -614,42 +615,59 @@ class _PrivacyHelpCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LsCard(
-      key: ValueKey('settings-privacy-help'),
+    return LsCard(
+      key: const ValueKey('settings-privacy-help'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _PrivacyHelpItem(
+          const _PrivacyHelpItem(
             icon: Icons.lock_outline_rounded,
             text: 'Life Shuffle calendars are private to signed-in members.',
           ),
-          SizedBox(height: 12),
-          _PrivacyHelpItem(
+          const SizedBox(height: 12),
+          const _PrivacyHelpItem(
             icon: Icons.group_outlined,
             text: 'Shared members can see and edit the shared calendar.',
           ),
-          SizedBox(height: 12),
-          _PrivacyHelpItem(
+          const SizedBox(height: 12),
+          const _PrivacyHelpItem(
             icon: Icons.rss_feed_rounded,
             text: 'Published calendar feeds will be read-only.',
           ),
-          SizedBox(height: 12),
-          _PrivacyHelpItem(
+          const SizedBox(height: 12),
+          const _PrivacyHelpItem(
             icon: Icons.link_rounded,
             text:
                 'Anyone with a published feed link may be able to view that feed.',
           ),
-          SizedBox(height: 12),
-          _PrivacyHelpItem(
+          const SizedBox(height: 12),
+          const _PrivacyHelpItem(
             icon: Icons.refresh_rounded,
             text: 'Feed links can be revoked or regenerated later.',
           ),
-          SizedBox(height: 12),
-          _PrivacyHelpItem(
+          const SizedBox(height: 12),
+          const _PrivacyHelpItem(
             icon: Icons.schedule_rounded,
             text: 'External calendar apps may not refresh immediately.',
           ),
+          const SizedBox(height: 14),
+          _TextButtonRow(
+            key: const ValueKey('settings-replay-intro'),
+            icon: Icons.replay_rounded,
+            label: 'Replay intro',
+            onTap: () => _replayIntro(context),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _replayIntro(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => OnboardingScreen(
+          onComplete: () => Navigator.of(routeContext).pop(),
+        ),
       ),
     );
   }
@@ -968,6 +986,7 @@ class _SettingsRow extends StatelessWidget {
 
 class _TextButtonRow extends StatelessWidget {
   const _TextButtonRow({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,

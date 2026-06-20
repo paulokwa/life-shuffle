@@ -21,6 +21,7 @@ import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
 import 'package:life_shuffle/theme/app_colors.dart';
 import 'package:life_shuffle/widgets/auth_gate.dart';
+import 'package:life_shuffle/widgets/bottom_nav_shell.dart';
 import 'package:life_shuffle/widgets/life_shuffle_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -141,8 +142,49 @@ void main() {
     expect(saved.calendarNameConfirmed, isTrue);
   });
 
+  test('AppState completes and persists intro onboarding', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.introOnboardingCompleted, isFalse);
+
+    appState.completeIntroOnboarding();
+
+    expect(appState.introOnboardingCompleted, isTrue);
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.introOnboardingCompleted, isTrue);
+
+    final restored = AppState(
+      activities: saved.activities,
+      savedState: saved,
+    );
+    expect(restored.introOnboardingCompleted, isTrue);
+  });
+
+  test('SavedState maps intro onboarding completion for Firestore sync', () {
+    const state = SavedState(
+      activities: [],
+      seed: 0,
+      updatedAtMillis: 100,
+      introOnboardingCompleted: true,
+      enabledMap: {},
+      checkinMap: {},
+      lockedMap: {},
+    );
+
+    final map = state.toMap();
+    expect(map['introOnboardingCompleted'], isTrue);
+
+    final restored = SavedState.fromMap(map);
+    expect(restored.introOnboardingCompleted, isTrue);
+
+    final defaulted = SavedState.fromMap(const {});
+    expect(defaulted.introOnboardingCompleted, isFalse);
+  });
+
   testWidgets(
-      'Fresh user flow asks display name, calendar name, then onboarding',
+      'Fresh user flow asks display name, calendar name, onboarding, then app',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -168,6 +210,46 @@ void main() {
 
     expect(find.byType(CalendarNameScreen), findsNothing);
     expect(find.byType(OnboardingScreen), findsOneWidget);
+
+    await _completeOnboarding(tester);
+
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(find.byType(BottomNavShell), findsOneWidget);
+    expect(appState.introOnboardingCompleted, isTrue);
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.introOnboardingCompleted, isTrue);
+  });
+
+  testWidgets('Returning local user skips mini onboarding when completed',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: const SavedState(
+        activities: [],
+        seed: 0,
+        updatedAtMillis: 1000,
+        displayName: 'Kwame',
+        displayNameConfirmed: true,
+        calendarTitle: 'Kwame and Laura',
+        calendarNameConfirmed: true,
+        introOnboardingCompleted: true,
+        enabledMap: {},
+        checkinMap: {},
+        lockedMap: {},
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+    await tester.pump();
+
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(find.byType(BottomNavShell), findsOneWidget);
   });
 
   testWidgets('Returning remote user skips both name screens',
@@ -202,6 +284,43 @@ void main() {
     expect(find.byType(DisplayNameScreen), findsNothing);
     expect(find.byType(CalendarNameScreen), findsNothing);
     expect(find.byType(OnboardingScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'Cleared local data with remote intro completed skips mini onboarding',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final remoteLoad = Completer<FirestoreCalendar?>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadDefaultCalendar: (_) => remoteLoad.future,
+      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('remote_intro_completed_user');
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(OnboardingScreen), findsNothing);
+
+    remoteLoad.complete(
+      _remoteCalendar(
+        userId: 'remote_intro_completed_user',
+        displayNameConfirmed: true,
+        calendarNameConfirmed: true,
+        introOnboardingCompleted: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(appState.introOnboardingCompleted, isTrue);
+    expect(find.byType(DisplayNameScreen), findsNothing);
+    expect(find.byType(CalendarNameScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(find.byType(BottomNavShell), findsOneWidget);
   });
 
   testWidgets(
@@ -556,6 +675,37 @@ void main() {
       find.text('External calendar apps may not refresh immediately.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Settings can replay intro without resetting completion',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.completeIntroOnboarding();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-replay-intro')),
+    );
+    await tester.tap(find.byKey(const ValueKey('settings-replay-intro')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+    expect(appState.introOnboardingCompleted, isTrue);
+
+    await _completeOnboarding(tester);
+
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(appState.introOnboardingCompleted, isTrue);
   });
 
   testWidgets('Settings displays publishing controls while disabled',
@@ -2166,6 +2316,7 @@ FirestoreCalendar _remoteCalendar({
   required String userId,
   required bool displayNameConfirmed,
   required bool calendarNameConfirmed,
+  bool introOnboardingCompleted = false,
 }) {
   const updatedAtMillis = 2000;
   const calendarTitle = 'Kwame and Laura';
@@ -2178,6 +2329,7 @@ FirestoreCalendar _remoteCalendar({
       displayNameConfirmed: displayNameConfirmed,
       calendarTitle: calendarTitle,
       calendarNameConfirmed: calendarNameConfirmed,
+      introOnboardingCompleted: introOnboardingCompleted,
       enabledMap: const {},
       checkinMap: const {},
       lockedMap: const {},
@@ -2191,6 +2343,15 @@ FirestoreCalendar _remoteCalendar({
       updatedAtMillis: updatedAtMillis,
     ),
   );
+}
+
+Future<void> _completeOnboarding(WidgetTester tester) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(find.text('Get started'));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpPlanScreen(WidgetTester tester, AppState appState) async {
