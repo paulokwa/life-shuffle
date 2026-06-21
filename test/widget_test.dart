@@ -665,6 +665,78 @@ void main() {
     expect(find.textContaining('private_key'), findsNothing);
   });
 
+  testWidgets('Calendar load failure shows diagnostics and does not save local',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    var saveCallCount = 0;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async {
+        throw const FirestoreSyncException('Firestore permission denied');
+      },
+      saveSelectedFirestoreState: (_, __, ___) async {
+        saveCallCount++;
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(saveCallCount, 0);
+    expect(appState.lastSyncErrorMessage, 'Firestore permission denied');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Sync diagnostics'), findsOneWidget);
+    expect(find.text('Firestore permission denied'), findsOneWidget);
+  });
+
+  test('Member profile load failure keeps remote member metadata visible',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: (_) async {
+        throw const FirestoreSyncException('Member profile lookup failed');
+      },
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.calendarId, 'shared_calendar');
+    expect(appState.calendarMemberUserIds, const ['owner_user', 'laura_user']);
+    expect(appState.calendarMemberDisplayLabels, const ['You', 'laura_us...']);
+    expect(appState.lastSyncErrorMessage, 'Member profile lookup failed');
+  });
+
   test(
       'Existing signed-in user still saves to default calendar when no shared '
       'calendar exists', () async {

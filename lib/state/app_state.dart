@@ -239,7 +239,7 @@ class AppState extends ChangeNotifier {
     try {
       final remoteCalendars = await _loadAccessibleCalendars(uid);
       if (_userId != uid) return;
-      await _refreshMemberProfiles(remoteCalendars);
+      final profileWarning = await _refreshMemberProfiles(remoteCalendars);
       if (_userId != uid) return;
 
       final local = _currentSavedState();
@@ -280,6 +280,15 @@ class AppState extends ChangeNotifier {
           notifyListeners();
         }
       }
+      if (profileWarning != null) {
+        _applySyncResult(FirestoreSyncResult.failure(profileWarning));
+      }
+    } on FirestoreSyncException catch (e) {
+      _applySyncResult(FirestoreSyncResult.failure(e.safeMessage));
+    } catch (_) {
+      _applySyncResult(
+        FirestoreSyncResult.failure('Unknown sync error'),
+      );
     } finally {
       if (_userId == uid && wasInitialSync) {
         _isInitialSyncComplete = true;
@@ -678,7 +687,7 @@ class AppState extends ChangeNotifier {
     return calendars.first;
   }
 
-  Future<void> _refreshMemberProfiles(
+  Future<String?> _refreshMemberProfiles(
     List<FirestoreCalendar> calendars,
   ) async {
     final memberIds = calendars
@@ -687,12 +696,21 @@ class AppState extends ChangeNotifier {
         .toList();
     if (memberIds.isEmpty) {
       _memberProfiles = const {};
-      return;
+      return null;
     }
-    final profiles = await _loadUserProfiles(memberIds);
-    _memberProfiles = Map.unmodifiable({
-      for (final profile in profiles) profile.uid: profile,
-    });
+    try {
+      final profiles = await _loadUserProfiles(memberIds);
+      _memberProfiles = Map.unmodifiable({
+        for (final profile in profiles) profile.uid: profile,
+      });
+      return null;
+    } on FirestoreSyncException catch (e) {
+      _memberProfiles = const {};
+      return e.safeMessage;
+    } catch (_) {
+      _memberProfiles = const {};
+      return 'Member profile lookup failed';
+    }
   }
 
   UserProfile? _memberProfileByEmail(String email) {

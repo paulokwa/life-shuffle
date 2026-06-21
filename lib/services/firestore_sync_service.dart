@@ -137,11 +137,16 @@ class FirestoreSyncService {
               .compareTo(b.metadata.title.toLowerCase());
         });
       return calendars;
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore loadAccessibleCalendars failed: ${e.code}');
+      }
+      throw FirestoreSyncException(_safeErrorMessage(e));
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Firestore loadAccessibleCalendars failed: $e');
       }
-      return const [];
+      throw const FirestoreSyncException('Unknown sync error');
     }
   }
 
@@ -252,11 +257,16 @@ class FirestoreSyncService {
         );
       }
       return profiles;
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore loadUserProfilesByIds failed: ${e.code}');
+      }
+      throw FirestoreSyncException(_safeErrorMessage(e));
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Firestore loadUserProfilesByIds failed: $e');
       }
-      return const [];
+      throw const FirestoreSyncException('Member profile lookup failed');
     }
   }
 
@@ -343,6 +353,15 @@ class FirestoreSyncResult {
   final bool succeeded;
   final String status;
   final String? errorMessage;
+}
+
+class FirestoreSyncException implements Exception {
+  const FirestoreSyncException(this.safeMessage);
+
+  final String safeMessage;
+
+  @override
+  String toString() => safeMessage;
 }
 
 class AddCalendarMemberResult {

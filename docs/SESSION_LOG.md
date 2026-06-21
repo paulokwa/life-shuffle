@@ -1224,3 +1224,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The shared calendar member list should stay on the selected shared calendar after reload, display friendly member names when profiles exist, and show an already-member message for duplicate adds. Firestore data was not reset or deleted, and `tool/serviceAccountKey.json` remains local/gitignored.
 - **Next recommended step**: Deploy this app build through the normal Netlify flow, then manually smoke-test with Laura's account: verify friendly Members labels, duplicate add message, shared calendar selection after reload, and a small Laura edit saving to the shared calendar.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 - Surface shared-calendar load failures instead of local fallback
+
+- **Goal**: Diagnose why production Settings showed the renamed calendar title but only `You` as member, no calendar switcher, and no sync diagnostics even though Firestore had persisted shared membership.
+- **Summary**: Confirmed production was deployed at `f69c4f7`, then verified with the safe Firestore diagnostic that the browser rename persisted to `HqKOyzqkUKeQdM8OppvfowMP4Pt1_default`. The app symptom still matched a failed accessible-calendar list load being treated as an empty list. Fixed the app so `FirestoreSyncService.loadAccessibleCalendars` throws a safe `FirestoreSyncException` instead of returning `[]` on read failure. `AppState.syncWithFirestore` now catches that error, surfaces the existing Settings sync diagnostics card, and does not save local/default state back to Firestore in that failure path. Member profile lookup failures now also surface a diagnostic while keeping remote member IDs applied.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Decisions made**:
+  - Treat an accessible-calendar read failure differently from a legitimate empty result for a new user.
+  - Do not change Firestore rules in this slice; make the app reveal whether rules/API/network are blocking the shared calendar query.
+  - Do not let a failed remote load trigger a local default-calendar save that can mask the real problem.
+- **Tests run**:
+  - `dart format lib/services/firestore_sync_service.dart lib/state/app_state.dart test/widget_test.dart`
+  - `flutter test test/widget_test.dart --plain-name "Calendar load failure shows diagnostics and does not save local"` - passed.
+  - `flutter test test/widget_test.dart --plain-name "Member profile load failure keeps remote member metadata visible"` - passed.
+  - `flutter test` - passed, 106/106 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 16 info-level lints.
+- **Current state**: The next production build should show a Settings sync diagnostics card if the signed-in app cannot list accessible calendars or load member profiles, instead of silently showing a one-member local/default view.
+- **Next recommended step**: Deploy this app build, refresh the live app, and check Settings. If the diagnostics card shows `Firestore permission denied`, revisit Firestore list-query rules for `calendars.where(memberUserIds arrayContains uid)`. If no diagnostics appear, use the switcher/member count display to select the intended shared calendar.
+- **Open questions**:
+  - Does the production client get a Firestore permission error on the `memberUserIds arrayContains` calendar query, or was the issue transient/stale local state?

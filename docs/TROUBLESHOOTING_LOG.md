@@ -257,6 +257,24 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Fix**: Cache `FirebaseAuth.instance.authStateChanges()` once per `_AuthGateState` (a `final` field set at construction) instead of calling it inside `build()`, so `StreamBuilder` always receives the same stream identity across rebuilds.
 - **Files affected**:
   - `lib/widgets/auth_gate.dart`
-- **Prevention / future note**: Any `Stream`/`Future` passed to a `StreamBuilder`/`FutureBuilder` must be created once (field/`initState`), never inline in `build()`, especially on a widget that rebuilds in response to a broad listener like a whole-app `ChangeNotifier`. Diagnosing this took longer than necessary because of a missing `netlify.toml` Flutter version pin (separate, real issue, but not the actual cause) — when local repro fails but production repro is consistent, check what code paths are gated behind environment flags like `AuthService.isReady` before assuming an infra/version mismatch.
+- **Prevention / future note**: Any `Stream`/`Future` passed to a `StreamBuilder`/`FutureBuilder` must be created once (field/`initState`), never inline in `build()`, especially on a widget that rebuilds in response to a broad listener like a whole-app `ChangeNotifier`. Diagnosing this took longer than necessary because of a missing `netlify.toml` Flutter version pin (separate, real issue, but not the actual cause) - when local repro fails but production repro is consistent, check what code paths are gated behind environment flags like `AuthService.isReady` before assuming an infra/version mismatch.
+
+---
+
+## 2026-06-21 - Shared calendar list failures were silently treated as no calendars
+
+- **Context**: After shared-calendar member UX fixes were deployed, production Settings showed a renamed calendar title but `Members: You`, no `Switch calendar` row, and no Sync diagnostics card. Safe Firestore diagnostics showed the calendar document still had multiple members and member profiles existed.
+- **Symptoms**:
+  - Current calendar title could be renamed and persisted to Firestore.
+  - Settings still displayed only `You` as member after refresh.
+  - The app did not show any sync error.
+  - Multiple similarly named calendar documents existed in Firestore, making selected-calendar confusion harder to see.
+- **Cause**: `FirestoreSyncService.loadAccessibleCalendars` caught all calendar list-query errors and returned `[]`. `AppState.syncWithFirestore` could not distinguish a real empty result for a new user from a failed Firestore read, so it continued down the local/default save path and never populated Settings diagnostics.
+- **Fix**: Added a safe `FirestoreSyncException`. Calendar list failures now throw it, `AppState.syncWithFirestore` catches it, surfaces the Settings diagnostics card, and skips the local save path. Member profile lookup failures also surface diagnostics while keeping calendar member metadata applied.
+- **Files affected**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+- **Prevention / future note**: Firestore read/list methods should not return empty collections for permission/API/network failures unless the caller also receives an error flag. Empty data and failed data are different states, especially before local state is saved back to Firestore.
 
 ---
