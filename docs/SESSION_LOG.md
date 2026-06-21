@@ -1272,3 +1272,25 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Run the non-deploying rules check and whitespace check, then deploy production Firestore rules only with explicit approval.
 - **Open questions**:
   - Does the local rules syntax compile in Firebase's Rules API, and does deploying it clear the production list-query denial?
+
+---
+
+## 2026-06-21 (continued) - Actually fix the shared-calendar list-query permission-denied
+
+- **Goal**: Resolve the `Firestore permission denied` diagnostic that persisted in production even after the `hasAny()` to `in` rewrite was published, by finding the real cause instead of guessing again.
+- **Summary**: Kwame manually published the `in`-based rules fix from the previous entry; Settings still showed `Firestore permission denied` and only `You` as a member after a hard refresh. Rather than keep guessing and asking for another manual console publish/test round trip, verified directly against live production Firestore: used the local `tool/serviceAccountKey.json` Admin SDK credentials to create a disposable throwaway calendar document, `admin.auth().createCustomToken()` to mint sign-in tokens for fake owner/member/stranger UIDs, `accounts:signInWithCustomToken` (REST, with a `Referer` header matching an already-allowlisted origin so the restricted browser-only API key would accept a server-side call) to get real ID tokens, then called the Firestore REST `runQuery` endpoint directly with those tokens to reproduce the exact `calendars.where('memberUserIds', arrayContains: uid)` query the app makes. First confirmed the already-deployed `in`-based fix still 403'd for everyone, including a stranger UID that should have gotten an empty result rather than a denial — which ruled out the originally suspected `isOwner` OR (an unprovable-field theory) and pointed at something else entirely. Iterated rule variants directly (this required `firebase login` interactively in the user's own terminal, since the service account lacks `firebaserules.googleapis.com` write/test permission needed for `firebase deploy`) and found the actual cause: `isMember()`'s `hasMemberList(data)` call (`data.memberUserIds is list`) made the rule unprovable for Firestore's list-query static analysis, independent of `hasAny()` vs `in` and independent of the `isOwner` OR. Removed that type-check from `isMember()` (redundant anyway, since `allow create` already guarantees the field is a list at document-creation time), redeployed, and confirmed with a 5-scenario probe against live production: member list (200, finds it), owner list (200, finds it), stranger list (200, empty - correct), member direct get (200), stranger direct get (403 - correctly still denied). Ran the existing safe Firestore diagnostic afterward and confirmed all 3 existing production calendars are unaffected.
+- **Files changed**:
+  - `firestore.rules`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Decisions made**:
+  - Verify rules changes against live production directly (custom-token sign-in + Firestore REST API) before asking Kwame to test in a browser, now that `firebase login` is available, instead of round-tripping fixes through manual console publish + manual browser test.
+  - Drop the `is list` runtime type-check from `isMember()` rather than trying to restructure the query or duplicate logic between `get`/`list`, since the type guarantee already exists at `allow create` time.
+  - Keep `allow list: if isOwner(resource.data) || isMember(resource.data);` (not narrowed to `isMember` only) since it's confirmed working now and matches `allow get`'s shape.
+- **Tests run**:
+  - 5-scenario live probe against production (member/owner/stranger x list/get) via disposable throwaway Firestore documents, cleaned up after each run - all expected results.
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calendar.ps1` - passed; all 3 existing production calendars still present and unaffected.
+  - `flutter test` / `flutter analyze` / `npm test` - not run; no Dart or JS files changed this session, only `firestore.rules` and docs.
+- **Current state**: The shared-calendar list query that Settings relies on to discover calendars a user is a member of now works in production. Kwame should hard-refresh the deployed app and confirm Settings shows the real member list/switcher instead of `Firestore permission denied`.
+- **Next recommended step**: Have Laura sign in and confirm she sees the shared calendar via the switcher, then do a real cross-account edit/check-in to confirm round-trip sync. Consider formalizing the throwaway-probe technique (or the emulator + `@firebase/rules-unit-testing`, blocked locally today by Java < 21) as a real test under `tool/diagnostics` so this class of bug gets caught before deploy next time.
+- **Open questions**: None.

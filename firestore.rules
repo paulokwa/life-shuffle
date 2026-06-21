@@ -16,7 +16,6 @@ service cloud.firestore {
 
     function isMember(data) {
       return isSignedIn() &&
-        hasMemberList(data) &&
         request.auth.uid in data.memberUserIds;
     }
 
@@ -45,8 +44,16 @@ service cloud.firestore {
       allow get: if isOwner(resource.data) ||
         isMember(resource.data) ||
         isOwnDefaultCalendarPath(calendarId);
-      allow list: if isOwner(resource.data) ||
-        isMember(resource.data);
+      // For list queries, Firestore must be able to statically prove every
+      // matched document satisfies the rule using only the query's own
+      // filter (memberUserIds array-contains uid). isMember() used to also
+      // check `data.memberUserIds is list`; that type check made the rule
+      // unprovable for the query and caused a blanket permission-denied,
+      // even for documents/results that obviously satisfied it. Removed
+      // the type check (memberUserIds is always a list by the time a
+      // document exists, enforced below in allow create) so list queries
+      // can be proven safe again.
+      allow list: if isOwner(resource.data) || isMember(resource.data);
 
       allow create: if isSignedIn() &&
         request.resource.data.calendarId == calendarId &&
