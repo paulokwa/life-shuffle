@@ -1523,3 +1523,34 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: All MVP 1 check-in items from the roadmap are now complete: skippable prompt, quick catch-up, day-sheet, one-by-one review, and week review. Optional notes for check-ins remain the only unchecked item in that group. No Firestore rules, ICS/feed behavior, calendar lifecycle, or planner changes were made.
 - **Next recommended step**: Decide whether native PDF export or calendar create/leave/delete lifecycle is next — these are the remaining open MVP 1 items.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Calendar create/select lifecycle slice
+
+- **Goal**: Implement the first safe calendar lifecycle slice: create named calendars, select them, persist selection, and safely fall back when a selected calendar is missing or inaccessible.
+- **Summary**: Added a dedicated `FirestoreSyncService.createCalendar()` path that creates additional calendars with generated Firestore document IDs, owner/member metadata for the current user, and starter/default planner state. Added `AppState.createCalendar()` and a Settings > Calendar `Create calendar` row/dialog; created calendars become selected immediately and `selectedCalendarId` persists locally. Kept existing rename, Add member, and switcher behavior working after creation. Tightened fallback selection so a missing preferred calendar no longer lets stale local state overwrite another accessible calendar: sync now uses the preserved preferred selection to detect stale access, prefers an accessible shared calendar when appropriate, and creates/uses the deterministic personal default with blank starter/default state when no accessible calendars remain.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - No Firestore rules change was needed; existing create rules already allow owner-created calendars with matching `calendarId`, `ownerUserId`, and owner membership.
+  - Additional calendars use generated IDs; the deterministic default remains `${uid}_default`.
+  - When no accessible calendars remain after a stale selection, the deterministic default is created/used with starter/default planner state rather than copying the old shared calendar.
+  - Leave/delete lifecycle, hard delete, feed revocation on delete, ownership transfer, roles, and invitations remain out of scope for this slice.
+- **Tests run**:
+  - `dart format` via bundled Dart: formatted touched Dart files.
+  - `flutter test` - passed, 143/143 tests. Added lifecycle coverage for Settings showing Create calendar, create selecting/persisting the new calendar, switcher including the created calendar, rename saving to the newly created selected calendar, missing selected-calendar fallback avoiding stale overwrites, and no-accessible-calendar fallback creating/using a blank deterministic default.
+  - `flutter analyze --no-fatal-infos` - passed with the same 18 existing info-level lints.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains `.gitignore`-matched and untracked.
+- **Current state**: Calendar create/select/fallback is implemented for V1. Settings can create a named calendar and switch among accessible calendars. Member leave and owner delete are still not implemented.
+- **Next recommended step**: Implement calendar lifecycle slice 2: member leave, including fallback to another accessible calendar or a blank deterministic default.
+- **Open questions**: None.

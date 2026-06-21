@@ -102,6 +102,74 @@ class FirestoreSyncService {
     }
   }
 
+  static Future<CreateCalendarResult> createCalendar({
+    required String userId,
+    required String title,
+    SavedState? initialState,
+    String? calendarId,
+  }) async {
+    final calendarTitle = title.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (calendarTitle.isEmpty) {
+      return CreateCalendarResult.failure('Enter a calendar name.');
+    }
+
+    try {
+      final calendarDoc = _normalizeCalendarId(calendarId) == null
+          ? _db.collection('calendars').doc()
+          : _getCalendarDoc(_normalizeCalendarId(calendarId)!);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final state = initialState ??
+          SavedState(
+            activities:
+                PlannerService.defaultActivities.map((a) => a.copy()).toList(),
+            seed: 0,
+            updatedAtMillis: now,
+            calendarTitle: calendarTitle,
+            calendarNameConfirmed: true,
+            enabledMap: const {},
+            checkinMap: const {},
+            lockedMap: const {},
+          );
+      final data = <String, dynamic>{
+        ...state.toMap(),
+        'calendarId': calendarDoc.id,
+        'title': calendarTitle,
+        'name': calendarTitle,
+        'calendarTitle': calendarTitle,
+        'calendarNameConfirmed': true,
+        'ownerUserId': userId,
+        'memberUserIds': [userId],
+        'createdAtMillis': now,
+        'updatedAtMillis':
+            state.updatedAtMillis == 0 ? now : state.updatedAtMillis,
+      };
+
+      await calendarDoc.set(data);
+      return CreateCalendarResult.success(
+        FirestoreCalendar(
+          state: SavedState.fromMap(
+            data,
+            fallbackActivities: PlannerService.defaultActivities,
+          ),
+          metadata: CalendarMetadata.fromMap(
+            data,
+            fallback: defaultMetadata(userId),
+          ),
+        ),
+      );
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore createCalendar failed: ${e.code}');
+      }
+      return CreateCalendarResult.failure(_safeErrorMessage(e));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore createCalendar failed: $e');
+      }
+      return CreateCalendarResult.failure('Unknown sync error');
+    }
+  }
+
   static Future<SavedState?> loadState(String userId) async {
     final calendar = await loadDefaultCalendar(userId);
     return calendar?.state;
@@ -409,6 +477,33 @@ class AddCalendarMemberResult {
   final String status;
   final UserProfile? profile;
   final bool alreadyMember;
+}
+
+class CreateCalendarResult {
+  const CreateCalendarResult._({
+    required this.succeeded,
+    required this.status,
+    this.calendar,
+  });
+
+  factory CreateCalendarResult.success(FirestoreCalendar calendar) {
+    return CreateCalendarResult._(
+      succeeded: true,
+      status: '${calendar.metadata.title} created.',
+      calendar: calendar,
+    );
+  }
+
+  factory CreateCalendarResult.failure(String safeMessage) {
+    return CreateCalendarResult._(
+      succeeded: false,
+      status: safeMessage,
+    );
+  }
+
+  final bool succeeded;
+  final String status;
+  final FirestoreCalendar? calendar;
 }
 
 String _safeErrorMessage(FirebaseException error) {

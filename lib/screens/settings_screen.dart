@@ -155,6 +155,18 @@ class SettingsScreen extends StatelessWidget {
                           state,
                         ),
                       ),
+                      if (state.canCreateCalendars)
+                        _SettingsRow(
+                          key: const ValueKey('settings-create-calendar-row'),
+                          icon: Icons.add_rounded,
+                          label: 'Create calendar',
+                          value: '',
+                          hasChevron: true,
+                          onTap: () => _showCreateCalendarDialog(
+                            context,
+                            state,
+                          ),
+                        ),
                       if (state.hasMultipleAccessibleCalendars)
                         _SettingsRow(
                           key: const ValueKey('settings-switch-calendar-row'),
@@ -557,6 +569,18 @@ Future<void> _showAddMemberDialog(
       ),
     );
 
+Future<void> _showCreateCalendarDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _CreateCalendarDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
 Future<void> _showCalendarSwitcherDialog(
   BuildContext context,
   AppState state,
@@ -640,6 +664,94 @@ class _RenameCalendarDialogState extends State<_RenameCalendarDialog> {
           key: const ValueKey('rename-calendar-save'),
           onPressed: _save,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CreateCalendarDialog extends StatefulWidget {
+  const _CreateCalendarDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  State<_CreateCalendarDialog> createState() => _CreateCalendarDialogState();
+}
+
+class _CreateCalendarDialogState extends State<_CreateCalendarDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+    final result = await widget.state.createCalendar(_controller.text);
+    if (!mounted) return;
+    if (result.succeeded) {
+      widget.onClose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.status)),
+      );
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _errorText = result.status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create calendar'),
+      content: TextField(
+        key: const ValueKey('create-calendar-text-field'),
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'Calendar name',
+          errorText: _errorText,
+        ),
+        onChanged: (_) {
+          if (_errorText == null) return;
+          setState(() {
+            _errorText = null;
+          });
+        },
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : widget.onClose,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('create-calendar-save'),
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Creating...' : 'Create'),
         ),
       ],
     );

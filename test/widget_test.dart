@@ -1459,6 +1459,337 @@ void main() {
     expect(find.text('Weekend ideas'), findsWidgets);
   });
 
+  testWidgets('Settings shows Create calendar for signed-in users',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          title: 'Kwame and Laura',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('settings-create-calendar-row')),
+        findsOneWidget);
+  });
+
+  testWidgets('Creating a calendar selects it and persists selection',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          title: 'Kwame and Laura',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      createCalendar: (
+          {required userId, required title, initialState, calendarId}) async {
+        return CreateCalendarResult.success(
+          _remoteCalendar(
+            userId: userId,
+            calendarId: 'generated_calendar',
+            title: title,
+            ownerUserId: userId,
+            memberUserIds: [userId],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        );
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-create-calendar-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('create-calendar-text-field')),
+      'Weekend ideas',
+    );
+    await tester.tap(find.byKey(const ValueKey('create-calendar-save')));
+    await tester.pumpAndSettle();
+
+    expect(appState.calendarId, 'generated_calendar');
+    expect(appState.calendarTitle, 'Weekend ideas');
+    expect(appState.accessibleCalendars.map((c) => c.calendarId),
+        contains('generated_calendar'));
+    expect(find.text('Weekend ideas created.'), findsOneWidget);
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId, 'generated_calendar');
+  });
+
+  testWidgets('Switcher includes newly created calendar',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          title: 'Kwame and Laura',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      createCalendar: (
+          {required userId, required title, initialState, calendarId}) async {
+        return CreateCalendarResult.success(
+          _remoteCalendar(
+            userId: userId,
+            calendarId: 'generated_calendar',
+            title: title,
+            ownerUserId: userId,
+            memberUserIds: [userId],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        );
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-create-calendar-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('create-calendar-text-field')),
+      'Weekend ideas',
+    );
+    await tester.tap(find.byKey(const ValueKey('create-calendar-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('settings-switch-calendar-row')),
+        findsOneWidget);
+    await tester
+        .tap(find.byKey(const ValueKey('settings-switch-calendar-row')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings-calendar-option-generated_calendar')),
+      findsOneWidget,
+    );
+  });
+
+  test('Rename still saves to newly created selected calendar', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final renamedSave = Completer<String>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          title: 'Kwame and Laura',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        if (state.calendarTitle == 'Renamed ideas' &&
+            !renamedSave.isCompleted) {
+          renamedSave.complete(calendarId);
+        }
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      createCalendar: (
+          {required userId, required title, initialState, calendarId}) async {
+        return CreateCalendarResult.success(
+          _remoteCalendar(
+            userId: userId,
+            calendarId: 'generated_calendar',
+            title: title,
+            ownerUserId: userId,
+            memberUserIds: [userId],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        );
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    final result = await appState.createCalendar('Weekend ideas');
+    expect(result.succeeded, isTrue);
+    appState.renameCalendarTitle('Renamed ideas');
+
+    expect(
+      await renamedSave.future.timeout(const Duration(seconds: 1)),
+      'generated_calendar',
+    );
+  });
+
+  test('Missing selected calendar falls back without overwriting fallback',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'ls_selected_calendar_id': 'missing_shared_calendar',
+      'ls_calendar_title': 'Missing shared',
+      'ls_calendar_name_confirmed': true,
+      'ls_updated_at_millis': 9999,
+    });
+    await PersistenceService.init();
+    final savedStates = <SavedState>[];
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: PersistenceService.load(PlannerService.defaultActivities),
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
+          title: 'Personal default',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Kwame and Laura',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, state) async {
+        savedStates.add(state);
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.calendarId, 'shared_calendar');
+    expect(appState.calendarTitle, 'Kwame and Laura');
+    expect(
+      savedStates.map((state) => state.calendarTitle),
+      isNot(contains('Missing shared')),
+    );
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId, 'shared_calendar');
+    expect(saved.calendarTitle, 'Kwame and Laura');
+  });
+
+  test('No accessible calendars after stale selection creates blank default',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final staleState = SavedState(
+      activities: [
+        Activity(
+          id: 'shared_only_activity',
+          title: 'Shared-only activity',
+          category: 'Social',
+          durationMinutes: 45,
+        ),
+      ],
+      seed: 12,
+      updatedAtMillis: 9999,
+      calendarTitle: 'Old shared',
+      selectedCalendarId: 'old_shared_calendar',
+      calendarNameConfirmed: true,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    SavedState? savedDefault;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: staleState,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (_, calendarId, state) async {
+        expect(
+            calendarId, FirestoreSyncService.defaultCalendarId('owner_user'));
+        savedDefault = state;
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.calendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'));
+    expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
+    expect(savedDefault, isNotNull);
+    expect(
+        savedDefault!.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
+    expect(savedDefault!.activities.map((a) => a.id),
+        isNot(contains('shared_only_activity')));
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'));
+  });
+
   test('Reload prefers shared accessible calendar when no selection exists',
       () async {
     SharedPreferences.setMockInitialValues({});
