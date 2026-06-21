@@ -278,3 +278,19 @@ Use it so future AI agents do not repeat the same mistakes.
 - **Prevention / future note**: Firestore read/list methods should not return empty collections for permission/API/network failures unless the caller also receives an error flag. Empty data and failed data are different states, especially before local state is saved back to Firestore.
 
 ---
+
+## 2026-06-21 - Shared calendar `arrayContains` list query denied by rules
+
+- **Context**: After `ca41bb7` deployed, Settings displayed the new Sync diagnostics card with `Firestore permission denied` while trying to load accessible shared calendars.
+- **Symptoms**:
+  - Account displayed correctly.
+  - Calendar section fell back to one-member state.
+  - Sync diagnostics showed `Firestore permission denied`.
+  - Safe admin diagnostics showed shared calendar documents and profiles existed.
+- **Cause**: The client list query is `where('memberUserIds', arrayContains: uid)`, while the rules used `memberUserIds.hasAny([request.auth.uid])` inside a combined `allow read`. Firestore rejected the list query even though direct document reads and admin diagnostics could see the data.
+- **Fix**: Locally changed membership checks to `request.auth.uid in data.memberUserIds`, split calendar `allow get` from `allow list`, and kept the own-default-calendar path exception only on direct `get` for first-save existence checks.
+- **Files affected**:
+  - `firestore.rules`
+- **Prevention / future note**: Rules for collection queries should match the client query shape as directly as possible. Keep direct-document bootstrap exceptions out of `allow list` rules so query behavior is easier to reason about. Add emulator/rules-unit tests before expanding sharing beyond the Kwame/Laura MVP slice.
+
+---

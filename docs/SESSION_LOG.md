@@ -1251,3 +1251,24 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Deploy this app build, refresh the live app, and check Settings. If the diagnostics card shows `Firestore permission denied`, revisit Firestore list-query rules for `calendars.where(memberUserIds arrayContains uid)`. If no diagnostics appear, use the switcher/member count display to select the intended shared calendar.
 - **Open questions**:
   - Does the production client get a Firestore permission error on the `memberUserIds arrayContains` calendar query, or was the issue transient/stale local state?
+
+---
+
+## 2026-06-21 - Patch shared-calendar list-query Firestore rules
+
+- **Goal**: Fix the production `Firestore permission denied` diagnostic shown after the app began surfacing accessible-calendar load failures.
+- **Summary**: Production confirmed the app build at `ca41bb7` was active and the failing path was the shared-calendar list query: `calendars.where('memberUserIds', arrayContains: uid)`. Updated `firestore.rules` locally so membership uses the canonical rules list-membership expression (`request.auth.uid in data.memberUserIds`) instead of `memberUserIds.hasAny([request.auth.uid])`, and split calendar `get` from `list`. Direct `get` keeps the narrow own-default-calendar existence-check exception; collection `list` is owner/member only.
+- **Files changed**:
+  - `firestore.rules`
+  - `docs/SESSION_LOG.md`
+  - `docs/TROUBLESHOOTING_LOG.md`
+- **Decisions made**:
+  - Keep this rules-only; no app UI, ICS/feed, data, role, invite, or lifecycle changes.
+  - Do not deploy rules until Kwame explicitly approves the production rules deploy.
+- **Tests run**:
+  - `powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firebase_rules.ps1` - passed; confirmed it does not deploy.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+- **Current state**: The likely rules fix is local only. Production still has the old rules until `tool/diagnostics/deploy_firebase_rules.ps1` is explicitly approved and run.
+- **Next recommended step**: Run the non-deploying rules check and whitespace check, then deploy production Firestore rules only with explicit approval.
+- **Open questions**:
+  - Does the local rules syntax compile in Firebase's Rules API, and does deploying it clear the production list-query denial?
