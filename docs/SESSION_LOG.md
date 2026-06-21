@@ -1408,3 +1408,23 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings > Export / print now has six output-detail switches that apply identically to Copy text, Open print view, and the Plan screen's Export action. Choices persist locally and sync through the existing Firestore `SavedState` path for signed-in users. No PDF export, monthly/two-week/day/year views, Firestore rules changes, or sharing/lifecycle work was added.
 - **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Google Calendar feed subscription smoke test passed
+
+- **Goal**: Record a real calendar-app subscription smoke test for the public ICS feed, closing the long-outstanding "real calendar-app subscription test" item.
+- **Summary**: Kwame manually subscribed to the Life Shuffle public calendar feed in Google Calendar. The subscribed calendar appeared under Google Calendar's "Other calendars" list as "Kwame and Laura," and Life Shuffle's planned activities appeared on the expected dates/times. Decision: for V1, Google Calendar verification is enough to satisfy the real calendar-app subscription test; Apple Calendar and Outlook were not tested in this pass so the team can move faster, and can be revisited later if needed.
+- **Files changed**:
+  - `docs/SESSION_LOG.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/ROADMAP.md`
+- **Decisions made**:
+  - Treat the Google Calendar subscription smoke test as sufficient real-world verification of the public ICS feed for V1, rather than requiring Apple Calendar and Outlook before closing this item.
+  - Leave Apple Calendar/Outlook subscription testing as optional future follow-up, not a blocking V1 gap.
+- **Tests run**:
+  - Manual smoke test (Kwame): subscribed to the public feed URL in Google Calendar; confirmed the calendar appeared under Other calendars as "Kwame and Laura" and planned activities rendered on the expected dates/times.
+  - `git diff --check` - passed.
+- **Current state**: The public ICS feed has now been verified end-to-end against a real external calendar app (Google Calendar). No app code, Netlify functions, ICS/feed behavior, or Firestore rules/data changed in this entry.
+- **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
+- **Open questions**: None.
