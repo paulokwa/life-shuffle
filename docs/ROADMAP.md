@@ -8,9 +8,9 @@ The first version should help Kwame and Laura plan better weeks together, create
 
 ## Current status
 
-App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, selected-calendar-safe save targeting, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, local ICS/iCalendar feed-string generation, and private feed token metadata are all working. Settings shows account, calendar info, owner/member display, an owner-only Add member action, a simple calendar switcher when multiple accessible calendars exist, planning style, activity-default dimension toggles, Publishing controls for local feed metadata, a simple Export / print text-copy action, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items. A public read-only ICS feed endpoint now exists (`netlify/functions/calendar-feed.js`): Settings > Publishing shows the real subscribable link with a working copy button, and the function serves the calendar's cached ICS text by `feedToken`, gated to the same enabled/disabled/revoked behavior already in the app. Production endpoint verification passed against real Firestore data; a real Apple Calendar, Google Calendar, or Outlook subscription test is still recommended. Settings > Export / print now also has an `Open print view` action that opens a read-only, print-friendly weekly view (calendar title, week range, per-day activities with time/duration/category, check-in status, and lock icon) and a `Print` button that triggers the browser print dialog on web.
+App is runnable. Core planner loop, Firebase auth, Google display name confirmation, first-calendar naming, Firestore sync, selected-calendar-safe save targeting, activity creation/editing, optional activity dimensions, difficulty-aware planning, plan generation with rules, planner soft-failure messages, lock/unlock, regeneration undo, check-ins, basic progress, local ICS/iCalendar feed-string generation, and private feed token metadata are all working. Settings shows account, calendar info, owner/member display, an owner-only Add member action, a simple calendar switcher when multiple accessible calendars exist, planning style, activity-default dimension toggles, Publishing controls for local feed metadata, a simple Export / print text-copy action, and a plain-language Privacy/help section for sharing and future feed links. Starter activity library and plan style choice are live. The Today screen's check-in prompt opens a full quick catch-up view that lists every past unchecked activity grouped by day with explicit Done/Partly/Skipped buttons. The Plan screen now lets users tap a day card or day-strip date to open a day check-in sheet with Done/Partly/Skipped/Unchecked controls. Progress now includes past 7 days and past 30 days summaries with planned, done, partly, skipped, and unchecked counts, a Difficulty-only hard-activity summary when Difficulty is enabled, a compact Recent Rhythm section for streaks and 7-day comparison, and a Looking Ahead summary for upcoming planned items. A public read-only ICS feed endpoint now exists (`netlify/functions/calendar-feed.js`): Settings > Publishing shows the real subscribable link with a working copy button, and the function serves the calendar's cached ICS text by `feedToken`, gated to the same enabled/disabled/revoked behavior already in the app. Production endpoint verification passed against real Firestore data; a real Apple Calendar, Google Calendar, or Outlook subscription test is still recommended. Settings > Export / print now also has an `Open print view` action that opens a read-only, print-friendly weekly view (calendar title, week range, per-day activities with time/duration/category, check-in status, and lock icon) and a `Print` button that triggers the browser print dialog on web. Settings > Export / print also has output detail toggles (Time, Duration, Category, Check-in status, Locked status, and Enabled planning dimensions when at least one of Difficulty/Energy/Social is on) that apply to both Copy text and Open print view; Activity title and the day/date always show and have no toggle.
 
-Still to build for MVP 1: calendar create/leave/delete lifecycle, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, PDF export, output detail toggles, and a real calendar-app subscription test for the public feed.
+Still to build for MVP 1: calendar create/leave/delete lifecycle, planning-dimensions onboarding, shared-edit/sync conflict messages, one-by-one/week-review check-in views, PDF export, and a real calendar-app subscription test for the public feed.
 
 ## MVP 1 — Shared mobile-first planner with onboarding/publishing/export/check-ins
 
@@ -51,7 +51,7 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add Settings > Publishing local metadata controls: feed enable/disable, no-endpoint copy/link placeholder, token preview, regenerate token, revoke token, feed explanation
 - [x] Add Settings > Publishing public feed controls: copy link and public endpoint-backed explanation
 - [x] Add Settings > Export/print text export section with Copy text
-- [ ] Add Settings > Export/print: default output details and note/status/dimension visibility
+- [ ] Add Settings > Export/print: default output details and note/status/dimension visibility (status/dimension visibility toggles done; notes are not implemented yet, so no notes toggle)
 - [x] Add Settings > Privacy/help: privacy explanation, feed explanation, help/about
 - [ ] Add calendar-level plan settings: week start, earliest/latest time, default activity count
 - [ ] Add planning-dimensions onboarding screen: Difficulty, Energy, Social
@@ -114,23 +114,23 @@ Goal: prove the core experience works for Kwame and Laura with a short setup flo
 - [x] Add printable calendar view
 - [ ] Add PDF export if practical
 - [x] Add simple text/share export if practical
-- [ ] Add output detail toggles for print/export
+- [x] Add output detail toggles for print/export
 
 ### MVP 1 export/output detail options
 
 Users should be able to choose whether exported/printed output includes:
 
-- [ ] Activity title
-- [ ] Date and time
-- [ ] Duration
-- [ ] Category
+- [ ] Activity title (always shown, no toggle)
+- [ ] Date and time (date always shown, no toggle; time has a toggle)
+- [x] Duration
+- [x] Category
 - [ ] Colour/icon
 - [ ] Location
 - [ ] Who it is for: Kwame, Laura, Both, or Either
-- [ ] Enabled planning dimensions: difficulty, energy, and/or social level
-- [ ] Check-in status
+- [x] Enabled planning dimensions: difficulty, energy, and/or social level
+- [x] Check-in status
 - [ ] Notes
-- [ ] Locked status
+- [x] Locked status
 
 Private/internal notes should be excluded by default.
 

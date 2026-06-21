@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/day_plan.dart';
+import '../models/export_print_options.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../services/browser_print.dart';
 import '../services/planner_service.dart';
@@ -203,60 +204,88 @@ class _PrintActivityRow extends StatelessWidget {
 
   final PlannedActivity activity;
 
-  String? get _statusLabel => switch (activity.status) {
-        CheckStatus.done => 'Done',
-        CheckStatus.partly => 'Partly done',
-        CheckStatus.skipped => 'Skipped',
-        CheckStatus.none => null,
-      };
+  String? _statusLabel(ExportPrintOptions options) {
+    if (!options.showCheckInStatus) return null;
+    return switch (activity.status) {
+      CheckStatus.done => 'Done',
+      CheckStatus.partly => 'Partly done',
+      CheckStatus.skipped => 'Skipped',
+      CheckStatus.none => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final details = [
-      activity.timeSlot,
-      activity.activity.duration,
-      activity.category,
-    ].where((part) => part.trim().isNotEmpty).join(' · ');
-    final statusLabel = _statusLabel;
+    final state = AppStateScope.of(context);
+    final options = state.exportPrintOptions;
 
-    return Row(
+    final details = [
+      if (options.showTime) activity.timeSlot,
+      if (options.showDuration) activity.activity.duration,
+      if (options.showCategory) activity.category,
+    ].where((part) => part.trim().isNotEmpty).join(' · ');
+    final statusLabel = _statusLabel(options);
+    final showLock = options.showLockedStatus && activity.locked;
+    final dimensionLabels = options.showEnabledDimensions
+        ? TextWeekExportService.dimensionLabels(
+            activity.activity,
+            difficultyEnabled: state.difficultyEnabled,
+            energyEnabled: state.energyEnabled,
+            socialEnabled: state.socialEnabled,
+          )
+        : const <String>[];
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                activity.title,
-                style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: textPrimary,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activity.title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                  if (details.isNotEmpty)
+                    Text(
+                      details,
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                    ),
+                ],
+              ),
+            ),
+            if (showLock)
+              const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Icon(Icons.lock_rounded, size: 14, color: textMuted),
+              ),
+            if (statusLabel != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Text(
+                  statusLabel,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
                 ),
               ),
-              if (details.isNotEmpty)
-                Text(
-                  details,
-                  style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
-                ),
-            ],
-          ),
+          ],
         ),
-        if (activity.locked)
-          const Padding(
-            padding: EdgeInsets.only(left: 6),
-            child: Icon(Icons.lock_rounded, size: 14, color: textMuted),
-          ),
-        if (statusLabel != null)
+        if (dimensionLabels.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.only(top: 2),
             child: Text(
-              statusLabel,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: textMuted,
-              ),
+              dimensionLabels.join(' · '),
+              style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
             ),
           ),
       ],

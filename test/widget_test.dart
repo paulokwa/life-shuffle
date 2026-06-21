@@ -1568,6 +1568,92 @@ void main() {
     expect(find.text('Week text copied'), findsOneWidget);
   });
 
+  testWidgets(
+      'Settings shows output detail toggles with useful defaults, no dimension toggle when none enabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    const baseToggleKeys = [
+      'settings-export-toggle-time',
+      'settings-export-toggle-duration',
+      'settings-export-toggle-category',
+      'settings-export-toggle-checkin',
+      'settings-export-toggle-locked',
+    ];
+    for (final key in baseToggleKeys) {
+      final finder = find.byKey(ValueKey(key));
+      await tester.ensureVisible(finder);
+      expect(finder, findsOneWidget);
+      expect(tester.widget<Switch>(finder).value, isTrue);
+    }
+
+    expect(
+      find.byKey(const ValueKey('settings-export-toggle-dimensions')),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Settings shows the enabled planning dimensions toggle only when a dimension is enabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setDifficultyEnabled(true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    final finder =
+        find.byKey(const ValueKey('settings-export-toggle-dimensions'));
+    await tester.ensureVisible(finder);
+    expect(finder, findsOneWidget);
+    expect(find.text('Enabled planning dimensions'), findsOneWidget);
+  });
+
+  testWidgets('Toggling an output detail switch updates and persists',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    final finder =
+        find.byKey(const ValueKey('settings-export-toggle-duration'));
+    await tester.ensureVisible(finder);
+    await tester.tap(finder);
+    await tester.pump();
+
+    expect(appState.exportPrintOptions.showDuration, isFalse);
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.exportShowDuration, isFalse);
+  });
+
   testWidgets('Settings exposes print preview action',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -1720,6 +1806,79 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No planned activities this week.'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Print preview hides duration, category, check-in, and locked status when disabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final plannedDay = appState.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+    plannedActivity.status = CheckStatus.done;
+    plannedActivity.locked = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.textContaining(plannedActivity.category), findsWidgets);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+
+    appState.setExportPrintOptions(
+      appState.exportPrintOptions.copyWith(
+        showDuration: false,
+        showCategory: false,
+        showCheckInStatus: false,
+        showLockedStatus: false,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text(plannedActivity.title), findsWidgets);
+    expect(find.textContaining(plannedActivity.category), findsNothing);
+    expect(find.text('Done'), findsNothing);
+    expect(find.byIcon(Icons.lock_rounded), findsNothing);
+  });
+
+  testWidgets(
+      'Print preview shows enabled planning dimensions only when toggled and enabled',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final plannedDay = appState.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+    final difficultyLabel =
+        'Difficulty ${plannedActivity.activity.difficulty}/5';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.text(difficultyLabel), findsNothing);
+
+    appState.setDifficultyEnabled(true);
+    await tester.pump();
+
+    expect(find.text(difficultyLabel), findsWidgets);
+
+    appState.setExportPrintOptions(
+      appState.exportPrintOptions.copyWith(showEnabledDimensions: false),
+    );
+    await tester.pump();
+
+    expect(find.text(difficultyLabel), findsNothing);
   });
 
   test('Publishing metadata enables disables regenerates and persists',

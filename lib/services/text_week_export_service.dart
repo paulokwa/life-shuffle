@@ -1,4 +1,6 @@
+import '../models/activity.dart';
 import '../models/day_plan.dart';
+import '../models/export_print_options.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import 'planner_service.dart';
 
@@ -8,6 +10,10 @@ class TextWeekExportService {
   static String generate({
     required String calendarTitle,
     required List<DayPlan> plan,
+    ExportPrintOptions options = const ExportPrintOptions(),
+    bool difficultyEnabled = false,
+    bool energyEnabled = false,
+    bool socialEnabled = false,
     Map<String, String> privateNotesByActivityId = const {},
     bool includePrivateNotes = false,
   }) {
@@ -35,14 +41,33 @@ class TextWeekExportService {
 
       buffer.writeln(_dateLabel(day.date));
       for (final planned in activities) {
-        buffer
-          ..writeln(
-            '- ${planned.timeSlot}, ${planned.title} '
-            '(${planned.activity.duration})',
-          )
-          ..writeln('  Category: ${planned.category}')
-          ..writeln('  Check-in: ${_checkStatusLabel(planned.status)}')
-          ..writeln('  Locked: ${planned.locked ? "Yes" : "No"}');
+        final headParts = [
+          if (options.showTime) planned.timeSlot,
+          planned.title,
+        ];
+        var headline = '- ${headParts.join(', ')}';
+        if (options.showDuration) {
+          headline += ' (${planned.activity.duration})';
+        }
+        buffer.writeln(headline);
+        if (options.showCategory) {
+          buffer.writeln('  Category: ${planned.category}');
+        }
+        if (options.showCheckInStatus) {
+          buffer.writeln('  Check-in: ${_checkStatusLabel(planned.status)}');
+        }
+        if (options.showLockedStatus) {
+          buffer.writeln('  Locked: ${planned.locked ? "Yes" : "No"}');
+        }
+        if (options.showEnabledDimensions) {
+          final dims = dimensionLabels(
+            planned.activity,
+            difficultyEnabled: difficultyEnabled,
+            energyEnabled: energyEnabled,
+            socialEnabled: socialEnabled,
+          );
+          if (dims.isNotEmpty) buffer.writeln('  ${dims.join(', ')}');
+        }
 
         final note = privateNotesByActivityId[planned.activity.id]?.trim();
         if (includePrivateNotes && note != null && note.isNotEmpty) {
@@ -53,6 +78,23 @@ class TextWeekExportService {
     }
 
     return buffer.toString().trimRight();
+  }
+
+  /// Compact labels for enabled planning dimensions on [activity], e.g.
+  /// `Difficulty 3/5`. Only includes a dimension when its Settings >
+  /// Activity defaults toggle is on; also used by the print preview so both
+  /// surfaces describe dimensions identically.
+  static List<String> dimensionLabels(
+    Activity activity, {
+    required bool difficultyEnabled,
+    required bool energyEnabled,
+    required bool socialEnabled,
+  }) {
+    return [
+      if (difficultyEnabled) 'Difficulty ${activity.difficulty}/5',
+      if (energyEnabled) 'Energy: ${Activity.optionLabel(activity.energy)}',
+      if (socialEnabled) 'Social: ${Activity.optionLabel(activity.social)}',
+    ];
   }
 
   /// Formatted month/day week range, e.g. `Jun 22-28, 2026`. Callers must

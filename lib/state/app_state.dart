@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../models/day_plan.dart';
+import '../models/export_print_options.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
@@ -76,6 +77,7 @@ class AppState extends ChangeNotifier {
   int? _feedRevokedAtMillis;
   String? _cachedIcsText;
   int? _cachedIcsUpdatedAtMillis;
+  ExportPrintOptions _exportPrintOptions = const ExportPrintOptions();
   String _lastSyncStatus = 'Sync pending';
   String? _lastSyncErrorMessage;
   int? _lastSyncAttemptAtMillis;
@@ -171,6 +173,7 @@ class AppState extends ChangeNotifier {
   int? get feedRevokedAtMillis => _feedRevokedAtMillis;
   String? get cachedIcsText => _cachedIcsText;
   int? get cachedIcsUpdatedAtMillis => _cachedIcsUpdatedAtMillis;
+  ExportPrintOptions get exportPrintOptions => _exportPrintOptions;
   String get lastSyncStatus => _lastSyncStatus;
   String? get lastSyncErrorMessage => _lastSyncErrorMessage;
   int? get lastSyncAttemptAtMillis => _lastSyncAttemptAtMillis;
@@ -556,6 +559,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setExportPrintOptions(ExportPrintOptions value) {
+    _exportPrintOptions = value;
+    _persist();
+    notifyListeners();
+  }
+
   void setSocialEnabled(bool value) {
     if (_socialEnabled == value) return;
     _socialEnabled = value;
@@ -763,6 +772,14 @@ class AppState extends ChangeNotifier {
       fallback: 'either',
       allowed: const ['solo', 'together', 'group', 'either'],
     );
+    _exportPrintOptions = ExportPrintOptions(
+      showTime: saved.exportShowTime,
+      showDuration: saved.exportShowDuration,
+      showCategory: saved.exportShowCategory,
+      showCheckInStatus: saved.exportShowCheckInStatus,
+      showLockedStatus: saved.exportShowLockedStatus,
+      showEnabledDimensions: saved.exportShowEnabledDimensions,
+    );
     _feedEnabled = saved.feedEnabled;
     _feedToken = saved.feedToken;
     _feedCreatedAtMillis = saved.feedCreatedAtMillis;
@@ -846,6 +863,18 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveDefaultDifficulty(state.defaultDifficulty);
     PersistenceService.saveDefaultEnergy(state.defaultEnergy);
     PersistenceService.saveDefaultSocial(state.defaultSocial);
+    PersistenceService.saveExportShowTime(state.exportShowTime);
+    PersistenceService.saveExportShowDuration(state.exportShowDuration);
+    PersistenceService.saveExportShowCategory(state.exportShowCategory);
+    PersistenceService.saveExportShowCheckInStatus(
+      state.exportShowCheckInStatus,
+    );
+    PersistenceService.saveExportShowLockedStatus(
+      state.exportShowLockedStatus,
+    );
+    PersistenceService.saveExportShowEnabledDimensions(
+      state.exportShowEnabledDimensions,
+    );
     PersistenceService.saveFeedEnabled(state.feedEnabled);
     PersistenceService.saveFeedToken(state.feedToken);
     PersistenceService.saveFeedCreatedAtMillis(state.feedCreatedAtMillis);
@@ -935,6 +964,12 @@ class AppState extends ChangeNotifier {
       feedRevokedAtMillis: _feedRevokedAtMillis,
       cachedIcsText: _cachedIcsText,
       cachedIcsUpdatedAtMillis: _cachedIcsUpdatedAtMillis,
+      exportShowTime: _exportPrintOptions.showTime,
+      exportShowDuration: _exportPrintOptions.showDuration,
+      exportShowCategory: _exportPrintOptions.showCategory,
+      exportShowCheckInStatus: _exportPrintOptions.showCheckInStatus,
+      exportShowLockedStatus: _exportPrintOptions.showLockedStatus,
+      exportShowEnabledDimensions: _exportPrintOptions.showEnabledDimensions,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,

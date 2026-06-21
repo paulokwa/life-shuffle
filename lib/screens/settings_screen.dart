@@ -392,6 +392,117 @@ class _ExportPrintCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, thickness: 1, color: borderWarm),
+          const SizedBox(height: 12),
+          Text(
+            'What to include',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6,
+              color: textMuted,
+            ),
+          ),
+          Text(
+            'Activity title and the day/date always show.',
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+          ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-time'),
+            label: 'Time',
+            value: state.exportPrintOptions.showTime,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(showTime: value),
+            ),
+          ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-duration'),
+            label: 'Duration',
+            value: state.exportPrintOptions.showDuration,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(showDuration: value),
+            ),
+          ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-category'),
+            label: 'Category',
+            value: state.exportPrintOptions.showCategory,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(showCategory: value),
+            ),
+          ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-checkin'),
+            label: 'Check-in status',
+            value: state.exportPrintOptions.showCheckInStatus,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(showCheckInStatus: value),
+            ),
+          ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-locked'),
+            label: 'Locked status',
+            value: state.exportPrintOptions.showLockedStatus,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(showLockedStatus: value),
+            ),
+          ),
+          if (state.difficultyEnabled ||
+              state.energyEnabled ||
+              state.socialEnabled)
+            _OutputDetailToggleRow(
+              toggleKey: const ValueKey('settings-export-toggle-dimensions'),
+              label: 'Enabled planning dimensions',
+              value: state.exportPrintOptions.showEnabledDimensions,
+              onChanged: (value) => state.setExportPrintOptions(
+                state.exportPrintOptions.copyWith(
+                  showEnabledDimensions: value,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutputDetailToggleRow extends StatelessWidget {
+  const _OutputDetailToggleRow({
+    required this.toggleKey,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Key toggleKey;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            key: toggleKey,
+            value: value,
+            activeThumbColor: primaryTerracotta,
+            activeTrackColor: primaryTerracotta.withValues(alpha: 0.32),
+            onChanged: onChanged,
+          ),
         ],
       ),
     );
@@ -402,6 +513,10 @@ void _copyWeekTextExport(BuildContext context, AppState state) {
   final text = TextWeekExportService.generate(
     calendarTitle: state.calendarTitle,
     plan: state.weekPlan,
+    options: state.exportPrintOptions,
+    difficultyEnabled: state.difficultyEnabled,
+    energyEnabled: state.energyEnabled,
+    socialEnabled: state.socialEnabled,
   );
   Clipboard.setData(ClipboardData(text: text));
   ScaffoldMessenger.of(context).showSnackBar(

@@ -35,6 +35,13 @@ class PersistenceService {
   static const _keyFeedRevokedAtMillis = 'ls_feed_revoked_at_millis';
   static const _keyCachedIcsText = 'ls_cached_ics_text';
   static const _keyCachedIcsUpdatedAtMillis = 'ls_cached_ics_updated_at_millis';
+  static const _keyExportShowTime = 'ls_export_show_time';
+  static const _keyExportShowDuration = 'ls_export_show_duration';
+  static const _keyExportShowCategory = 'ls_export_show_category';
+  static const _keyExportShowCheckInStatus = 'ls_export_show_checkin_status';
+  static const _keyExportShowLockedStatus = 'ls_export_show_locked_status';
+  static const _keyExportShowEnabledDimensions =
+      'ls_export_show_enabled_dimensions';
   static const _pfxEnabled = 'ls_en_';
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
@@ -70,6 +77,15 @@ class PersistenceService {
     final cachedIcsText = _prefs.getString(_keyCachedIcsText);
     final cachedIcsUpdatedAtMillis =
         _prefs.getInt(_keyCachedIcsUpdatedAtMillis);
+    final exportShowTime = _prefs.getBool(_keyExportShowTime) ?? true;
+    final exportShowDuration = _prefs.getBool(_keyExportShowDuration) ?? true;
+    final exportShowCategory = _prefs.getBool(_keyExportShowCategory) ?? true;
+    final exportShowCheckInStatus =
+        _prefs.getBool(_keyExportShowCheckInStatus) ?? true;
+    final exportShowLockedStatus =
+        _prefs.getBool(_keyExportShowLockedStatus) ?? true;
+    final exportShowEnabledDimensions =
+        _prefs.getBool(_keyExportShowEnabledDimensions) ?? true;
     final enabledMap = <String, bool>{};
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
@@ -114,6 +130,12 @@ class PersistenceService {
       feedRevokedAtMillis: feedRevokedAtMillis,
       cachedIcsText: cachedIcsText,
       cachedIcsUpdatedAtMillis: cachedIcsUpdatedAtMillis,
+      exportShowTime: exportShowTime,
+      exportShowDuration: exportShowDuration,
+      exportShowCategory: exportShowCategory,
+      exportShowCheckInStatus: exportShowCheckInStatus,
+      exportShowLockedStatus: exportShowLockedStatus,
+      exportShowEnabledDimensions: exportShowEnabledDimensions,
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
@@ -212,6 +234,24 @@ class PersistenceService {
   static void saveCachedIcsUpdatedAtMillis(int? value) =>
       _saveNullableInt(_keyCachedIcsUpdatedAtMillis, value);
 
+  static void saveExportShowTime(bool value) =>
+      _prefs.setBool(_keyExportShowTime, value);
+
+  static void saveExportShowDuration(bool value) =>
+      _prefs.setBool(_keyExportShowDuration, value);
+
+  static void saveExportShowCategory(bool value) =>
+      _prefs.setBool(_keyExportShowCategory, value);
+
+  static void saveExportShowCheckInStatus(bool value) =>
+      _prefs.setBool(_keyExportShowCheckInStatus, value);
+
+  static void saveExportShowLockedStatus(bool value) =>
+      _prefs.setBool(_keyExportShowLockedStatus, value);
+
+  static void saveExportShowEnabledDimensions(bool value) =>
+      _prefs.setBool(_keyExportShowEnabledDimensions, value);
+
   static void saveUpdatedAtMillis(int value) =>
       _prefs.setInt(_keyUpdatedAtMillis, value);
 
@@ -283,6 +323,12 @@ class SavedState {
     this.feedRevokedAtMillis,
     this.cachedIcsText,
     this.cachedIcsUpdatedAtMillis,
+    this.exportShowTime = true,
+    this.exportShowDuration = true,
+    this.exportShowCategory = true,
+    this.exportShowCheckInStatus = true,
+    this.exportShowLockedStatus = true,
+    this.exportShowEnabledDimensions = true,
   });
 
   final List<Activity> activities;
@@ -308,6 +354,12 @@ class SavedState {
   final int? feedRevokedAtMillis;
   final String? cachedIcsText;
   final int? cachedIcsUpdatedAtMillis;
+  final bool exportShowTime;
+  final bool exportShowDuration;
+  final bool exportShowCategory;
+  final bool exportShowCheckInStatus;
+  final bool exportShowLockedStatus;
+  final bool exportShowEnabledDimensions;
   final Map<String, bool> enabledMap;
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
@@ -337,6 +389,12 @@ class SavedState {
       'feedRevokedAtMillis': feedRevokedAtMillis,
       'cachedIcsText': cachedIcsText,
       'cachedIcsUpdatedAtMillis': cachedIcsUpdatedAtMillis,
+      'exportShowTime': exportShowTime,
+      'exportShowDuration': exportShowDuration,
+      'exportShowCategory': exportShowCategory,
+      'exportShowCheckInStatus': exportShowCheckInStatus,
+      'exportShowLockedStatus': exportShowLockedStatus,
+      'exportShowEnabledDimensions': exportShowEnabledDimensions,
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
@@ -385,6 +443,15 @@ class SavedState {
       cachedIcsText: _readRawNullableString(map['cachedIcsText']),
       cachedIcsUpdatedAtMillis:
           _readNullableInt(map['cachedIcsUpdatedAtMillis']),
+      exportShowTime: _readBoolOrDefault(map['exportShowTime'], true),
+      exportShowDuration: _readBoolOrDefault(map['exportShowDuration'], true),
+      exportShowCategory: _readBoolOrDefault(map['exportShowCategory'], true),
+      exportShowCheckInStatus:
+          _readBoolOrDefault(map['exportShowCheckInStatus'], true),
+      exportShowLockedStatus:
+          _readBoolOrDefault(map['exportShowLockedStatus'], true),
+      exportShowEnabledDimensions:
+          _readBoolOrDefault(map['exportShowEnabledDimensions'], true),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
@@ -428,6 +495,9 @@ class SavedState {
   }
 
   static bool _readBool(Object? value) => value is bool ? value : false;
+
+  static bool _readBoolOrDefault(Object? value, bool fallback) =>
+      value is bool ? value : fallback;
 
   static String _readOption(
     Object? value, {

@@ -194,6 +194,10 @@ class PlanScreen extends StatelessWidget {
     final text = TextWeekExportService.generate(
       calendarTitle: state.calendarTitle,
       plan: state.weekPlan,
+      options: state.exportPrintOptions,
+      difficultyEnabled: state.difficultyEnabled,
+      energyEnabled: state.energyEnabled,
+      socialEnabled: state.socialEnabled,
     );
 
     try {

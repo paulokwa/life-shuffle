@@ -1372,3 +1372,39 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The print preview screen's back arrow and "Print preview" label are excluded from the frame captured by browser print, so PDF/print output now starts with the calendar title and week range as intended. On-screen, the controls are visible and usable as before, disappearing only for the instant printing is triggered.
 - **Next recommended step**: None pending for this fix. Future PDF export or output-detail toggles remain separate, unstarted roadmap items.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Output detail toggles for export/print
+
+- **Goal**: Let users choose which optional fields appear in the weekly text export and print preview for the selected calendar, without PDF generation, monthly/two-week/day/year views, Firestore rules changes, or new sharing/lifecycle work.
+- **Summary**: Added `ExportPrintOptions` (`lib/models/export_print_options.dart`), a small immutable value object with six booleans — `showTime`, `showDuration`, `showCategory`, `showCheckInStatus`, `showLockedStatus`, `showEnabledDimensions` — all defaulting to `true` so existing output is unchanged until a user turns something off. `AppState` holds one `_exportPrintOptions` field, exposes it via `exportPrintOptions`, and a single `setExportPrintOptions()` mutator that Settings switches call through `copyWith()`. Persistence follows the existing flat-field `SavedState` pattern used by `difficultyEnabled`/`feedEnabled`/etc.: six new flat fields on `SavedState`/`PersistenceService` (no nested map, no new Firestore collection), so `FirestoreSyncService` needed no changes since it already spreads `SavedState.toMap()`/`fromMap()`. `TextWeekExportService.generate()` gained an `options` parameter (default `const ExportPrintOptions()`) plus `difficultyEnabled`/`energyEnabled`/`socialEnabled` flags, and a new public `TextWeekExportService.dimensionLabels()` helper (e.g. `Difficulty 3/5`, `Energy: Medium`) shared by both the text export and the print preview so the two surfaces describe dimensions identically. Activity title and the day/date line have no toggle and always show, per the task's explicit scope. `PrintPreviewScreen`'s `_PrintActivityRow` now reads `AppState.exportPrintOptions` directly (no prop-drilling) and conditionally renders time/duration/category/check-in/locked/dimension chips. Settings > Export / print gained a "What to include" section with five always-visible switches (Time, Duration, Category, Check-in status, Locked status) and a sixth "Enabled planning dimensions" switch that only appears when at least one of Difficulty/Energy/Social is itself enabled in Activity defaults — so a fully-disabled-dimensions calendar never shows a toggle with nothing to control. Also wired the same `options`/dimension flags into the Plan screen's existing "Export" quick action (`plan_screen.dart`) so it produces the same output as Settings > Copy text instead of silently ignoring the new preferences.
+- **Files changed**:
+  - `lib/models/export_print_options.dart` (new)
+  - `lib/services/text_week_export_service.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `lib/screens/print_preview_screen.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/text_week_export_service_test.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep `ExportPrintOptions` as a typed value object for app/business logic, but persist it as flat `SavedState` booleans rather than a nested map, matching every other small settings group already in `SavedState` and avoiding a new serialization shape.
+  - No notes toggle: private/internal notes are not implemented anywhere in current app state, so there is nothing to gate. Likewise, no Location or "who it is for" toggles, since those fields don't exist cleanly on `Activity` yet.
+  - Hide the "Enabled planning dimensions" switch entirely (not just disable it) when none of Difficulty/Energy/Social is enabled, rather than showing a dead toggle.
+  - Apply the same options to the Plan screen's existing Export action, not just the two explicitly named Settings actions, so the app has one consistent export/print output instead of two diverging ones for the same week.
+- **Tests run**:
+  - `dart format` on all touched/new Dart and test files.
+  - `flutter test` - passed, 123/123 tests, including 7 new `text_week_export_service_test.dart` cases (defaults, hiding duration/category/check-in/locked, hiding time, including/excluding dimensions by setting and by toggle, `dimensionLabels()` filtering) and 5 new `widget_test.dart` cases (Settings shows the five base toggles with useful defaults and no dimension toggle when none enabled; dimension toggle appears only when a dimension is enabled; toggling a switch updates `AppState` and persists through `PersistenceService.load()`; print preview hides duration/category/check-in/locked status when disabled while title stays visible; print preview shows/hides enabled planning dimensions based on both the dimension setting and the toggle).
+  - `flutter analyze --no-fatal-infos` - passed; same 18 pre-existing info-level lints, no new issues.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with no whitespace issues.
+  - `npm test` - not run; no JavaScript files were touched.
+  - Confirmed `tool/serviceAccountKey.json` remains untracked and `.gitignore`-matched.
+- **Current state**: Settings > Export / print now has six output-detail switches that apply identically to Copy text, Open print view, and the Plan screen's Export action. Choices persist locally and sync through the existing Firestore `SavedState` path for signed-in users. No PDF export, monthly/two-week/day/year views, Firestore rules changes, or sharing/lifecycle work was added.
+- **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
+- **Open questions**: None.
