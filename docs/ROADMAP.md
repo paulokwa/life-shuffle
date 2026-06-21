@@ -151,6 +151,29 @@ Goal: improve the shared experience after the core Version 1 works.
 - [ ] Add richer starter activity templates if needed
 - [ ] Add notifications/reminders if needed
 
+### MVP 2 calendar view expansion notes
+
+Do not pull monthly/two-week/day/year views into MVP 1 unless there is an explicit direction change. For now, keep MVP 1 focused on the useful shared weekly planner and weekly print/export.
+
+When MVP 2 calendar-view work begins, treat month view as a planning feature, not just a visual/print template. A monthly grid is only valuable if the app can generate, save, and reload a whole month of activities.
+
+Preferred approach for monthly planning:
+
+- Build a dedicated `MonthPlannerService` or equivalent month-planning layer that can reuse the weekly planner internally, rather than calling the weekly generator directly from the UI.
+- Expose a clean month-plan model to the front end so the user sees a normal month calendar, not week-generation plumbing.
+- Keep generated months stable across refreshes, shared-account reloads, and printing; do not regenerate a different month accidentally on every view open.
+- Preserve locks and check-ins for the correct dates across the whole generated month.
+- Decide how rules behave across week boundaries before implementation. In particular, no-consecutive-days should probably apply across Sunday/Monday boundaries because users experience the month as continuous days, not isolated weeks.
+- Keep browser print / Save as PDF as the first PDF path. Native app-generated PDF export is not required unless V2 later needs one-tap PDF download/share, exact page breaks, or custom PDF templates.
+
+Suggested narrow first slice for MVP 2:
+
+- Read-only generated month view for the selected calendar.
+- Proper 7-column calendar grid.
+- Activity titles inside date cells.
+- Browser print / Save as PDF support.
+- No drag/drop, no cell editing, no recurring-events system, no native PDF package, and no full Google/Outlook-style calendar clone in the first slice.
+
 ## MVP 3 — AI assistant
 
 Goal: help users who do not know what to add or how to plan.
