@@ -17,7 +17,7 @@ class TextWeekExportService {
         sortedPlan.where((day) => day.activities.isNotEmpty).toList();
     final buffer = StringBuffer()
       ..writeln('$calendarTitle week')
-      ..writeln(_weekRange(sortedPlan))
+      ..writeln(weekRangeLabel(sortedPlan))
       ..writeln();
 
     if (plannedDays.isEmpty) {
@@ -55,7 +55,9 @@ class TextWeekExportService {
     return buffer.toString().trimRight();
   }
 
-  static String _weekRange(List<DayPlan> plan) {
+  /// Formatted month/day week range, e.g. `Jun 22-28, 2026`. Callers must
+  /// pass an already date-sorted [plan] (also used by the print preview).
+  static String weekRangeLabel(List<DayPlan> plan) {
     if (plan.isEmpty) return 'No week selected';
     final first = plan.first.date;
     final last = plan.last.date;

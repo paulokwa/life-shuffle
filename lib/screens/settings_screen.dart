@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import 'onboarding_screen.dart';
+import 'print_preview_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -351,7 +352,7 @@ class _ExportPrintCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Week text export',
+                      'Export / print this week',
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -360,7 +361,7 @@ class _ExportPrintCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Copies this week as plain text. Private notes are not included.',
+                      'Copy this week as plain text, or open a print-friendly view. Private notes are not included.',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         height: 1.35,
@@ -373,11 +374,23 @@ class _ExportPrintCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _PublishingActionButton(
-            key: const ValueKey('settings-copy-week-text-export'),
-            icon: Icons.copy_rounded,
-            label: 'Copy text',
-            onTap: () => _copyWeekTextExport(context, state),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _PublishingActionButton(
+                key: const ValueKey('settings-copy-week-text-export'),
+                icon: Icons.copy_rounded,
+                label: 'Copy text',
+                onTap: () => _copyWeekTextExport(context, state),
+              ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-open-print-view'),
+                icon: Icons.print_rounded,
+                label: 'Open print view',
+                onTap: () => _openPrintPreview(context, state),
+              ),
+            ],
           ),
         ],
       ),
@@ -393,6 +406,12 @@ void _copyWeekTextExport(BuildContext context, AppState state) {
   Clipboard.setData(ClipboardData(text: text));
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(content: Text('Week text copied')),
+  );
+}
+
+void _openPrintPreview(BuildContext context, AppState state) {
+  Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => PrintPreviewScreen(appState: state)),
   );
 }
 

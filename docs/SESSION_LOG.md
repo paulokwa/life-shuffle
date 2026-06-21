@@ -1313,3 +1313,37 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The shared-calendar/member access foundation for Kwame and Laura is manually verified in production. No app code, Firestore rules, or Firestore data changed in this entry.
 - **Next recommended step**: Decide whether to start calendar create/leave/delete lifecycle work or another roadmap item next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Printable weekly calendar view foundation
+
+- **Goal**: Add a simple print-friendly weekly calendar view for the selected/shared calendar, without PDF export, output-detail toggles, or any sharing/lifecycle/Firestore/ICS changes.
+- **Summary**: Added `lib/screens/print_preview_screen.dart`, a read-only screen pushed from Settings showing the selected calendar's title, week date range, and each day with planned activity title, time, duration, category, a check-in status label when set (Done/Partly done/Skipped; hidden when unchecked to avoid noise), and a small lock icon only when an item is locked. Days with no planned items show "No planned items"; if the whole week has nothing planned, the screen shows a single "No planned activities this week." message instead of seven empty day blocks. Added a `Print` app-bar action that calls a new conditional-import helper (`lib/services/browser_print.dart` exporting `browser_print_stub.dart` or, on web, `browser_print_web.dart`) which triggers `dart:html`'s `window.print()` on web and otherwise returns `false` so the screen falls back to a SnackBar telling the user to use their own browser/device print option. Wired a new `Open print view` button into Settings > Export / print (`lib/screens/settings_screen.dart`), alongside the existing `Copy text` action, and reworded that card's title/description to cover both actions. Exposed `TextWeekExportService.weekRangeLabel()` (previously private `_weekRange`) so the print preview reuses the exact same week-range formatting as the text export instead of duplicating it.
+- **Files changed**:
+  - `lib/screens/print_preview_screen.dart` (new)
+  - `lib/services/browser_print.dart` (new)
+  - `lib/services/browser_print_stub.dart` (new)
+  - `lib/services/browser_print_web.dart` (new)
+  - `lib/services/text_week_export_service.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the print view read-only with no notes UI, no output-detail toggles, and no PDF generation, matching the explicit MVP scope for this slice.
+  - Use a `dart:html`/conditional-import approach for browser print rather than adding a new package; it resolves to a no-op stub under `flutter test`'s VM target and under mobile, so the screen always falls back gracefully instead of crashing.
+  - Hide check-in status entirely for unchecked items and only show the lock icon when an item is actually locked, to keep the printed page visually quiet.
+  - Show a single empty-week message only when the entire week has no planned items; days with no items inside an otherwise-planned week just show "No planned items" inline, consistent with existing Plan-screen wording.
+- **Tests run**:
+  - `dart format` on all touched/new Dart files.
+  - `flutter test` - passed, 110/110 tests, including four new tests: Settings exposes the print preview action and navigates to it, print preview renders calendar title/week range/day labels, print preview renders planned activity details, and print preview shows the empty-week message when nothing is planned. Updated the existing Settings export test for the renamed card title.
+  - `flutter analyze --no-fatal-infos` - passed; 18 info-level lints (the existing 16 plus two expected `dart:html`-related deprecation/avoid-web-library infos from the new conditional-import print helper, both non-fatal).
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note, confirming the conditional `dart:html` import resolves correctly for the web compile target.
+  - `git diff --check` - passed with no whitespace issues.
+  - `npm test` - not run; no JavaScript files were touched.
+  - Confirmed `tool/serviceAccountKey.json` remains untracked and `.gitignore`-matched.
+- **Current state**: Settings > Export / print now offers both Copy text and Open print view. The print preview is a read-only, print-friendly weekly view of the selected calendar with a working browser-print button on web. No PDF export, output-detail toggles, Firestore rules, ICS/feed behavior, or sharing/lifecycle features were changed.
+- **Next recommended step**: Decide whether PDF export, output-detail toggles, or calendar create/leave/delete lifecycle is the next export/print or V1 lane to build.
+- **Open questions**: None.

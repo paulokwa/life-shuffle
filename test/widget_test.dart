@@ -13,6 +13,7 @@ import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
 import 'package:life_shuffle/screens/onboarding_screen.dart';
 import 'package:life_shuffle/screens/plan_screen.dart';
+import 'package:life_shuffle/screens/print_preview_screen.dart';
 import 'package:life_shuffle/screens/progress_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
@@ -1554,7 +1555,7 @@ void main() {
       find.byKey(const ValueKey('settings-export-print-card')),
       findsOneWidget,
     );
-    expect(find.text('Week text export'), findsOneWidget);
+    expect(find.text('Export / print this week'), findsOneWidget);
 
     await tester.ensureVisible(
       find.byKey(const ValueKey('settings-copy-week-text-export')),
@@ -1565,6 +1566,115 @@ void main() {
     await tester.pump();
 
     expect(find.text('Week text copied'), findsOneWidget);
+  });
+
+  testWidgets('Settings exposes print preview action',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings-open-print-view')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-open-print-view')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-open-print-view')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('print-preview-screen')),
+      findsOneWidget,
+    );
+    expect(find.text('Print preview'), findsOneWidget);
+  });
+
+  testWidgets('Print preview renders calendar title, week range, and days',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('print-preview-calendar-title')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(appState.calendarTitle),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-week-range')),
+      findsOneWidget,
+    );
+    for (final day in appState.weekPlan) {
+      expect(find.text(day.fullLabel), findsOneWidget);
+    }
+  });
+
+  testWidgets('Print preview renders planned activity details',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final plannedDay = appState.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('print-preview-empty-week')),
+      findsNothing,
+    );
+    expect(
+      find.text(plannedActivity.title),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('Print preview shows a helpful empty-week message',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('print-preview-empty-week')),
+      findsOneWidget,
+    );
+    expect(find.text('No planned activities this week.'), findsOneWidget);
   });
 
   test('Publishing metadata enables disables regenerates and persists',
