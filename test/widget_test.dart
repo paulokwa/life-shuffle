@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1953,6 +1954,149 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('Owner sees Delete calendar', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('settings-delete-calendar-row')),
+        findsOneWidget);
+  });
+
+  testWidgets('Non-owner member does not see Delete calendar',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('laura_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('settings-delete-calendar-row')),
+        findsNothing);
+  });
+
+  testWidgets('Delete confirmation requires exact calendar name',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('settings-delete-calendar-row')));
+    await tester.pumpAndSettle();
+
+    FilledButton deleteButton() => tester.widget<FilledButton>(
+          find.byKey(const ValueKey('delete-calendar-confirm')),
+        );
+
+    expect(find.text('Delete this calendar?'), findsOneWidget);
+    expect(
+      find.text(
+          'This deletes it for everyone and turns off its calendar feed.'),
+      findsOneWidget,
+    );
+    expect(deleteButton().onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('delete-calendar-name-field')),
+      'shared week',
+    );
+    await tester.pump();
+    expect(deleteButton().onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('delete-calendar-name-field')),
+      'Shared week',
+    );
+    await tester.pump();
+    expect(deleteButton().onPressed, isNotNull);
+  });
+
   test('Owner cannot leave current calendar', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -2182,6 +2326,226 @@ void main() {
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.selectedCalendarId,
         FirestoreSyncService.defaultCalendarId('laura_user'));
+  });
+
+  test('Owner delete removes only current calendar', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final deletedCalendarIds = <String>[];
+    var sharedExists = true;
+    const personalCalendarId = 'personal_calendar';
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (userId) async {
+        return [
+          if (sharedExists)
+            _remoteCalendar(
+              userId: 'owner_user',
+              calendarId: 'shared_calendar',
+              title: 'Shared week',
+              ownerUserId: 'owner_user',
+              memberUserIds: const ['owner_user', 'laura_user'],
+              displayNameConfirmed: true,
+              calendarNameConfirmed: true,
+            ),
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: personalCalendarId,
+            title: 'Weekend ideas',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ];
+      },
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      deleteCalendar: ({required calendarId, required currentUserId}) async {
+        deletedCalendarIds.add(calendarId);
+        sharedExists = false;
+        return DeleteCalendarResult.success();
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+    expect(appState.calendarId, 'shared_calendar');
+
+    final result = await appState.deleteCurrentCalendar();
+
+    expect(result.succeeded, isTrue);
+    expect(deletedCalendarIds, const ['shared_calendar']);
+    expect(appState.accessibleCalendars.map((c) => c.calendarId),
+        isNot(contains('shared_calendar')));
+    expect(appState.accessibleCalendars.map((c) => c.calendarId),
+        contains(personalCalendarId));
+  });
+
+  test(
+      'Owner delete selects another accessible calendar and persists selection',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    var sharedExists = true;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (userId) async {
+        return [
+          if (sharedExists)
+            _remoteCalendar(
+              userId: 'owner_user',
+              calendarId: 'shared_calendar',
+              title: 'Shared week',
+              ownerUserId: 'owner_user',
+              memberUserIds: const ['owner_user', 'laura_user'],
+              displayNameConfirmed: true,
+              calendarNameConfirmed: true,
+            ),
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'weekend_calendar',
+            title: 'Weekend ideas',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ];
+      },
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      deleteCalendar: ({required calendarId, required currentUserId}) async {
+        sharedExists = false;
+        return DeleteCalendarResult.success();
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    final result = await appState.deleteCurrentCalendar();
+
+    expect(result.succeeded, isTrue);
+    expect(appState.calendarId, 'weekend_calendar');
+    expect(appState.calendarTitle, 'Weekend ideas');
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId, 'weekend_calendar');
+  });
+
+  test('Owner delete only accessible calendar creates blank default', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final sharedOnlyActivity = Activity(
+      id: 'shared_only_activity',
+      title: 'Shared-only activity',
+      category: 'Social',
+      durationMinutes: 45,
+    );
+    var sharedExists = true;
+    SavedState? savedDefault;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (userId) async {
+        if (!sharedExists) return const [];
+        return [
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'shared_calendar',
+            title: 'Shared week',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user', 'laura_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+            activities: [sharedOnlyActivity],
+          ),
+        ];
+      },
+      saveSelectedFirestoreState: (_, calendarId, state) async {
+        if (calendarId ==
+            FirestoreSyncService.defaultCalendarId('owner_user')) {
+          savedDefault = state;
+        }
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      deleteCalendar: ({required calendarId, required currentUserId}) async {
+        sharedExists = false;
+        return DeleteCalendarResult.success();
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+    expect(appState.calendarId, 'shared_calendar');
+
+    final result = await appState.deleteCurrentCalendar();
+
+    expect(result.succeeded, isTrue);
+    expect(appState.calendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'));
+    expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
+    expect(savedDefault, isNotNull);
+    expect(savedDefault!.selectedCalendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'));
+    expect(savedDefault!.activities.map((activity) => activity.id),
+        isNot(contains('shared_only_activity')));
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'));
+  });
+
+  test('Non-owner member cannot call delete through AppState guard', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    var deleteCalled = false;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      deleteCalendar: ({required calendarId, required currentUserId}) async {
+        deleteCalled = true;
+        return DeleteCalendarResult.success();
+      },
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('laura_user');
+    await appState.syncWithFirestore();
+
+    final result = await appState.deleteCurrentCalendar();
+
+    expect(result.succeeded, isFalse);
+    expect(result.status, 'Only the owner can delete this calendar.');
+    expect(deleteCalled, isFalse);
+  });
+
+  test('Firestore rules allow only owners to delete calendars', () {
+    final rules = File('firestore.rules').readAsStringSync();
+
+    expect(rules, contains('allow delete: if isOwner(resource.data);'));
+    expect(rules, isNot(contains('allow delete: if isMember')));
   });
 
   testWidgets('Header displays confirmed calendar name',

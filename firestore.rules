@@ -88,6 +88,8 @@ service cloud.firestore {
         keepsCalendarIdentity(resource.data) &&
         keepsMembersOrIsOwner(resource.data)) ||
         isSelfLeave(resource.data);
+
+      allow delete: if isOwner(resource.data);
     }
 
     match /userProfiles/{userId} {

@@ -1588,3 +1588,38 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Member self-leave is implemented locally for V1. The app can show Leave calendar for non-owner members, remove only that member's access, and safely persist a fallback selection. Owner delete/feed-revocation-on-delete is still not implemented.
 - **Next recommended step**: Review the local Firestore self-leave rules change, install Firebase CLI or run rules tests/diagnostics in an environment that has it, then deploy rules only after explicit approval.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Calendar owner delete lifecycle slice
+
+- **Goal**: Implement calendar lifecycle slice 3: owner hard-delete of the current calendar with feed revocation by document removal.
+- **Summary**: Added an owner-only hard-delete path for the current calendar. `FirestoreSyncService.deleteCalendar()` verifies the current user owns the calendar before deleting only that calendar document. `AppState.deleteCurrentCalendar()` blocks non-owners, calls the service, then reloads accessible calendars and selects another accessible calendar or creates/uses a blank deterministic personal default without copying deleted calendar contents. Settings > Calendar now shows a destructive `Delete calendar` row only to owners. The confirmation dialog uses the requested title/body copy and enables Delete only after the exact calendar name is typed. `netlify/functions/calendar-feed.js` was inspected and not changed: because the feed endpoint looks up a calendar document by `feedToken`, hard-deleting the document makes the old feed URL return unavailable/404 naturally. Added local Firestore rules allowing delete only for owners; rules were not deployed.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `firestore.rules`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - V1 owner delete is hard delete only.
+  - Feed revocation on delete is handled by removing the calendar document, not by adding soft-delete/feed logic.
+  - Non-owners are blocked in UI, AppState, service guard, and Firestore rules.
+  - No soft delete, restore/trash, ownership transfer, arbitrary member removal, native PDF, or extra calendar views were added.
+- **Tests run**:
+  - Bundled Dart formatter on touched Dart files.
+  - Targeted `flutter test test/widget_test.dart --plain-name "Delete"` - passed, 3/3 targeted UI tests.
+  - Targeted `flutter test test/widget_test.dart --plain-name "Owner delete"` - passed, 3/3 targeted state tests.
+  - `flutter test` - passed, 156/156 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the same 18 info-level lints already present.
+  - `flutter build web` - passed with the existing wasm dry-run and icon-font warnings.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - Firestore rules diagnostic `tool/diagnostics/check_firebase_rules.ps1` - blocked because Firebase CLI is not installed in this environment; no rules were deployed.
+  - `npm test` - not run; no JavaScript files were changed.
+  - Confirmed `tool/serviceAccountKey.json` remains `.gitignore`-matched and untracked.
+- **Current state**: Calendar create/select, member self-leave, and owner hard-delete/feed-revocation lifecycle slices are now implemented locally for V1. The only remaining roadmap item currently called out in the top-level "Still to build" line is PDF export.
+- **Next recommended step**: Review and explicitly approve Firestore rules deployment when ready, then deploy the accumulated rules changes in an environment with Firebase CLI installed.
+- **Open questions**: None.

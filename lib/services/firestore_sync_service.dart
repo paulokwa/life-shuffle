@@ -411,6 +411,48 @@ class FirestoreSyncService {
     }
   }
 
+  static Future<DeleteCalendarResult> deleteCalendar({
+    required String calendarId,
+    required String currentUserId,
+  }) async {
+    final normalizedCalendarId = _normalizeCalendarId(calendarId);
+    final normalizedUserId = _normalizeCalendarId(currentUserId);
+    if (normalizedCalendarId == null || normalizedUserId == null) {
+      return DeleteCalendarResult.failure("You can't delete this calendar.");
+    }
+
+    try {
+      final calendarDoc = _getCalendarDoc(normalizedCalendarId);
+      final snapshot = await calendarDoc.get();
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        return DeleteCalendarResult.failure("You can't delete this calendar.");
+      }
+      final metadata = CalendarMetadata.fromMap(
+        data,
+        fallback: defaultMetadata(normalizedUserId),
+      );
+      if (metadata.ownerUserId != normalizedUserId) {
+        return DeleteCalendarResult.failure(
+          'Only the owner can delete this calendar.',
+        );
+      }
+
+      await calendarDoc.delete();
+      return DeleteCalendarResult.success();
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore deleteCalendar failed: ${e.code}');
+      }
+      return DeleteCalendarResult.failure(_safeErrorMessage(e));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore deleteCalendar failed: $e');
+      }
+      return DeleteCalendarResult.failure('Unknown sync error');
+    }
+  }
+
   static String? _normalizeCalendarId(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
@@ -550,6 +592,30 @@ class LeaveCalendarResult {
 
   factory LeaveCalendarResult.failure(String safeMessage) {
     return LeaveCalendarResult._(
+      succeeded: false,
+      status: safeMessage,
+    );
+  }
+
+  final bool succeeded;
+  final String status;
+}
+
+class DeleteCalendarResult {
+  const DeleteCalendarResult._({
+    required this.succeeded,
+    required this.status,
+  });
+
+  factory DeleteCalendarResult.success() {
+    return const DeleteCalendarResult._(
+      succeeded: true,
+      status: 'Calendar deleted.',
+    );
+  }
+
+  factory DeleteCalendarResult.failure(String safeMessage) {
+    return DeleteCalendarResult._(
       succeeded: false,
       status: safeMessage,
     );

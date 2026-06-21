@@ -216,6 +216,19 @@ class SettingsScreen extends StatelessWidget {
                             state,
                           ),
                         ),
+                      if (state.canDeleteCurrentCalendar)
+                        _SettingsRow(
+                          key: const ValueKey('settings-delete-calendar-row'),
+                          icon: Icons.delete_outline_rounded,
+                          label: 'Delete calendar',
+                          value: '',
+                          hasChevron: true,
+                          color: Theme.of(context).colorScheme.error,
+                          onTap: () => _showDeleteCalendarDialog(
+                            context,
+                            state,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -605,6 +618,18 @@ Future<void> _showLeaveCalendarDialog(
       ),
     );
 
+Future<void> _showDeleteCalendarDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _DeleteCalendarDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
 Future<void> _showCalendarSwitcherDialog(
   BuildContext context,
   AppState state,
@@ -938,6 +963,109 @@ class _LeaveCalendarDialogState extends State<_LeaveCalendarDialog> {
           key: const ValueKey('leave-calendar-confirm'),
           onPressed: _leaving ? null : _leave,
           child: Text(_leaving ? 'Leaving...' : 'Leave'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteCalendarDialog extends StatefulWidget {
+  const _DeleteCalendarDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  State<_DeleteCalendarDialog> createState() => _DeleteCalendarDialogState();
+}
+
+class _DeleteCalendarDialogState extends State<_DeleteCalendarDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+  bool _deleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _matchesCalendarName =>
+      _controller.text == widget.state.calendarTitle;
+
+  Future<void> _delete() async {
+    if (_deleting || !_matchesCalendarName) return;
+    setState(() {
+      _deleting = true;
+      _errorText = null;
+    });
+    final result = await widget.state.deleteCurrentCalendar();
+    if (!mounted) return;
+    if (result.succeeded) {
+      widget.onClose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.status)),
+      );
+      return;
+    }
+    setState(() {
+      _deleting = false;
+      _errorText = result.status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return AlertDialog(
+      title: const Text('Delete this calendar?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This deletes it for everyone and turns off its calendar feed.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('delete-calendar-name-field'),
+            controller: _controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: 'Type the calendar name',
+              helperText: widget.state.calendarTitle,
+              errorText: _errorText,
+            ),
+            onChanged: (_) => setState(() {
+              _errorText = null;
+            }),
+            onSubmitted: (_) => _delete(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting ? null : widget.onClose,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('delete-calendar-confirm'),
+          style: FilledButton.styleFrom(
+            backgroundColor: errorColor,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _deleting || !_matchesCalendarName ? null : _delete,
+          child: Text(_deleting ? 'Deleting...' : 'Delete'),
         ),
       ],
     );
@@ -1659,6 +1787,7 @@ class _SettingsRow extends StatelessWidget {
     required this.value,
     this.hasChevron = true,
     this.onTap,
+    this.color,
   });
 
   final IconData icon;
@@ -1666,12 +1795,13 @@ class _SettingsRow extends StatelessWidget {
   final String value;
   final bool hasChevron;
   final VoidCallback? onTap;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final row = Row(
       children: [
-        Icon(icon, size: 18, color: textMuted),
+        Icon(icon, size: 18, color: color ?? textMuted),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1679,7 +1809,7 @@ class _SettingsRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: textPrimary,
+              color: color ?? textPrimary,
             ),
           ),
         ),

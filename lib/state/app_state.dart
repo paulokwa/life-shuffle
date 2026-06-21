@@ -51,6 +51,10 @@ typedef LeaveCalendar = Future<LeaveCalendarResult> Function({
   required String calendarId,
   required String userId,
 });
+typedef DeleteCalendar = Future<DeleteCalendarResult> Function({
+  required String calendarId,
+  required String currentUserId,
+});
 typedef LoadUserProfiles = Future<List<UserProfile>> Function(
   List<String> userIds,
 );
@@ -106,6 +110,7 @@ class AppState extends ChangeNotifier {
   final AddCalendarMember _addCalendarMember;
   final CreateCalendar _createCalendar;
   final LeaveCalendar _leaveCalendar;
+  final DeleteCalendar _deleteCalendar;
   final LoadUserProfiles _loadUserProfiles;
 
   AppState({
@@ -119,6 +124,7 @@ class AppState extends ChangeNotifier {
     AddCalendarMember? addCalendarMember,
     CreateCalendar? createCalendar,
     LeaveCalendar? leaveCalendar,
+    DeleteCalendar? deleteCalendar,
     LoadUserProfiles? loadUserProfiles,
   })  : activities = activities.map((activity) => activity.copy()).toList(),
         _loadAccessibleCalendars = loadAccessibleCalendars ??
@@ -145,6 +151,7 @@ class AppState extends ChangeNotifier {
             addCalendarMember ?? FirestoreSyncService.addMemberByEmail,
         _createCalendar = createCalendar ?? FirestoreSyncService.createCalendar,
         _leaveCalendar = leaveCalendar ?? FirestoreSyncService.leaveCalendar,
+        _deleteCalendar = deleteCalendar ?? FirestoreSyncService.deleteCalendar,
         _loadUserProfiles =
             loadUserProfiles ?? FirestoreSyncService.loadUserProfilesByIds {
     if (savedState != null) {
@@ -180,6 +187,8 @@ class AppState extends ChangeNotifier {
   bool get hasMultipleAccessibleCalendars => _accessibleCalendars.length > 1;
   bool get canCreateCalendars => _userId != null;
   bool get canAddCalendarMembers =>
+      _userId != null && _calendarOwnerUserId == _userId && _calendarId != null;
+  bool get canDeleteCurrentCalendar =>
       _userId != null && _calendarOwnerUserId == _userId && _calendarId != null;
   bool get canLeaveCurrentCalendar {
     final uid = _userId;
@@ -556,6 +565,33 @@ class AppState extends ChangeNotifier {
       _persistLocal(_currentSavedState());
     }
     _applySyncResult(FirestoreSyncResult.success());
+    notifyListeners();
+    return result;
+  }
+
+  Future<DeleteCalendarResult> deleteCurrentCalendar() async {
+    final uid = _userId;
+    final calendarId = _calendarId;
+    if (uid == null || calendarId == null) {
+      return DeleteCalendarResult.failure(
+        'Sign in before deleting a calendar.',
+      );
+    }
+    if (_calendarOwnerUserId != uid) {
+      return DeleteCalendarResult.failure(
+        'Only the owner can delete this calendar.',
+      );
+    }
+
+    final result = await _deleteCalendar(
+      calendarId: calendarId,
+      currentUserId: uid,
+    );
+    if (!result.succeeded) {
+      return result;
+    }
+
+    await _selectSafeFallbackAfterCalendarRemoval(uid, calendarId);
     notifyListeners();
     return result;
   }
@@ -955,6 +991,47 @@ class AppState extends ChangeNotifier {
       _memberProfiles = const {};
       return 'Member profile lookup failed';
     }
+  }
+
+  Future<void> _selectSafeFallbackAfterCalendarRemoval(
+    String uid,
+    String removedCalendarId,
+  ) async {
+    final remoteCalendars = await _loadAccessibleCalendars(uid);
+    if (_userId != uid) return;
+    final remainingCalendars = remoteCalendars
+        .where(
+          (calendar) => calendar.metadata.calendarId != removedCalendarId,
+        )
+        .toList();
+    await _refreshMemberProfiles(remainingCalendars);
+    if (_userId != uid) return;
+    _accessibleCalendars = List.unmodifiable(remainingCalendars);
+    _preferredCalendarId = null;
+
+    if (remainingCalendars.isNotEmpty) {
+      final fallback = _chooseCalendar(remainingCalendars, uid)!;
+      _applyCalendarMetadata(fallback.metadata, rememberSelection: true);
+      _applySavedState(fallback.state, persistLocal: false);
+      _persistLocal(_currentSavedState());
+      await _saveStateToFirestore(uid, _calendarId!, _currentSavedState());
+      return;
+    }
+
+    final defaultCalendarId = FirestoreSyncService.defaultCalendarId(uid);
+    final fallbackState = _newCalendarSavedState(
+      title: FirestoreSyncService.defaultCalendarTitle,
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+    );
+    _applyCalendarMetadata(
+      FirestoreSyncService.defaultMetadata(uid).copyWith(
+        updatedAtMillis: fallbackState.updatedAtMillis,
+      ),
+      rememberSelection: true,
+    );
+    _applySavedState(fallbackState, persistLocal: false);
+    _persistLocal(_currentSavedState());
+    await _saveStateToFirestore(uid, defaultCalendarId, _currentSavedState());
   }
 
   UserProfile? _memberProfileByEmail(String email) {
