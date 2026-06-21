@@ -8,10 +8,15 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/activity_plan_card.dart';
-import 'check_in_catchup_screen.dart';
+import 'check_in_one_by_one_screen.dart';
 
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key});
+  const TodayScreen({super.key, this.now});
+
+  /// Override for [DateTime.now] used by the check-in prompt's past-unchecked
+  /// check, so tests are deterministic regardless of which real weekday they
+  /// run on. Defaults to the real clock in production.
+  final DateTime? now;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -64,10 +69,10 @@ class _TodayScreenState extends State<TodayScreen> {
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
   }
 
-  void _openCatchup(AppState state) {
+  void _openOneByOneReview(AppState state) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CheckInCatchupScreen(appState: state),
+        builder: (_) => CheckInOneByOneScreen(appState: state),
       ),
     );
   }
@@ -100,10 +105,7 @@ class _TodayScreenState extends State<TodayScreen> {
         .toList();
     final nextUp = pending.isEmpty ? null : pending.first;
 
-    final now = DateTime.now();
-    final hasPastUnchecked = week.any((d) =>
-        d.date.isBefore(DateTime(now.year, now.month, now.day)) &&
-        d.activities.any((a) => a.status == CheckStatus.none));
+    final hasPastUnchecked = state.hasPastUnchecked(now: widget.now);
     final showCheckInPrompt = hasPastUnchecked && !state.checkInPromptDismissed;
 
     return SafeArea(
@@ -123,7 +125,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   if (showCheckInPrompt) ...[
                     const SizedBox(height: 12),
                     _CheckInCard(
-                      onCheckIn: () => _openCatchup(state),
+                      onCheckIn: () => _openOneByOneReview(state),
                       onDismiss: state.dismissCheckInPrompt,
                     ),
                   ],

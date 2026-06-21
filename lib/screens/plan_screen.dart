@@ -10,6 +10,8 @@ import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/status_choice.dart';
+import 'week_review_screen.dart';
 
 class PlanScreen extends StatelessWidget {
   const PlanScreen({super.key});
@@ -184,6 +186,15 @@ class PlanScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _OutlineButton(
+                      key: const ValueKey('plan-review-week-button'),
+                      label: 'Review week',
+                      onTap: () => _openWeekReview(context, state),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -228,6 +239,14 @@ class PlanScreen extends StatelessWidget {
               ? 'Week plan copied'
               : 'No planned activities this week. Empty week copied.',
         ),
+      ),
+    );
+  }
+
+  static void _openWeekReview(BuildContext context, AppState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WeekReviewScreen(appState: state),
       ),
     );
   }
@@ -813,7 +832,7 @@ class _DaySheetActivityCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _StatusChoice(
+              StatusChoice(
                 activityId: activity.id,
                 status: CheckStatus.done,
                 selectedStatus: activity.status,
@@ -821,7 +840,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                 selectedColor: accentSage,
                 onTap: onStatusSelected,
               ),
-              _StatusChoice(
+              StatusChoice(
                 activityId: activity.id,
                 status: CheckStatus.partly,
                 selectedStatus: activity.status,
@@ -829,7 +848,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                 selectedColor: sand,
                 onTap: onStatusSelected,
               ),
-              _StatusChoice(
+              StatusChoice(
                 activityId: activity.id,
                 status: CheckStatus.skipped,
                 selectedStatus: activity.status,
@@ -837,7 +856,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                 selectedColor: textMuted,
                 onTap: onStatusSelected,
               ),
-              _StatusChoice(
+              StatusChoice(
                 activityId: activity.id,
                 status: CheckStatus.none,
                 selectedStatus: activity.status,
@@ -848,54 +867,6 @@ class _DaySheetActivityCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatusChoice extends StatelessWidget {
-  const _StatusChoice({
-    required this.activityId,
-    required this.status,
-    required this.selectedStatus,
-    required this.label,
-    required this.selectedColor,
-    required this.onTap,
-  });
-
-  final String activityId;
-  final CheckStatus status;
-  final CheckStatus selectedStatus;
-  final String label;
-  final Color selectedColor;
-  final ValueChanged<CheckStatus> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = status == selectedStatus;
-    return GestureDetector(
-      key: ValueKey('day-sheet-status-$activityId-${status.name}'),
-      onTap: () => onTap(status),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 13),
-        decoration: BoxDecoration(
-          color: selected ? selectedColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: selected ? selectedColor : borderWarmStrong,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: GoogleFonts.dmSans(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : textMuted,
-          ),
-        ),
       ),
     );
   }

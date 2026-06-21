@@ -5,40 +5,37 @@ import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../state/app_state.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/ls_card.dart';
+import '../widgets/status_choice.dart';
 
-/// Full-screen catch-up flow listing every past unchecked activity grouped
-/// by day, so a user can clear a backlog of check-ins in one pass.
+/// Full-current-week check-in review: every day of [AppState.weekPlan],
+/// including already-checked items, so a user can look back over (and
+/// correct) the whole week in one continuous scroll instead of opening each
+/// day's bottom sheet individually.
 ///
 /// Pushed as a new route, so [AppState] is passed in explicitly and
 /// re-provided via a fresh [AppStateScope] here rather than looked up from
 /// the screen that pushed this route (a new route's context is not a
 /// descendant of the previous route's widget tree).
-class CheckInCatchupScreen extends StatelessWidget {
-  const CheckInCatchupScreen({super.key, required this.appState, this.now});
+class WeekReviewScreen extends StatelessWidget {
+  const WeekReviewScreen({super.key, required this.appState});
 
   final AppState appState;
 
-  /// Override for [DateTime.now] used by the past-unchecked filter, so tests
-  /// are deterministic regardless of which real weekday they run on.
-  final DateTime? now;
-
   @override
   Widget build(BuildContext context) {
-    return AppStateScope(state: appState, child: _CatchupView(now: now));
+    return AppStateScope(state: appState, child: const _WeekReviewView());
   }
 }
 
-class _CatchupView extends StatelessWidget {
-  const _CatchupView({this.now});
-
-  final DateTime? now;
+class _WeekReviewView extends StatelessWidget {
+  const _WeekReviewView();
 
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final dayGroups = state.pastUncheckedByDay(now: now);
-    final totalRemaining =
-        dayGroups.fold<int>(0, (sum, g) => sum + g.$2.length);
+    final days = state.weekPlan;
+    final hasAnyActivities = days.any((d) => d.activities.isNotEmpty);
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -63,7 +60,7 @@ class _CatchupView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Catch up',
+                    'Week review',
                     style: GoogleFonts.lora(
                       fontSize: 28,
                       fontWeight: FontWeight.w500,
@@ -73,9 +70,7 @@ class _CatchupView extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    totalRemaining == 0
-                        ? 'You are all caught up.'
-                        : 'No typing needed — just tap to mark how it went.',
+                    'Mark what happened across the week. No typing needed.',
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                 ],
@@ -83,13 +78,12 @@ class _CatchupView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: dayGroups.isEmpty
-                  ? const AllCaughtUpCard()
-                  : ListView.builder(
+              child: hasAnyActivities
+                  ? ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                      itemCount: dayGroups.length,
+                      itemCount: days.length,
                       itemBuilder: (context, index) {
-                        final (day, items) = dayGroups[index];
+                        final day = days[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 20),
                           child: Column(
@@ -105,17 +99,29 @@ class _CatchupView extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              ...items.map(
-                                (a) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: _CatchupItemCard(activity: a),
+                              if (day.activities.isEmpty)
+                                Text(
+                                  'No planned items.',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 13,
+                                    color: textMuted,
+                                  ),
+                                )
+                              else
+                                ...day.activities.map(
+                                  (a) => Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: 10,
+                                    ),
+                                    child: _WeekReviewItemCard(activity: a),
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         );
                       },
-                    ),
+                    )
+                  : const _NoWeekToReview(),
             ),
           ],
         ),
@@ -124,13 +130,8 @@ class _CatchupView extends StatelessWidget {
   }
 }
 
-// One past activity with three explicit outcome buttons. Each tap commits a
-// final status directly (rather than cycling through states), since the item
-// leaves this screen the moment its status changes away from `none` — a
-// cycling tap would always land on the first state (Done) before the user
-// could reach Partly or Skipped.
-class _CatchupItemCard extends StatelessWidget {
-  const _CatchupItemCard({required this.activity});
+class _WeekReviewItemCard extends StatelessWidget {
+  const _WeekReviewItemCard({required this.activity});
 
   final PlannedActivity activity;
 
@@ -198,7 +199,9 @@ class _CatchupItemCard extends StatelessWidget {
                         Text(
                           activity.time,
                           style: GoogleFonts.dmSans(
-                              fontSize: 12, color: textMuted),
+                            fontSize: 12,
+                            color: textMuted,
+                          ),
                         ),
                         CategoryChip(category: activity.category),
                       ],
@@ -209,34 +212,33 @@ class _CatchupItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: OutcomeButton(
-                  label: 'Done',
-                  background: accentSage,
-                  foreground: Colors.white,
-                  onTap: () => _setStatus(context, CheckStatus.done),
-                ),
+              StatusChoice(
+                activityId: activity.id,
+                status: CheckStatus.done,
+                selectedStatus: activity.status,
+                label: 'Done',
+                selectedColor: accentSage,
+                onTap: (status) => _setStatus(context, status),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutcomeButton(
-                  label: 'Partly',
-                  background: sand.withValues(alpha: 0.20),
-                  foreground: sand,
-                  onTap: () => _setStatus(context, CheckStatus.partly),
-                ),
+              StatusChoice(
+                activityId: activity.id,
+                status: CheckStatus.partly,
+                selectedStatus: activity.status,
+                label: 'Partly',
+                selectedColor: sand,
+                onTap: (status) => _setStatus(context, status),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutcomeButton(
-                  label: 'Skipped',
-                  background: Colors.transparent,
-                  foreground: textMuted,
-                  hasBorder: true,
-                  onTap: () => _setStatus(context, CheckStatus.skipped),
-                ),
+              StatusChoice(
+                activityId: activity.id,
+                status: CheckStatus.skipped,
+                selectedStatus: activity.status,
+                label: 'Skipped',
+                selectedColor: textMuted,
+                onTap: (status) => _setStatus(context, status),
               ),
             ],
           ),
@@ -246,88 +248,38 @@ class _CatchupItemCard extends StatelessWidget {
   }
 }
 
-class OutcomeButton extends StatelessWidget {
-  const OutcomeButton({
-    super.key,
-    required this.label,
-    required this.background,
-    required this.foreground,
-    required this.onTap,
-    this.hasBorder = false,
-  });
-
-  final String label;
-  final Color background;
-  final Color foreground;
-  final bool hasBorder;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 36,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(100),
-          border: hasBorder ? Border.all(color: borderWarmStrong) : null,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: GoogleFonts.dmSans(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: foreground,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class AllCaughtUpCard extends StatelessWidget {
-  const AllCaughtUpCard({super.key});
+class _NoWeekToReview extends StatelessWidget {
+  const _NoWeekToReview();
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFEEF6F2),
+        child: LsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Nothing planned this week',
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: textPrimary,
+                ),
               ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.check_rounded,
-                size: 26,
-                color: accentSage,
+              const SizedBox(height: 4),
+              Text(
+                'Add some activities then regenerate your week to review '
+                'check-ins here.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: textMuted,
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'All caught up',
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: textPrimary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'No past activities are waiting on a check-in.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

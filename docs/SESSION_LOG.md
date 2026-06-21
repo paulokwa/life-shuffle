@@ -1488,3 +1488,38 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: New users now choose Difficulty/Energy/Social during setup instead of only discovering them in Settings later. Settings remains the single source of truth post-onboarding. Replaying the intro from Settings also shows the new step correctly.
 - **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or one-by-one/week-review check-in views is next — these are the remaining open MVP 1 items.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - One-by-one and week review check-in views
+
+- **Goal**: Close the last two open MVP 1 check-in items — a calmer one-by-one review and a week review — without touching the existing quick catch-up view or the Plan day-sheet controls.
+- **Summary**: Added `lib/screens/check_in_one_by_one_screen.dart`: a sequential, one-item-at-a-time review of the past-unchecked backlog (same data as the existing quick catch-up), with Done/Partly/Skipped buttons and a calm "All caught up" completion state. It's stateless — it recomputes the past-unchecked queue from `AppState` on every rebuild and always shows the first remaining item, so marking the current item naturally advances to the next one once `AppState.notifyCheckIn()` fires `notifyListeners()`; no internal index needed. The Today screen's check-in prompt now opens this screen instead of going straight to the full list; the one-by-one screen itself has a "View as list" action that switches to the existing `CheckInCatchupScreen`, so the full list remains one tap away. Added `lib/screens/week_review_screen.dart`: a separate, distinct feature that lists the *entire* current week (all 7 days, including already-checked items, via `AppState.weekPlan` directly — no date filtering), letting users revisit and correct any day in one continuous scroll instead of opening each day's bottom sheet individually. Reachable from a new "Review week" button on the Plan screen, below the existing Export/Publish feed row. Extracted the past-unchecked-by-day filtering logic (previously duplicated inline in both `today_screen.dart` and `check_in_catchup_screen.dart`) into `AppState.pastUncheckedFrom()` (a pure static function operating on a `List<DayPlan>`) plus `pastUncheckedByDay()`/`hasPastUnchecked()` instance wrappers — both accept an optional `now` override, mirroring the existing `ProgressSummaryCalculator.recent(..., now:)` pattern, so date-sensitive logic is unit-testable regardless of which real weekday the test suite happens to run on (the live week always starts on the Monday of `DateTime.now()`, so "are there days before today" is false on real Mondays). Also extracted `StatusChoice` (the filled-when-selected status pill used by the Plan day-sheet) into a new shared `lib/widgets/status_choice.dart` so the week review screen could reuse it without creating a circular import between `plan_screen.dart` and `week_review_screen.dart`. Made `OutcomeButton` and `AllCaughtUpCard` (previously private to `check_in_catchup_screen.dart`) public so the one-by-one screen could reuse them too.
+- **Files changed**:
+  - `lib/screens/check_in_one_by_one_screen.dart` (new)
+  - `lib/screens/week_review_screen.dart` (new)
+  - `lib/widgets/status_choice.dart` (new, extracted from `plan_screen.dart`)
+  - `lib/state/app_state.dart` (`pastUncheckedFrom`/`pastUncheckedByDay`/`hasPastUnchecked`)
+  - `lib/screens/today_screen.dart` (optional `now` param; opens one-by-one instead of catch-up directly; uses the new `AppState` helper)
+  - `lib/screens/check_in_catchup_screen.dart` (uses the new `AppState` helper; `OutcomeButton`/`AllCaughtUpCard` made public; optional `now` param)
+  - `lib/screens/plan_screen.dart` (`StatusChoice` moved out; new "Review week" button)
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - One-by-one only shows Done/Partly/Skipped (no "leave unchecked" button) — the close (X) button is the escape hatch if a user wants to stop mid-review, matching the task's "optional, if it matches existing UX" guidance; there's no existing precedent for a 4th neutral button on these item cards.
+  - Week review intentionally shows the *whole* week (not just the unchecked backlog) so it's meaningfully different from quick catch-up rather than a near-duplicate; it omits "Unchecked" (3 buttons, not 4) per the task's literal wording, so fully resetting a status still requires the Plan day-sheet.
+  - Kept the existing quick catch-up screen's behavior and route untouched aside from the shared-helper refactor; it remains reachable via "View as list" from the new one-by-one screen.
+  - Gave date-sensitive AppState methods an optional `now` override rather than relying on the real clock in tests, since the live week's "today" can legitimately be the first day of the array (Monday), which would make any "are there past days" widget test flaky depending on which real weekday it runs on.
+- **Tests run**:
+  - `dart format` on all touched/new Dart files (no changes needed — already formatted).
+  - `flutter test` - passed, 137/137 tests. Added 7 new tests: a pure unit test for `AppState.pastUncheckedFrom` with synthetic days and a fixed `now` (decoupled from the real clock); Today screen shows the check-in prompt and "Check in" opens `CheckInOneByOneScreen`; one-by-one review advances through every past-unchecked item via repeated "Done" taps and shows "All caught up" at the end; "View as list" switches from one-by-one to `CheckInCatchupScreen`; week review shows all 7 day headers (scrolling past `ListView.builder`'s lazy rendering to reach the last one) and updates/persists an activity's status via the shared `StatusChoice` keys; Plan screen's new "Review week" button opens `WeekReviewScreen`. Updated none of the existing check-in tests' assertions — the Plan day-sheet and persistence tests (`StatusChoice`'s key format) passed unmodified since the key format wasn't changed during the extraction.
+  - `flutter analyze --no-fatal-infos` - passed; same 18 pre-existing info-level lints, no new issues.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with no whitespace issues.
+  - Confirmed `tool/serviceAccountKey.json` remains untracked and `.gitignore`-matched.
+  - No browser-automation tool was available in this session to click through the live UI manually; verification relied on the widget tests above plus the clean web build.
+- **Current state**: All MVP 1 check-in items from the roadmap are now complete: skippable prompt, quick catch-up, day-sheet, one-by-one review, and week review. Optional notes for check-ins remain the only unchecked item in that group. No Firestore rules, ICS/feed behavior, calendar lifecycle, or planner changes were made.
+- **Next recommended step**: Decide whether native PDF export or calendar create/leave/delete lifecycle is next — these are the remaining open MVP 1 items.
+- **Open questions**: None.

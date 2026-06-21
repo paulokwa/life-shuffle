@@ -684,6 +684,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Past (strictly before [now], defaulting to [DateTime.now]), unchecked
+  /// activities in [plans], grouped by day. A pure function of its inputs so
+  /// it can be unit tested with synthetic days regardless of which real
+  /// weekday the test happens to run on.
+  static List<(DayPlan, List<PlannedActivity>)> pastUncheckedFrom(
+    List<DayPlan> plans, {
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? DateTime.now());
+    final result = <(DayPlan, List<PlannedActivity>)>[];
+    for (final day in plans) {
+      if (!day.date.isBefore(today)) continue;
+      final unchecked =
+          day.activities.where((a) => a.status == CheckStatus.none).toList();
+      if (unchecked.isNotEmpty) result.add((day, unchecked));
+    }
+    return result;
+  }
+
+  List<(DayPlan, List<PlannedActivity>)> pastUncheckedByDay({DateTime? now}) =>
+      pastUncheckedFrom(_weekPlan, now: now);
+
+  bool hasPastUnchecked({DateTime? now}) =>
+      pastUncheckedByDay(now: now).isNotEmpty;
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
   // ─── Private ─────────────────────────────────────────────────────────────
 
   FirestoreCalendar? _chooseCalendar(

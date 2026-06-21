@@ -10,12 +10,16 @@ import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
+import 'package:life_shuffle/screens/check_in_catchup_screen.dart';
+import 'package:life_shuffle/screens/check_in_one_by_one_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
 import 'package:life_shuffle/screens/onboarding_screen.dart';
 import 'package:life_shuffle/screens/plan_screen.dart';
 import 'package:life_shuffle/screens/print_preview_screen.dart';
 import 'package:life_shuffle/screens/progress_screen.dart';
 import 'package:life_shuffle/screens/settings_screen.dart';
+import 'package:life_shuffle/screens/today_screen.dart';
+import 'package:life_shuffle/screens/week_review_screen.dart';
 import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/firestore_sync_service.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
@@ -3175,6 +3179,22 @@ void main() {
     );
   });
 
+  testWidgets('Plan Review week button opens the week review screen',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-review-week-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-review-week-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WeekReviewScreen), findsOneWidget);
+  });
+
   testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -3251,6 +3271,159 @@ void main() {
         .expand((candidate) => candidate.activities)
         .firstWhere((candidate) => candidate.id == planned.id);
     expect(restoredPlanned.status, CheckStatus.partly);
+  });
+
+  test('AppState.pastUncheckedFrom groups past unchecked items by day', () {
+    final now = DateTime(2026, 6, 18, 9);
+    final plans = [
+      _summaryDay(DateTime(2026, 6, 15), [CheckStatus.none, CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 16), [CheckStatus.partly]),
+      _summaryDay(
+        DateTime(2026, 6, 17),
+        [CheckStatus.none, CheckStatus.none],
+      ),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.none]),
+      _summaryDay(DateTime(2026, 6, 19), [CheckStatus.none]),
+    ];
+
+    final result = AppState.pastUncheckedFrom(plans, now: now);
+
+    expect(result.length, 2);
+    expect(result[0].$1.date, DateTime(2026, 6, 15));
+    expect(result[0].$2.length, 1);
+    expect(result[1].$1.date, DateTime(2026, 6, 17));
+    expect(result[1].$2.length, 2);
+  });
+
+  testWidgets(
+      'Today screen shows the check-in prompt and opens one-by-one review',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final now = appState.weekPlan.last.date.add(const Duration(days: 1));
+    expect(appState.hasPastUnchecked(now: now), isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: Scaffold(body: TodayScreen(now: now)),
+        ),
+      ),
+    );
+
+    expect(
+      find.text('Past activities need a quick check-in'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Check in'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CheckInOneByOneScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'One-by-one review advances after marking items and shows completion',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final now = appState.weekPlan.last.date.add(const Duration(days: 1));
+    final flat = <PlannedActivity>[
+      for (final (_, items) in appState.pastUncheckedByDay(now: now)) ...items,
+    ];
+    expect(flat, isNotEmpty);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CheckInOneByOneScreen(appState: appState, now: now),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (var remaining = flat.length; remaining > 0; remaining--) {
+      expect(
+        find.text(
+          '$remaining ${remaining == 1 ? "item" : "items"} to review',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text('All caught up'), findsOneWidget);
+    expect(flat.every((a) => a.status == CheckStatus.done), isTrue);
+  });
+
+  testWidgets('One-by-one review "View as list" switches to catch-up',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final now = appState.weekPlan.last.date.add(const Duration(days: 1));
+    expect(appState.hasPastUnchecked(now: now), isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CheckInOneByOneScreen(appState: appState, now: now),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('View as list'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CheckInCatchupScreen), findsOneWidget);
+    expect(find.byType(CheckInOneByOneScreen), findsNothing);
+  });
+
+  testWidgets('Week review groups items by day and updates statuses',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final day = appState.weekPlan.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+    final planned = day.activities.first;
+
+    await tester.pumpWidget(
+      MaterialApp(home: WeekReviewScreen(appState: appState)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(appState.weekPlan.first.fullLabel.toUpperCase()),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-done')),
+    );
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-done')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.done);
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-status-${planned.id}-partly')),
+    );
+    await tester.pumpAndSettle();
+    expect(planned.status, CheckStatus.partly);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.checkinMap[planned.id], CheckStatus.partly.index);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(appState.weekPlan.last.fullLabel.toUpperCase()),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Plan empty day opens empty check-in sheet',
