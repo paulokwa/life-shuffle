@@ -1554,3 +1554,37 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Calendar create/select/fallback is implemented for V1. Settings can create a named calendar and switch among accessible calendars. Member leave and owner delete are still not implemented.
 - **Next recommended step**: Implement calendar lifecycle slice 2: member leave, including fallback to another accessible calendar or a blank deterministic default.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Calendar member leave lifecycle slice
+
+- **Goal**: Implement the second safe calendar lifecycle slice: allow non-owner members to leave the current shared calendar without implementing owner delete.
+- **Summary**: Added `FirestoreSyncService.leaveCalendar()` as a narrow update path that removes only the current user from `memberUserIds` and updates `updatedAtMillis`. Added `AppState.leaveCurrentCalendar()` plus `canLeaveCurrentCalendar`; after a successful leave it reloads accessible calendars and lets the existing fallback flow select another accessible calendar or create/use the deterministic personal default with blank starter/default state. Added a Settings > Calendar `Leave calendar` row for non-owner shared-calendar members and a plain-language confirmation dialog. Owner delete, owner removing other members, ownership transfer, invitations, PDF export, and ICS/feed behavior remain out of scope.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `firestore.rules`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Owner cannot leave their own calendar in V1.
+  - Member leave does not delete the calendar and does not mutate planner, feed, or activity fields.
+  - The fallback/default calendar after leaving an only accessible shared calendar is blank starter/default state, not a copy of the shared calendar.
+  - A local Firestore rules update is required for member self-leave because the existing non-owner update rule preserved `memberUserIds`. Rules were not deployed.
+- **Tests run**:
+  - `dart format` via bundled Dart: formatted touched Dart files.
+  - Targeted `flutter test test/widget_test.dart --plain-name "Leaving"` - passed, 3/3 targeted leave tests.
+  - `flutter test` - passed, 148/148 tests. Added leave coverage for non-owner visibility, owner leave blocking, narrow self-leave behavior, fallback to another accessible calendar, fallback to a blank deterministic personal default, and persisted local selected-calendar state after leave.
+  - `flutter analyze --no-fatal-infos` - passed with the same 18 existing info-level lints.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - Firestore rules diagnostic `tool/diagnostics/check_firebase_rules.ps1` - blocked because Firebase CLI is not installed in this environment; no rules were deployed.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains `.gitignore`-matched and untracked.
+- **Current state**: Member self-leave is implemented locally for V1. The app can show Leave calendar for non-owner members, remove only that member's access, and safely persist a fallback selection. Owner delete/feed-revocation-on-delete is still not implemented.
+- **Next recommended step**: Review the local Firestore self-leave rules change, install Firebase CLI or run rules tests/diagnostics in an environment that has it, then deploy rules only after explicit approval.
+- **Open questions**: None.

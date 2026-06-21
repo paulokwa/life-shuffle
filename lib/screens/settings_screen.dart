@@ -204,6 +204,18 @@ class SettingsScreen extends StatelessWidget {
                             state,
                           ),
                         ),
+                      if (state.canLeaveCurrentCalendar)
+                        _SettingsRow(
+                          key: const ValueKey('settings-leave-calendar-row'),
+                          icon: Icons.logout_rounded,
+                          label: 'Leave calendar',
+                          value: '',
+                          hasChevron: true,
+                          onTap: () => _showLeaveCalendarDialog(
+                            context,
+                            state,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -581,6 +593,18 @@ Future<void> _showCreateCalendarDialog(
       ),
     );
 
+Future<void> _showLeaveCalendarDialog(
+  BuildContext context,
+  AppState state,
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _LeaveCalendarDialog(
+        state: state,
+        onClose: () => Navigator.of(dialogContext).pop(),
+      ),
+    );
+
 Future<void> _showCalendarSwitcherDialog(
   BuildContext context,
   AppState state,
@@ -840,6 +864,80 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
           key: const ValueKey('add-member-save'),
           onPressed: _saving ? null : _save,
           child: Text(_saving ? 'Adding...' : 'Add'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeaveCalendarDialog extends StatefulWidget {
+  const _LeaveCalendarDialog({
+    required this.state,
+    required this.onClose,
+  });
+
+  final AppState state;
+  final VoidCallback onClose;
+
+  @override
+  State<_LeaveCalendarDialog> createState() => _LeaveCalendarDialogState();
+}
+
+class _LeaveCalendarDialogState extends State<_LeaveCalendarDialog> {
+  String? _errorText;
+  bool _leaving = false;
+
+  Future<void> _leave() async {
+    if (_leaving) return;
+    setState(() {
+      _leaving = true;
+      _errorText = null;
+    });
+    final result = await widget.state.leaveCurrentCalendar();
+    if (!mounted) return;
+    if (result.succeeded) {
+      widget.onClose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.status)),
+      );
+      return;
+    }
+    setState(() {
+      _leaving = false;
+      _errorText = result.status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Leave this calendar?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "You won't see or edit this calendar anymore. Other members can "
+            'still use it.',
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _leaving ? null : widget.onClose,
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('leave-calendar-confirm'),
+          onPressed: _leaving ? null : _leave,
+          child: Text(_leaving ? 'Leaving...' : 'Leave'),
         ),
       ],
     );

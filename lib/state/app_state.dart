@@ -47,6 +47,10 @@ typedef CreateCalendar = Future<CreateCalendarResult> Function({
   SavedState? initialState,
   String? calendarId,
 });
+typedef LeaveCalendar = Future<LeaveCalendarResult> Function({
+  required String calendarId,
+  required String userId,
+});
 typedef LoadUserProfiles = Future<List<UserProfile>> Function(
   List<String> userIds,
 );
@@ -101,6 +105,7 @@ class AppState extends ChangeNotifier {
   final UpsertUserProfile _upsertUserProfile;
   final AddCalendarMember _addCalendarMember;
   final CreateCalendar _createCalendar;
+  final LeaveCalendar _leaveCalendar;
   final LoadUserProfiles _loadUserProfiles;
 
   AppState({
@@ -113,6 +118,7 @@ class AppState extends ChangeNotifier {
     UpsertUserProfile? upsertUserProfile,
     AddCalendarMember? addCalendarMember,
     CreateCalendar? createCalendar,
+    LeaveCalendar? leaveCalendar,
     LoadUserProfiles? loadUserProfiles,
   })  : activities = activities.map((activity) => activity.copy()).toList(),
         _loadAccessibleCalendars = loadAccessibleCalendars ??
@@ -138,6 +144,7 @@ class AppState extends ChangeNotifier {
         _addCalendarMember =
             addCalendarMember ?? FirestoreSyncService.addMemberByEmail,
         _createCalendar = createCalendar ?? FirestoreSyncService.createCalendar,
+        _leaveCalendar = leaveCalendar ?? FirestoreSyncService.leaveCalendar,
         _loadUserProfiles =
             loadUserProfiles ?? FirestoreSyncService.loadUserProfilesByIds {
     if (savedState != null) {
@@ -174,6 +181,15 @@ class AppState extends ChangeNotifier {
   bool get canCreateCalendars => _userId != null;
   bool get canAddCalendarMembers =>
       _userId != null && _calendarOwnerUserId == _userId && _calendarId != null;
+  bool get canLeaveCurrentCalendar {
+    final uid = _userId;
+    return uid != null &&
+        _calendarId != null &&
+        _calendarOwnerUserId != uid &&
+        _calendarMemberUserIds.contains(uid) &&
+        _calendarMemberUserIds.length > 1;
+  }
+
   bool get difficultyEnabled => _difficultyEnabled;
   bool get energyEnabled => _energyEnabled;
   bool get socialEnabled => _socialEnabled;
@@ -503,6 +519,44 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       await syncWithFirestore();
     }
+    return result;
+  }
+
+  Future<LeaveCalendarResult> leaveCurrentCalendar() async {
+    final uid = _userId;
+    final calendarId = _calendarId;
+    if (uid == null || calendarId == null) {
+      return LeaveCalendarResult.failure(
+        'Sign in before leaving a calendar.',
+      );
+    }
+    if (_calendarOwnerUserId == uid) {
+      return LeaveCalendarResult.failure(
+        "Owners can't leave their own calendar.",
+      );
+    }
+    if (!_calendarMemberUserIds.contains(uid) ||
+        _calendarMemberUserIds.length <= 1) {
+      return LeaveCalendarResult.failure(
+        "You can't leave this calendar.",
+      );
+    }
+
+    final result = await _leaveCalendar(
+      calendarId: calendarId,
+      userId: uid,
+    );
+    if (!result.succeeded) {
+      return result;
+    }
+
+    await syncWithFirestore();
+    final selectedCalendarId = _calendarId;
+    if (selectedCalendarId != null) {
+      _persistLocal(_currentSavedState());
+    }
+    _applySyncResult(FirestoreSyncResult.success());
+    notifyListeners();
     return result;
   }
 

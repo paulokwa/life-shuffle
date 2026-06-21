@@ -382,6 +382,35 @@ class FirestoreSyncService {
     }
   }
 
+  static Future<LeaveCalendarResult> leaveCalendar({
+    required String calendarId,
+    required String userId,
+  }) async {
+    final normalizedCalendarId = _normalizeCalendarId(calendarId);
+    final normalizedUserId = _normalizeCalendarId(userId);
+    if (normalizedCalendarId == null || normalizedUserId == null) {
+      return LeaveCalendarResult.failure("You can't leave this calendar.");
+    }
+
+    try {
+      await _getCalendarDoc(normalizedCalendarId).update({
+        'memberUserIds': FieldValue.arrayRemove([normalizedUserId]),
+        'updatedAtMillis': DateTime.now().millisecondsSinceEpoch,
+      });
+      return LeaveCalendarResult.success();
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore leaveCalendar failed: ${e.code}');
+      }
+      return LeaveCalendarResult.failure(_safeErrorMessage(e));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore leaveCalendar failed: $e');
+      }
+      return LeaveCalendarResult.failure('Unknown sync error');
+    }
+  }
+
   static String? _normalizeCalendarId(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
@@ -504,6 +533,30 @@ class CreateCalendarResult {
   final bool succeeded;
   final String status;
   final FirestoreCalendar? calendar;
+}
+
+class LeaveCalendarResult {
+  const LeaveCalendarResult._({
+    required this.succeeded,
+    required this.status,
+  });
+
+  factory LeaveCalendarResult.success() {
+    return const LeaveCalendarResult._(
+      succeeded: true,
+      status: 'You left the calendar.',
+    );
+  }
+
+  factory LeaveCalendarResult.failure(String safeMessage) {
+    return LeaveCalendarResult._(
+      succeeded: false,
+      status: safeMessage,
+    );
+  }
+
+  final bool succeeded;
+  final String status;
 }
 
 String _safeErrorMessage(FirebaseException error) {
