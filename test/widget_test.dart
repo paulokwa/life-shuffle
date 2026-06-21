@@ -260,6 +260,130 @@ void main() {
     expect(saved.introOnboardingCompleted, isTrue);
   });
 
+  testWidgets('Onboarding shows planning-dimensions step with toggles',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: OnboardingScreen(onComplete: () {}),
+        ),
+      ),
+    );
+
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text('Choose planning\ndetails'), findsOneWidget);
+    expect(find.text('Difficulty'), findsOneWidget);
+    expect(find.text('Energy'), findsOneWidget);
+    expect(find.text('Social'), findsOneWidget);
+    expect(
+      find.text('Helps avoid stacking too many hard activities.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Helps match activities to low, medium, or high energy days.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Helps mark activities as solo, together, group, or either.'),
+      findsOneWidget,
+    );
+    expect(find.byType(Switch), findsNWidgets(3));
+    expect(find.text('Get started'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Toggling dimensions during onboarding updates AppState and persists',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: OnboardingScreen(onComplete: () {}),
+        ),
+      ),
+    );
+
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(appState.difficultyEnabled, isFalse);
+    expect(appState.energyEnabled, isFalse);
+    expect(appState.socialEnabled, isFalse);
+
+    final switches = find.byType(Switch);
+    await tester.tap(switches.at(0));
+    await tester.pump();
+    await tester.tap(switches.at(1));
+    await tester.pump();
+    await tester.tap(switches.at(2));
+    await tester.pump();
+
+    expect(appState.difficultyEnabled, isTrue);
+    expect(appState.energyEnabled, isTrue);
+    expect(appState.socialEnabled, isTrue);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.difficultyEnabled, isTrue);
+    expect(saved.energyEnabled, isTrue);
+    expect(saved.socialEnabled, isTrue);
+  });
+
+  testWidgets(
+      'Completing onboarding persists chosen dimension settings alongside completion',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(home: AuthGate(appState: appState)),
+    );
+
+    await tester.enterText(find.byType(TextField), 'Kwame');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+
+    for (var i = 0; i < 4; i++) {
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pump();
+
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomNavShell), findsOneWidget);
+    expect(appState.introOnboardingCompleted, isTrue);
+    expect(appState.difficultyEnabled, isTrue);
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.introOnboardingCompleted, isTrue);
+    expect(saved.difficultyEnabled, isTrue);
+  });
+
   testWidgets('Returning local user skips mini onboarding when completed',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -3716,7 +3840,7 @@ Future<List<UserProfile>> _loadProfilesForTest(List<String> userIds) async {
 }
 
 Future<void> _completeOnboarding(WidgetTester tester) async {
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < 4; i++) {
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
   }

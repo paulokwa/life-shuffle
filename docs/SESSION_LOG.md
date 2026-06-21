@@ -1461,3 +1461,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings shows calm, plain-language sync diagnostics (title, body, optional Retry) for load/save/profile/permission failures instead of raw Firebase text. The Plan screen shows a small dismissible notice when a sync just applied a newer remote version. No real-time listeners, merge UI, Firestore rules changes, or calendar lifecycle work was added.
 - **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Planning-dimensions onboarding screen
+
+- **Goal**: Close the last open MVP 1 onboarding item by surfacing the existing Difficulty/Energy/Social dimension toggles during initial setup, not just in Settings.
+- **Summary**: Added a 5th step to the existing `OnboardingScreen` (after the 4 narrative intro steps, titled "Choose planning details") with three toggle rows wired directly to the existing `AppState.setDifficultyEnabled`/`setEnergyEnabled`/`setSocialEnabled` methods — no new model, persistence key, or planner change. The existing `_steps`/`isLast`/dots logic was generalized with a `_lastPage` getter instead of hardcoding `_steps.length - 1`. To avoid a `RenderFlex` overflow on short screens once a 3-row card was added, the previous `Spacer()`-centered layout was replaced with an `Expanded` + centered `Column` for the 4 narrative steps, and the new dimensions page renders inside a `SingleChildScrollView` (new `_DimensionsStepBody`/`_OnboardingDimensionRow` widgets, styled like but simpler than Settings' `_DimensionToggleRow` — no default-value picker, just enable/disable). Toggling during onboarding persists immediately through the same `AppState` setters Settings already uses, so Settings remains the source of truth with no extra wiring. Existing users who already completed onboarding are unaffected (the existing `introOnboardingCompleted` gate in `auth_gate.dart` is unchanged). Found and fixed a real latent bug this change exposed: Settings' "Replay intro" (`_replayIntro`) pushes `OnboardingScreen` via `Navigator.push`, but since `BottomNavShell` has no nested `Navigator`, the pushed route sits outside the `AppStateScope` established by `AuthGate` — harmless while `OnboardingScreen` never read `AppState`, but a crash (`Null check operator used on a null value` in `AppStateScope.of`) once the dimensions page needed it. Fixed by wrapping the pushed route in its own `AppStateScope(state: state, child: ...)`.
+- **Files changed**:
+  - `lib/screens/onboarding_screen.dart`
+  - `lib/screens/settings_screen.dart` (`_replayIntro` fix only)
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat the dimensions step as a virtual 5th page (`_page == _steps.length`) rather than adding it as static `_OnboardingStep` data, since it needs live `AppState` access that the existing data-driven steps don't.
+  - Keep the onboarding toggle row deliberately simpler than Settings' version (no "Default X/5" value label, no On/Off badge) since onboarding is enable/disable only; default-value pickers remain Settings-only.
+  - All three dimensions still default to `false`/off — onboarding only surfaces the existing toggle, it does not change default behavior for anyone.
+- **Tests run**:
+  - `dart format` on touched Dart files.
+  - `flutter test` - passed, 131/131 tests. Added 3 new tests (onboarding shows the dimensions step with all three toggles and helper text; tapping each switch during onboarding updates `AppState` and persists via `PersistenceService.load()`; completing onboarding after toggling a dimension persists both `introOnboardingCompleted` and the dimension flag together). Updated the shared `_completeOnboarding` helper from 3 to 4 "Next" taps to account for the new page, which also kept the existing "Fresh user flow..." test passing. The pre-existing "Settings can replay intro without resetting completion" test caught the `AppStateScope` bug described above before the fix.
+  - `flutter analyze --no-fatal-infos` - passed; same pre-existing info-level lints (plus 2 new `withOpacity` infos carried over unchanged from the original file), no new errors.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - No browser-automation tool was available in this session to click through the live UI manually; verification relied on the widget tests above (which simulate taps on the new switches and assert state) plus the clean web build.
+- **Current state**: New users now choose Difficulty/Energy/Social during setup instead of only discovering them in Settings later. Settings remains the single source of truth post-onboarding. Replaying the intro from Settings also shows the new step correctly.
+- **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or one-by-one/week-review check-in views is next — these are the remaining open MVP 1 items.
+- **Open questions**: None.

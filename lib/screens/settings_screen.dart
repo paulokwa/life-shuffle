@@ -1170,10 +1170,14 @@ class _PrivacyHelpCard extends StatelessWidget {
   }
 
   void _replayIntro(BuildContext context) {
+    final state = AppStateScope.of(context);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (routeContext) => OnboardingScreen(
-          onComplete: () => Navigator.of(routeContext).pop(),
+        builder: (routeContext) => AppStateScope(
+          state: state,
+          child: OnboardingScreen(
+            onComplete: () => Navigator.of(routeContext).pop(),
+          ),
         ),
       ),
     );
