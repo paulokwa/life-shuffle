@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/sync_message.dart';
 import '../services/auth_service.dart';
 import '../services/planner_service.dart' show PlanStyle;
 import '../services/text_week_export_service.dart';
@@ -132,7 +135,7 @@ class SettingsScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (state.lastSyncErrorMessage != null) ...[
+                  if (state.syncMessage != null) ...[
                     const SizedBox(height: 10),
                     _SyncDiagnosticsCard(state: state),
                   ],
@@ -777,7 +780,14 @@ class _SyncDiagnosticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final message = state.syncMessage;
+    if (message == null) return const SizedBox.shrink();
     final attemptedAt = state.lastSyncAttemptAtMillis;
+    final accent = switch (message.severity) {
+      SyncMessageSeverity.error => primaryTerracotta,
+      SyncMessageSeverity.warning => primaryTerracotta,
+      SyncMessageSeverity.info => accentSage,
+    };
     return LsCard(
       key: const ValueKey('settings-sync-diagnostics-card'),
       color: const Color(0xFFFAF0EC),
@@ -788,14 +798,16 @@ class _SyncDiagnosticsCard extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: primaryTerracotta.withValues(alpha: 0.12),
+              color: accent.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: const Icon(
-              Icons.sync_problem_rounded,
+            child: Icon(
+              message.severity == SyncMessageSeverity.info
+                  ? Icons.info_outline_rounded
+                  : Icons.sync_problem_rounded,
               size: 17,
-              color: primaryTerracotta,
+              color: accent,
             ),
           ),
           const SizedBox(width: 10),
@@ -804,7 +816,7 @@ class _SyncDiagnosticsCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Sync diagnostics',
+                  message.title,
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -813,12 +825,12 @@ class _SyncDiagnosticsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  state.lastSyncErrorMessage ?? state.lastSyncStatus,
+                  message.body,
                   key: const ValueKey('settings-sync-error-message'),
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: primaryTerracotta,
+                    color: accent,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -832,6 +844,15 @@ class _SyncDiagnosticsCard extends StatelessWidget {
                     color: textMuted,
                   ),
                 ),
+                if (message.actionLabel != null) ...[
+                  const SizedBox(height: 8),
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-sync-retry'),
+                    icon: Icons.refresh_rounded,
+                    label: message.actionLabel!,
+                    onTap: () => unawaited(state.syncWithFirestore()),
+                  ),
+                ],
               ],
             ),
           ),

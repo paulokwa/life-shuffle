@@ -7,11 +7,16 @@ import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/sync_message.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
 import '../services/persistence_service.dart';
 import '../services/planner_service.dart'
     show PlannerGenerationResult, PlannerService, PlanStyle;
+
+/// Which sync operation a recorded sync failure came from, used only to
+/// pick the right plain-language wording in [AppState._buildSyncMessage].
+enum _SyncOperation { load, save, profile }
 
 typedef LoadDefaultCalendar = Future<FirestoreCalendar?> Function(
     String userId);
@@ -80,7 +85,9 @@ class AppState extends ChangeNotifier {
   ExportPrintOptions _exportPrintOptions = const ExportPrintOptions();
   String _lastSyncStatus = 'Sync pending';
   String? _lastSyncErrorMessage;
+  _SyncOperation? _lastSyncOperation;
   int? _lastSyncAttemptAtMillis;
+  bool _remoteUpdatedElsewhere = false;
   bool _isInitialSyncComplete = true;
   bool _isSyncingInitialState = false;
   final LoadAccessibleCalendars _loadAccessibleCalendars;
@@ -177,6 +184,12 @@ class AppState extends ChangeNotifier {
   String get lastSyncStatus => _lastSyncStatus;
   String? get lastSyncErrorMessage => _lastSyncErrorMessage;
   int? get lastSyncAttemptAtMillis => _lastSyncAttemptAtMillis;
+  bool get remoteUpdatedElsewhere => _remoteUpdatedElsewhere;
+
+  /// Calm, plain-language description of the current sync problem or
+  /// notice, or `null` when sync is healthy. Never exposes raw Firebase
+  /// exception text.
+  SyncMessage? get syncMessage => _buildSyncMessage();
   bool get isInitialSyncComplete => _isInitialSyncComplete;
   bool get isSyncingInitialState => _isSyncingInitialState;
   bool get shouldWaitForInitialSync =>
@@ -240,6 +253,7 @@ class AppState extends ChangeNotifier {
     }
 
     try {
+      _remoteUpdatedElsewhere = false;
       final remoteCalendars = await _loadAccessibleCalendars(uid);
       if (_userId != uid) return;
       final profileWarning = await _refreshMemberProfiles(remoteCalendars);
@@ -259,6 +273,13 @@ class AppState extends ChangeNotifier {
 
       if (remote != null &&
           remote.state.updatedAtMillis > local.updatedAtMillis) {
+        // A previous local sync already happened (updatedAtMillis > 0) and
+        // the remote copy is newer, so another device/session changed this
+        // calendar in between; note that for the UI rather than treating it
+        // as the normal first-load case below.
+        if (local.updatedAtMillis > 0) {
+          _remoteUpdatedElsewhere = true;
+        }
         _applySavedState(remote.state, persistLocal: false);
         _persistLocal(_currentSavedState());
         // Re-derive rather than re-save remote.state verbatim:
@@ -284,13 +305,20 @@ class AppState extends ChangeNotifier {
         }
       }
       if (profileWarning != null) {
-        _applySyncResult(FirestoreSyncResult.failure(profileWarning));
+        _applySyncResult(
+          FirestoreSyncResult.failure(profileWarning),
+          operation: _SyncOperation.profile,
+        );
       }
     } on FirestoreSyncException catch (e) {
-      _applySyncResult(FirestoreSyncResult.failure(e.safeMessage));
+      _applySyncResult(
+        FirestoreSyncResult.failure(e.safeMessage),
+        operation: _SyncOperation.load,
+      );
     } catch (_) {
       _applySyncResult(
         FirestoreSyncResult.failure('Unknown sync error'),
+        operation: _SyncOperation.load,
       );
     } finally {
       if (_userId == uid && wasInitialSync) {
@@ -299,6 +327,14 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Dismisses the "updated elsewhere" notice without waiting for the next
+  /// sync to naturally clear it.
+  void dismissRemoteUpdateNotice() {
+    if (!_remoteUpdatedElsewhere) return;
+    _remoteUpdatedElsewhere = false;
+    notifyListeners();
   }
 
   // ─── Activities ───────────────────────────────────────────────────────────
@@ -816,20 +852,73 @@ class AppState extends ChangeNotifier {
   ) async {
     _markSyncPending();
     final result = await _saveSelectedFirestoreState(uid, calendarId, state);
-    _applySyncResult(result);
+    _applySyncResult(result, operation: _SyncOperation.save);
   }
 
   void _markSyncPending() {
     _lastSyncStatus = 'Sync pending';
     _lastSyncErrorMessage = null;
+    _lastSyncOperation = null;
     _lastSyncAttemptAtMillis = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
   }
 
-  void _applySyncResult(FirestoreSyncResult result) {
+  void _applySyncResult(FirestoreSyncResult result,
+      {_SyncOperation? operation}) {
     _lastSyncStatus = result.status;
     _lastSyncErrorMessage = result.errorMessage;
+    _lastSyncOperation = result.errorMessage != null ? operation : null;
     notifyListeners();
+  }
+
+  /// Translates the current safe sync status into a calm, plain-language
+  /// [SyncMessage] for the UI. Returns `null` when sync is healthy and no
+  /// notice is pending.
+  SyncMessage? _buildSyncMessage() {
+    if (_remoteUpdatedElsewhere) {
+      return const SyncMessage(
+        severity: SyncMessageSeverity.info,
+        title: 'Updated elsewhere',
+        body:
+            'This calendar was updated elsewhere. Showing the latest version.',
+      );
+    }
+    final error = _lastSyncErrorMessage;
+    if (error == null) return null;
+    if (error.toLowerCase().contains('permission denied')) {
+      return const SyncMessage(
+        severity: SyncMessageSeverity.warning,
+        title: "Can't access this calendar",
+        body: 'You may not have access to this calendar anymore. '
+            'Ask the calendar owner to check sharing.',
+      );
+    }
+    switch (_lastSyncOperation) {
+      case _SyncOperation.save:
+        return const SyncMessage(
+          severity: SyncMessageSeverity.warning,
+          title: "Couldn't save",
+          body:
+              "Couldn't save just now. Your changes are still on this device.",
+          actionLabel: 'Retry',
+        );
+      case _SyncOperation.profile:
+        return const SyncMessage(
+          severity: SyncMessageSeverity.info,
+          title: 'Member names unavailable',
+          body: "Couldn't load member names for this calendar right now.",
+          actionLabel: 'Retry',
+        );
+      case _SyncOperation.load:
+      case null:
+        return const SyncMessage(
+          severity: SyncMessageSeverity.warning,
+          title: 'Sync issue',
+          body: "Couldn't load the latest shared calendar. "
+              'Check your connection and try again.',
+          actionLabel: 'Retry',
+        );
+    }
   }
 
   @visibleForTesting

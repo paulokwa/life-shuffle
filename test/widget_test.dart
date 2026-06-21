@@ -659,8 +659,15 @@ void main() {
       find.byKey(const ValueKey('settings-sync-diagnostics-card')),
       findsOneWidget,
     );
-    expect(find.text('Sync diagnostics'), findsOneWidget);
-    expect(find.text('Firestore permission denied'), findsOneWidget);
+    expect(find.text("Can't access this calendar"), findsOneWidget);
+    expect(
+      find.text(
+        'You may not have access to this calendar anymore. '
+        'Ask the calendar owner to check sharing.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Firestore permission denied'), findsNothing);
     expect(find.text('Last attempt: 12345'), findsOneWidget);
     expect(find.textContaining('BEGIN:VCALENDAR'), findsNothing);
     expect(find.textContaining('private_key'), findsNothing);
@@ -689,6 +696,9 @@ void main() {
 
     expect(saveCallCount, 0);
     expect(appState.lastSyncErrorMessage, 'Firestore permission denied');
+    expect(appState.syncMessage?.title, "Can't access this calendar");
+    expect(appState.syncMessage?.body, isNot(contains('Firestore')));
+    expect(appState.syncMessage?.body, isNot(contains('Firebase')));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -699,8 +709,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Sync diagnostics'), findsOneWidget);
-    expect(find.text('Firestore permission denied'), findsOneWidget);
+    expect(find.text("Can't access this calendar"), findsOneWidget);
+    expect(find.text('Firestore permission denied'), findsNothing);
   });
 
   test('Member profile load failure keeps remote member metadata visible',
@@ -736,6 +746,197 @@ void main() {
     expect(appState.calendarMemberUserIds, const ['owner_user', 'laura_user']);
     expect(appState.calendarMemberDisplayLabels, const ['You', 'laura_us...']);
     expect(appState.lastSyncErrorMessage, 'Member profile lookup failed');
+    expect(appState.syncMessage?.title, 'Member names unavailable');
+    expect(appState.syncMessage?.body,
+        isNot(contains('Member profile lookup failed')));
+  });
+
+  test('Failed save shows a plain-language message and keeps local changes',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.failure('Firebase unavailable'),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.lastSyncErrorMessage, 'Firebase unavailable');
+    expect(appState.syncMessage, isNotNull);
+    expect(appState.syncMessage!.title, "Couldn't save");
+    expect(
+      appState.syncMessage!.body,
+      "Couldn't save just now. Your changes are still on this device.",
+    );
+    expect(appState.syncMessage!.body, isNot(contains('Firebase')));
+    expect(appState.syncMessage!.actionLabel, 'Retry');
+  });
+
+  test('Permission denied never exposes raw Firebase exception text', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async {
+        throw const FirestoreSyncException('Firestore permission denied');
+      },
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    final message = appState.syncMessage;
+    expect(message, isNotNull);
+    expect(message!.body, isNot(contains('Firestore')));
+    expect(message.body, isNot(contains('Firebase')));
+    expect(message.body, isNot(contains('permission-denied')));
+    expect(message.title, "Can't access this calendar");
+  });
+
+  test('Successful sync clears any sync message', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.lastSyncErrorMessage, isNull);
+    expect(appState.syncMessage, isNull);
+    expect(appState.remoteUpdatedElsewhere, isFalse);
+  });
+
+  testWidgets('Settings sync diagnostics shows Retry and it re-syncs',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    // Both the implicit sync triggered by setUserId and the explicit await
+    // below race each other, so they must agree on the outcome (fail) until
+    // the test deliberately flips shouldFail after settling, avoiding any
+    // ordering-dependent flakiness.
+    var shouldFail = true;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async {
+        if (shouldFail) {
+          throw const FirestoreSyncException('Firebase unavailable');
+        }
+        return const [];
+      },
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+    expect(appState.syncMessage?.actionLabel, 'Retry');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    final retryButton = find.byKey(const ValueKey('settings-sync-retry'));
+    await tester.ensureVisible(retryButton);
+    expect(retryButton, findsOneWidget);
+
+    shouldFail = false;
+    await tester.tap(retryButton);
+    await tester.pumpAndSettle();
+
+    expect(appState.syncMessage, isNull);
+  });
+
+  testWidgets(
+      'Plan screen shows updated-elsewhere notice and dismiss clears it',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    // Both calls in the first sync round (the implicit one from setUserId
+    // and the explicit awaited one below) must observe the same remote
+    // value, so the round is race-safe; the value is only bumped after that
+    // round has fully settled.
+    var remoteUpdatedAtMillis = 2000;
+    FirestoreCalendar buildCalendar() => FirestoreCalendar(
+          state: SavedState(
+            activities: PlannerService.defaultActivities,
+            seed: 0,
+            updatedAtMillis: remoteUpdatedAtMillis,
+            enabledMap: const {},
+            checkinMap: const {},
+            lockedMap: const {},
+          ),
+          metadata: CalendarMetadata(
+            calendarId: 'owner_user_default',
+            title: 'Kwame and Laura',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            createdAtMillis: remoteUpdatedAtMillis,
+            updatedAtMillis: remoteUpdatedAtMillis,
+          ),
+        );
+
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [buildCalendar()],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+    expect(appState.remoteUpdatedElsewhere, isFalse);
+
+    remoteUpdatedAtMillis = 9000;
+    await appState.syncWithFirestore();
+    expect(appState.remoteUpdatedElsewhere, isTrue);
+    expect(appState.syncMessage?.title, 'Updated elsewhere');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(state: appState, child: const PlanScreen()),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('plan-sync-notice-card')),
+      findsOneWidget,
+    );
+    expect(find.text('Updated elsewhere'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('plan-sync-notice-dismiss')));
+    await tester.pump();
+
+    expect(appState.remoteUpdatedElsewhere, isFalse);
+    expect(
+      find.byKey(const ValueKey('plan-sync-notice-card')),
+      findsNothing,
+    );
   });
 
   test(

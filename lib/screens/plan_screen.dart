@@ -5,6 +5,7 @@ import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/sync_message.dart';
 import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
@@ -78,6 +79,13 @@ class PlanScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   _DayStrip(plans: plans, onDayTap: openDaySheet),
                   const SizedBox(height: 16),
+                  if (state.remoteUpdatedElsewhere) ...[
+                    _SyncNoticeCard(
+                      message: state.syncMessage!,
+                      onDismiss: state.dismissRemoteUpdateNotice,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (state.canUndoLastRegeneration) ...[
                     _RegenerationUndoCard(
                       onUndo: state.undoLastRegeneration,
@@ -243,6 +251,72 @@ class PlanScreen extends StatelessWidget {
       builder: (_) => AppStateScope(
         state: state,
         child: _DayCheckInSheet(plan: plan),
+      ),
+    );
+  }
+}
+
+class _SyncNoticeCard extends StatelessWidget {
+  const _SyncNoticeCard({required this.message, required this.onDismiss});
+
+  final SyncMessage message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('plan-sync-notice-card'),
+      color: const Color(0xFFEEF6F2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x1A6A9E88),
+            ),
+            child: const Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: accentSage,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message.body,
+                  key: const ValueKey('plan-sync-notice-body'),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('plan-sync-notice-dismiss'),
+            onPressed: onDismiss,
+            icon: const Icon(Icons.close_rounded, size: 18, color: textMuted),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
       ),
     );
   }

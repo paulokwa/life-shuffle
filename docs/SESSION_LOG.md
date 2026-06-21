@@ -1428,3 +1428,36 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The public ICS feed has now been verified end-to-end against a real external calendar app (Google Calendar). No app code, Netlify functions, ICS/feed behavior, or Firestore rules/data changed in this entry.
 - **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Basic shared-edit/sync conflict messages
+
+- **Goal**: Make sync/save/load problems and possible shared-edit conflicts visible in plain language for MVP 1, without real-time collaboration, complex merge/conflict-resolution UI, or any Firestore rules changes.
+- **Summary**: Added a small `SyncMessage` value object (`lib/models/sync_message.dart`: `severity`, `title`, `body`, optional `actionLabel`) and wired `AppState` to translate its existing safe sync-status fields into one through a new `syncMessage` getter. Added a private `_SyncOperation` enum (`load`/`save`/`profile`) recorded alongside the existing `_lastSyncErrorMessage` at each of the three places `app_state.dart` already records a failure — `syncWithFirestore()`'s load-exception catch blocks, the member-profile-warning branch, and `_saveStateToFirestore()` — so the same underlying Firestore error can produce different, contextually correct wording ("Couldn't save just now..." vs "Couldn't load the latest shared calendar..." vs "Couldn't load member names...") without changing `firestore_sync_service.dart`'s existing safe-error-code mapping. A permission-denied check runs first regardless of operation, since "you may not have access to this calendar anymore" is the right message no matter which call failed. Also detected the simplest safe shared-edit-conflict case: in `syncWithFirestore()`, when a freshly loaded remote calendar is newer than the local `updatedAtMillis` *and* a local sync had already happened before (`local.updatedAtMillis > 0`, ruling out the normal first-load case), a new `_remoteUpdatedElsewhere` flag is set and exposed as an info-level "Updated elsewhere" `SyncMessage`; the app already auto-applies the newer remote state in that branch, so this is purely an acknowledgement, not a merge decision. Settings' existing `_SyncDiagnosticsCard` now renders `syncMessage`'s title/body (replacing the old raw status string and the generic "Sync diagnostics" heading) plus a Retry button when `actionLabel` is set, wired to the existing safe `syncWithFirestore()`. The Plan screen gained a new dismissible `_SyncNoticeCard`, shown only when `remoteUpdatedElsewhere` is true, with a close button calling a new `AppState.dismissRemoteUpdateNotice()`.
+- **Files changed**:
+  - `lib/models/sync_message.dart` (new)
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep the existing raw `lastSyncStatus`/`lastSyncErrorMessage`/`lastSyncAttemptAtMillis` fields and `firestore_sync_service.dart`'s safe-error-code strings unchanged; layer the new plain-language `SyncMessage` translation entirely inside `AppState` so internal diagnostics history and `setSyncDiagnosticForTesting()` keep working as-is.
+  - Only show the Plan-screen staleness notice for the specific "remote updated elsewhere" case, not general sync errors, since those already have a home in Settings; avoids duplicating the same error in two places.
+  - No SnackBar for the routine background auto-save path: `_persist()` fires on nearly every interaction (toggles, check-ins, locks), so a SnackBar there would be noisy rather than calm; the existing Settings diagnostics card already covers "did my save fail" without new disruptive UI.
+  - Treat "remote newer than local" as a notice only when a prior local sync already happened (`updatedAtMillis > 0`); the very first sync for a fresh session always has a "newer" remote trivially and isn't a real conflict.
+- **Tests run**:
+  - `dart format` on all touched/new Dart files.
+  - `flutter test` - passed, 128/128 tests. Added 5 new tests: a failed save shows "Couldn't save" with no raw Firebase text and a Retry action; permission-denied never exposes raw Firebase/Firestore text; a successful sync clears `syncMessage` and `remoteUpdatedElsewhere`; tapping Settings' Retry button calls `syncWithFirestore()` again and clears the message on success; the Plan screen shows the "Updated elsewhere" notice only after a prior sync and a newer remote update, and dismissing it clears `remoteUpdatedElsewhere`. Also extended the existing member-profile-failure test with a `syncMessage` assertion, and updated the two pre-existing diagnostics-card tests whose literal-text assertions ("Firestore permission denied", "Sync diagnostics" heading) no longer match the new friendly wording/structure.
+  - Two of the new tests drive `syncWithFirestore()` both via `setUserId()`'s internal unawaited call and an explicit awaited call; verified by running each five times in isolation that both fakes are deliberately designed so concurrent invocations agree on outcome until the test has fully settled, avoiding interleaving-order flakiness.
+  - `flutter analyze --no-fatal-infos` - passed; same 18 pre-existing info-level lints, no new issues.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with no whitespace issues.
+  - `npm test` - not run; no JavaScript files were touched.
+  - Confirmed `tool/serviceAccountKey.json` remains untracked and `.gitignore`-matched.
+- **Current state**: Settings shows calm, plain-language sync diagnostics (title, body, optional Retry) for load/save/profile/permission failures instead of raw Firebase text. The Plan screen shows a small dismissible notice when a sync just applied a newer remote version. No real-time listeners, merge UI, Firestore rules changes, or calendar lifecycle work was added.
+- **Next recommended step**: Decide whether native PDF export, calendar create/leave/delete lifecycle, or another MVP 1 item is next.
+- **Open questions**: None.
