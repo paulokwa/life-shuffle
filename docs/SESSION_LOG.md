@@ -1294,3 +1294,22 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The shared-calendar list query that Settings relies on to discover calendars a user is a member of now works in production. Kwame should hard-refresh the deployed app and confirm Settings shows the real member list/switcher instead of `Firestore permission denied`.
 - **Next recommended step**: Have Laura sign in and confirm she sees the shared calendar via the switcher, then do a real cross-account edit/check-in to confirm round-trip sync. Consider formalizing the throwaway-probe technique (or the emulator + `@firebase/rules-unit-testing`, blocked locally today by Java < 21) as a real test under `tool/diagnostics` so this class of bug gets caught before deploy next time.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Manual shared-calendar smoke test passed
+
+- **Goal**: Record Kwame's manual smoke test of the deployed shared-calendar flow after the app-side member UX/reload fix and the Firestore list-query rules fix.
+- **Summary**: Kwame manually tested the deployed app and confirmed the shared-calendar foundation works end to end: the shared calendar stays selected after reload, member names display as friendly labels instead of raw IDs, a calendar rename persists after refresh, and cross-account shared-calendar syncing works. No Firestore data reset or delete was performed during this test.
+- **Files changed**:
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Treat the simple Kwame/Laura membership and selected-calendar access foundation as manually verified in production.
+  - Email invitations, public profiles, calendar create/leave/delete lifecycle, and broader role management remain out of scope for this foundation slice.
+- **Tests run**:
+  - Manual production smoke test (Kwame): shared calendar selection survives reload, friendly member labels display, calendar rename persists after refresh, and cross-account sync works.
+  - `git diff --check` - passed.
+- **Current state**: The shared-calendar/member access foundation for Kwame and Laura is manually verified in production. No app code, Firestore rules, or Firestore data changed in this entry.
+- **Next recommended step**: Decide whether to start calendar create/leave/delete lifecycle work or another roadmap item next.
+- **Open questions**: None.
