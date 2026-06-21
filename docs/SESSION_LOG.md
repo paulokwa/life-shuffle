@@ -1197,3 +1197,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Shared-calendar Firestore rules remain local and undeployed until the explicit production deploy script is run after approval. The old check script can no longer deploy production rules.
 - **Next recommended step**: Review the local shared-calendar `firestore.rules`, then run `deploy_firebase_rules.ps1` only after explicit production rules deploy approval.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 - Fix shared-calendar member UX and reload selection
+
+- **Goal**: Fix app-side shared-calendar member display, duplicate add behavior, and reload selection after Firestore rules were manually published.
+- **Summary**: Confirmed with the safe Firestore diagnostic that `memberUserIds` persisted in production and Laura's profile was linked on the shared calendar. Fixed the app side by resolving member IDs through minimal `userProfiles`, showing the current user as `You`, using display name/email labels for other members, treating duplicate add-by-email as an already-member result, refreshing accessible calendars after a successful member add, and persisting a local selected-calendar ID. Initial sync now prefers a remembered calendar, or a multi-member shared calendar when no prior selection exists, instead of silently falling back to a one-member default calendar.
+- **Files changed**:
+  - `lib/services/firestore_sync_service.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/settings_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/V1_AUDIT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Keep profile data minimal and use it only to resolve member display labels and duplicate add checks.
+  - Keep `arrayUnion` as a backend safety net, but detect duplicates before claiming a new member was added.
+  - Store selected calendar ID as local UI preference, not as Firestore calendar document state.
+  - Do not add invitations, public profiles, roles beyond owner/member, calendar create/delete/leave, or ICS/feed changes.
+- **Tests run**:
+  - `dart format lib/services/firestore_sync_service.dart lib/services/persistence_service.dart lib/state/app_state.dart lib/screens/settings_screen.dart test/widget_test.dart`
+  - `flutter test` - passed, 104/104 tests.
+  - `flutter analyze --no-fatal-infos` - passed with the existing 16 info-level lints.
+- **Current state**: The shared calendar member list should stay on the selected shared calendar after reload, display friendly member names when profiles exist, and show an already-member message for duplicate adds. Firestore data was not reset or deleted, and `tool/serviceAccountKey.json` remains local/gitignored.
+- **Next recommended step**: Deploy this app build through the normal Netlify flow, then manually smoke-test with Laura's account: verify friendly Members labels, duplicate add message, shared calendar selection after reload, and a small Laura edit saving to the shared calendar.
+- **Open questions**: None.

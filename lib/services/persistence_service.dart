@@ -19,6 +19,7 @@ class PersistenceService {
   static const _keyDisplayName = 'ls_display_name';
   static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
   static const _keyCalendarTitle = 'ls_calendar_title';
+  static const _keySelectedCalendarId = 'ls_selected_calendar_id';
   static const _keyCalendarNameConfirmed = 'ls_calendar_name_confirmed';
   static const _keyIntroOnboardingCompleted = 'ls_intro_onboarding_completed';
   static const _keyDifficultyEnabled = 'ls_difficulty_enabled';
@@ -50,6 +51,7 @@ class PersistenceService {
     final displayNameConfirmed =
         _prefs.getBool(_keyDisplayNameConfirmed) ?? false;
     final calendarTitle = _prefs.getString(_keyCalendarTitle);
+    final selectedCalendarId = _prefs.getString(_keySelectedCalendarId);
     final calendarNameConfirmed =
         _prefs.getBool(_keyCalendarNameConfirmed) ?? false;
     final introOnboardingCompleted =
@@ -96,6 +98,7 @@ class PersistenceService {
       displayName: displayName,
       displayNameConfirmed: displayNameConfirmed,
       calendarTitle: calendarTitle,
+      selectedCalendarId: selectedCalendarId,
       calendarNameConfirmed: calendarNameConfirmed,
       introOnboardingCompleted: introOnboardingCompleted,
       difficultyEnabled: difficultyEnabled,
@@ -144,6 +147,14 @@ class PersistenceService {
       return;
     }
     _prefs.setString(_keyCalendarTitle, value.trim());
+  }
+
+  static void saveSelectedCalendarId(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      _prefs.remove(_keySelectedCalendarId);
+      return;
+    }
+    _prefs.setString(_keySelectedCalendarId, value.trim());
   }
 
   static void saveCalendarNameConfirmed(bool value) =>
@@ -256,6 +267,7 @@ class SavedState {
     this.displayName,
     this.displayNameConfirmed = false,
     this.calendarTitle,
+    this.selectedCalendarId,
     this.calendarNameConfirmed = false,
     this.introOnboardingCompleted = false,
     this.difficultyEnabled = false,
@@ -280,6 +292,7 @@ class SavedState {
   final String? displayName;
   final bool displayNameConfirmed;
   final String? calendarTitle;
+  final String? selectedCalendarId;
   final bool calendarNameConfirmed;
   final bool introOnboardingCompleted;
   final bool difficultyEnabled;
@@ -342,6 +355,7 @@ class SavedState {
       displayName: _readNullableString(map['displayName']),
       displayNameConfirmed: _readBool(map['displayNameConfirmed']),
       calendarTitle: _readNullableString(map['calendarTitle']),
+      selectedCalendarId: _readNullableString(map['selectedCalendarId']),
       calendarNameConfirmed: _readBool(map['calendarNameConfirmed']),
       introOnboardingCompleted: _readBool(map['introOnboardingCompleted']),
       difficultyEnabled: _readBool(map['difficultyEnabled']),

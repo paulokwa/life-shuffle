@@ -35,8 +35,9 @@ class SettingsScreen extends StatelessWidget {
         : state.calendarOwnerUserId == currentUserId
             ? 'You'
             : _shortId(state.calendarOwnerUserId!);
-    final memberLabel =
-        _memberLabel(state.calendarMemberUserIds, currentUserId);
+    final memberLabel = state.calendarMemberDisplayLabels.isEmpty
+        ? 'Local only'
+        : state.calendarMemberDisplayLabels.join(', ');
 
     return SafeArea(
       child: Column(
@@ -313,14 +314,6 @@ class SettingsScreen extends StatelessWidget {
     if (id.length <= 8) return id;
     return '${id.substring(0, 8)}...';
   }
-
-  static String _memberLabel(List<String> ids, String? currentUserId) {
-    if (ids.isEmpty) return 'Local only';
-    if (ids.length == 1 && ids.first == currentUserId) return 'You';
-    final labels =
-        ids.map((id) => id == currentUserId ? 'You' : _shortId(id)).join(', ');
-    return labels;
-  }
 }
 
 class _ExportPrintCard extends StatelessWidget {
@@ -557,7 +550,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     if (result.succeeded) {
       widget.onClose();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Member added')),
+        SnackBar(content: Text(result.status)),
       );
       return;
     }

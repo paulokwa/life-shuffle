@@ -225,6 +225,41 @@ class FirestoreSyncService {
     }
   }
 
+  static Future<List<UserProfile>> loadUserProfilesByIds(
+    List<String> userIds,
+  ) async {
+    final uniqueIds = userIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (uniqueIds.isEmpty) return const [];
+
+    try {
+      final profiles = <UserProfile>[];
+      for (var start = 0; start < uniqueIds.length; start += 10) {
+        final end =
+            start + 10 > uniqueIds.length ? uniqueIds.length : start + 10;
+        final chunk = uniqueIds.sublist(start, end);
+        final snapshot = await _db
+            .collection('userProfiles')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        profiles.addAll(
+          snapshot.docs
+              .map((doc) => UserProfile.fromMap(doc.data()))
+              .where((profile) => profile.uid.isNotEmpty),
+        );
+      }
+      return profiles;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Firestore loadUserProfilesByIds failed: $e');
+      }
+      return const [];
+    }
+  }
+
   static Future<AddCalendarMemberResult> addMemberByEmail({
     required String calendarId,
     required String email,
@@ -242,6 +277,15 @@ class FirestoreSyncService {
     }
 
     try {
+      final calendar = await _getCalendarDoc(calendarId).get();
+      final data = calendar.data();
+      final existingMembers = data == null
+          ? const <String>[]
+          : CalendarMetadata._readStringList(data['memberUserIds'], const []);
+      if (existingMembers.contains(profile.uid)) {
+        return AddCalendarMemberResult.alreadyMember(profile);
+      }
+
       await _getCalendarDoc(calendarId).update({
         'memberUserIds': FieldValue.arrayUnion([profile.uid]),
         'updatedAtMillis': DateTime.now().millisecondsSinceEpoch,
@@ -306,13 +350,25 @@ class AddCalendarMemberResult {
     required this.succeeded,
     required this.status,
     this.profile,
+    this.alreadyMember = false,
   });
 
   factory AddCalendarMemberResult.success(UserProfile profile) {
     return AddCalendarMemberResult._(
       succeeded: true,
-      status: 'Member added',
+      status: '${profile.displayLabel} added.',
       profile: profile,
+    );
+  }
+
+  factory AddCalendarMemberResult.alreadyMember(UserProfile profile) {
+    final label =
+        profile.displayLabel.isEmpty ? 'That person' : profile.displayLabel;
+    return AddCalendarMemberResult._(
+      succeeded: true,
+      status: '$label is already a member.',
+      profile: profile,
+      alreadyMember: true,
     );
   }
 
@@ -333,6 +389,7 @@ class AddCalendarMemberResult {
   final bool succeeded;
   final String status;
   final UserProfile? profile;
+  final bool alreadyMember;
 }
 
 String _safeErrorMessage(FirebaseException error) {
@@ -368,6 +425,12 @@ class UserProfile {
   final String uid;
   final String emailLower;
   final String? displayName;
+
+  String get displayLabel {
+    final trimmedName = displayName?.trim();
+    if (trimmedName != null && trimmedName.isNotEmpty) return trimmedName;
+    return emailLower;
+  }
 
   factory UserProfile.fromMap(Map<String, dynamic> map) {
     return UserProfile(

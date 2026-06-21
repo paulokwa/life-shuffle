@@ -744,6 +744,7 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
     );
 
     appState.setUserId('laura_user');
@@ -781,6 +782,7 @@ void main() {
       },
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
     );
 
     appState.setUserId('laura_user');
@@ -793,7 +795,7 @@ void main() {
     );
   });
 
-  testWidgets('Settings member list displays safely',
+  testWidgets('Settings member list uses profile labels when available',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -812,6 +814,7 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
     );
     appState.setUserId('owner_user');
     await appState.syncWithFirestore();
@@ -826,20 +829,22 @@ void main() {
     );
 
     expect(find.text('Members'), findsOneWidget);
-    expect(find.text('You, member_1...'), findsOneWidget);
+    expect(find.text('You, Laura Cormier'), findsOneWidget);
+    expect(find.text('member_1...'), findsNothing);
   });
 
   testWidgets('Settings Add member succeeds when profile exists',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
+    var remoteMemberIds = const ['owner_user'];
     final appState = AppState(
       activities: PlannerService.defaultActivities,
       loadAccessibleCalendars: (_) async => [
         _remoteCalendar(
           userId: 'owner_user',
           ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user'],
+          memberUserIds: remoteMemberIds,
           displayNameConfirmed: true,
           calendarNameConfirmed: true,
         ),
@@ -848,14 +853,17 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
-      addCalendarMember: ({required calendarId, required email}) async =>
-          AddCalendarMemberResult.success(
-        const UserProfile(
-          uid: 'laura_user',
-          emailLower: 'laura@example.com',
-          displayName: 'Laura',
-        ),
-      ),
+      loadUserProfiles: _loadProfilesForTest,
+      addCalendarMember: ({required calendarId, required email}) async {
+        remoteMemberIds = const ['owner_user', 'laura_user'];
+        return AddCalendarMemberResult.success(
+          const UserProfile(
+            uid: 'laura_user',
+            emailLower: 'laura@example.com',
+            displayName: 'Laura',
+          ),
+        );
+      },
     );
     appState.setUserId('owner_user');
     await appState.syncWithFirestore();
@@ -878,8 +886,64 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add-member-save')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Member added'), findsOneWidget);
+    expect(find.text('Laura added.'), findsOneWidget);
     expect(appState.calendarMemberUserIds, contains('laura_user'));
+    expect(appState.calendarMemberDisplayLabels, contains('Laura'));
+  });
+
+  testWidgets('Settings Add member reports existing member without duplicate',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    var addCallCount = 0;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+      addCalendarMember: ({required calendarId, required email}) async {
+        addCallCount++;
+        return AddCalendarMemberResult.failure('Should not call backend');
+      },
+    );
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('settings-add-member-row')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('add-member-email-field')),
+      'laura@example.com',
+    );
+    await tester.tap(find.byKey(const ValueKey('add-member-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Laura is already a member.'), findsOneWidget);
+    expect(addCallCount, 0);
+    expect(
+      appState.calendarMemberUserIds.where((id) => id == 'laura_user').length,
+      1,
+    );
   });
 
   testWidgets('Settings Add member shows helpful message for unknown email',
@@ -901,6 +965,7 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
       addCalendarMember: ({required calendarId, required email}) async =>
           AddCalendarMemberResult.notFound(
         'Laura needs to sign in once before she can be added.',
@@ -965,6 +1030,7 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
     );
     appState.setUserId('owner_user');
     await appState.syncWithFirestore();
@@ -989,6 +1055,130 @@ void main() {
     expect(appState.calendarId, 'weekend_calendar');
     expect(appState.calendarTitle, 'Weekend ideas');
     expect(find.text('Weekend ideas'), findsWidgets);
+  });
+
+  test('Reload prefers shared accessible calendar when no selection exists',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
+          title: 'Personal default',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Kwame and Laura',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user', 'kwame_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.calendarId, 'shared_calendar');
+    expect(appState.calendarTitle, 'Kwame and Laura');
+    expect(appState.calendarMemberUserIds, hasLength(3));
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.selectedCalendarId, 'shared_calendar');
+  });
+
+  test('Reload keeps locally selected calendar when multiple are accessible',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'ls_selected_calendar_id': 'weekend_calendar',
+    });
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: PersistenceService.load(PlannerService.defaultActivities),
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Kwame and Laura',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'weekend_calendar',
+          title: 'Weekend ideas',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+
+    expect(appState.calendarId, 'weekend_calendar');
+    expect(appState.calendarTitle, 'Weekend ideas');
+  });
+
+  testWidgets('Non-owner does not see Add member', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          title: 'Shared week',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('laura_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('settings-add-member-row')), findsNothing);
   });
 
   testWidgets('Header displays confirmed calendar name',
@@ -2910,6 +3100,32 @@ FirestoreCalendar _remoteCalendar({
       updatedAtMillis: updatedAtMillis,
     ),
   );
+}
+
+Future<List<UserProfile>> _loadProfilesForTest(List<String> userIds) async {
+  const profiles = {
+    'owner_user': UserProfile(
+      uid: 'owner_user',
+      emailLower: 'owner@example.com',
+      displayName: 'Owner User',
+    ),
+    'laura_user': UserProfile(
+      uid: 'laura_user',
+      emailLower: 'laura@example.com',
+      displayName: 'Laura',
+    ),
+    'kwame_user': UserProfile(
+      uid: 'kwame_user',
+      emailLower: 'kwame@example.com',
+      displayName: 'Kwame',
+    ),
+    'member_123456789': UserProfile(
+      uid: 'member_123456789',
+      emailLower: 'laura.cormier@example.com',
+      displayName: 'Laura Cormier',
+    ),
+  };
+  return userIds.map((id) => profiles[id]).whereType<UserProfile>().toList();
 }
 
 Future<void> _completeOnboarding(WidgetTester tester) async {

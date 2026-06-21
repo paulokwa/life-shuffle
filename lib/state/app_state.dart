@@ -35,6 +35,9 @@ typedef AddCalendarMember = Future<AddCalendarMemberResult> Function({
   required String calendarId,
   required String email,
 });
+typedef LoadUserProfiles = Future<List<UserProfile>> Function(
+  List<String> userIds,
+);
 
 /// Holds all mutable in-session state: activity pool, current week plan.
 /// Persists changes to [PersistenceService] and [FirestoreSyncService] (if signed in) on every mutation.
@@ -54,9 +57,11 @@ class AppState extends ChangeNotifier {
   bool _checkInPromptDismissed = false;
   String? _userId;
   String? _calendarId;
+  String? _preferredCalendarId;
   String _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
   String? _calendarOwnerUserId;
   List<String> _calendarMemberUserIds = const [];
+  Map<String, UserProfile> _memberProfiles = const {};
   List<FirestoreCalendar> _accessibleCalendars = const [];
   bool _difficultyEnabled = false;
   bool _energyEnabled = false;
@@ -80,6 +85,7 @@ class AppState extends ChangeNotifier {
   final SaveSelectedFirestoreState _saveSelectedFirestoreState;
   final UpsertUserProfile _upsertUserProfile;
   final AddCalendarMember _addCalendarMember;
+  final LoadUserProfiles _loadUserProfiles;
 
   AppState({
     required List<Activity> activities,
@@ -90,6 +96,7 @@ class AppState extends ChangeNotifier {
     SaveSelectedFirestoreState? saveSelectedFirestoreState,
     UpsertUserProfile? upsertUserProfile,
     AddCalendarMember? addCalendarMember,
+    LoadUserProfiles? loadUserProfiles,
   })  : activities = activities.map((activity) => activity.copy()).toList(),
         _loadAccessibleCalendars = loadAccessibleCalendars ??
             (loadDefaultCalendar == null
@@ -112,8 +119,12 @@ class AppState extends ChangeNotifier {
         _upsertUserProfile =
             upsertUserProfile ?? FirestoreSyncService.upsertUserProfile,
         _addCalendarMember =
-            addCalendarMember ?? FirestoreSyncService.addMemberByEmail {
+            addCalendarMember ?? FirestoreSyncService.addMemberByEmail,
+        _loadUserProfiles =
+            loadUserProfiles ?? FirestoreSyncService.loadUserProfilesByIds {
     if (savedState != null) {
+      _preferredCalendarId =
+          _normalizeNullableId(savedState.selectedCalendarId);
       _applySavedState(savedState, persistLocal: false);
     } else {
       _weekPlan = _buildPlan();
@@ -135,6 +146,9 @@ class AppState extends ChangeNotifier {
   String? get calendarOwnerUserId => _calendarOwnerUserId;
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
+  List<String> get calendarMemberDisplayLabels => List.unmodifiable(
+        _calendarMemberUserIds.map(_memberDisplayLabel),
+      );
   List<CalendarMetadata> get accessibleCalendars => List.unmodifiable(
         _accessibleCalendars.map((calendar) => calendar.metadata),
       );
@@ -190,6 +204,7 @@ class AppState extends ChangeNotifier {
       _isInitialSyncComplete = true;
       _isSyncingInitialState = false;
       _accessibleCalendars = const [];
+      _memberProfiles = const {};
       _clearCalendarMetadata();
       notifyListeners();
     }
@@ -224,18 +239,25 @@ class AppState extends ChangeNotifier {
     try {
       final remoteCalendars = await _loadAccessibleCalendars(uid);
       if (_userId != uid) return;
+      await _refreshMemberProfiles(remoteCalendars);
+      if (_userId != uid) return;
 
       final local = _currentSavedState();
       var metadataChanged = false;
       final remote = _chooseCalendar(remoteCalendars, uid);
       _accessibleCalendars = List.unmodifiable(remoteCalendars);
       if (remote != null) {
-        metadataChanged = _applyCalendarMetadata(remote.metadata);
+        metadataChanged = _applyCalendarMetadata(
+          remote.metadata,
+          rememberSelection: true,
+        );
+        _persistLocal(_currentSavedState());
       }
 
       if (remote != null &&
           remote.state.updatedAtMillis > local.updatedAtMillis) {
-        _applySavedState(remote.state);
+        _applySavedState(remote.state, persistLocal: false);
+        _persistLocal(_currentSavedState());
         // Re-derive rather than re-save remote.state verbatim:
         // _applySavedState just rebuilt _weekPlan against "now", which may
         // be a different calendar week than the cached ICS in remote.state.
@@ -280,8 +302,9 @@ class AppState extends ChangeNotifier {
     if (selected == null) return false;
     if (_calendarId == selected.metadata.calendarId) return true;
 
-    _applyCalendarMetadata(selected.metadata);
-    _applySavedState(selected.state);
+    _applyCalendarMetadata(selected.metadata, rememberSelection: true);
+    _applySavedState(selected.state, persistLocal: false);
+    _persistLocal(_currentSavedState());
     notifyListeners();
     return true;
   }
@@ -294,12 +317,24 @@ class AppState extends ChangeNotifier {
       );
     }
 
+    final locallyKnownProfile = _memberProfileByEmail(email);
+    if (locallyKnownProfile != null &&
+        _calendarMemberUserIds.contains(locallyKnownProfile.uid)) {
+      return AddCalendarMemberResult.alreadyMember(locallyKnownProfile);
+    }
+
     final result = await _addCalendarMember(
       calendarId: calendarId,
       email: email,
     );
     final profile = result.profile;
-    if (result.succeeded && profile != null) {
+    if (profile != null) {
+      _memberProfiles = Map.unmodifiable({
+        ..._memberProfiles,
+        profile.uid: profile,
+      });
+    }
+    if (result.succeeded && profile != null && !result.alreadyMember) {
       final nextMembers = [..._calendarMemberUserIds];
       if (!nextMembers.contains(profile.uid)) {
         nextMembers.add(profile.uid);
@@ -317,6 +352,7 @@ class AppState extends ChangeNotifier {
         }),
       );
       notifyListeners();
+      await syncWithFirestore();
     }
     return result;
   }
@@ -602,13 +638,37 @@ class AppState extends ChangeNotifier {
   ) {
     if (calendars.isEmpty) return null;
 
-    for (final calendar in calendars) {
-      if (calendar.metadata.calendarId == _calendarId) {
-        return calendar;
+    final preferredCalendarId = _preferredCalendarId;
+    if (preferredCalendarId != null) {
+      for (final calendar in calendars) {
+        if (calendar.metadata.calendarId == preferredCalendarId) {
+          return calendar;
+        }
       }
     }
 
     final defaultId = FirestoreSyncService.defaultCalendarId(userId);
+    for (final calendar in calendars) {
+      if (calendar.metadata.calendarId == _calendarId) {
+        if (preferredCalendarId == null &&
+            calendar.metadata.calendarId == defaultId) {
+          break;
+        }
+        return calendar;
+      }
+    }
+
+    final sharedCalendars = calendars
+        .where((calendar) => calendar.metadata.memberUserIds.length > 1)
+        .toList()
+      ..sort((a, b) {
+        final memberComparison = b.metadata.memberUserIds.length
+            .compareTo(a.metadata.memberUserIds.length);
+        if (memberComparison != 0) return memberComparison;
+        return b.metadata.updatedAtMillis.compareTo(a.metadata.updatedAtMillis);
+      });
+    if (sharedCalendars.isNotEmpty) return sharedCalendars.first;
+
     for (final calendar in calendars) {
       if (calendar.metadata.calendarId == defaultId) {
         return calendar;
@@ -616,6 +676,41 @@ class AppState extends ChangeNotifier {
     }
 
     return calendars.first;
+  }
+
+  Future<void> _refreshMemberProfiles(
+    List<FirestoreCalendar> calendars,
+  ) async {
+    final memberIds = calendars
+        .expand((calendar) => calendar.metadata.memberUserIds)
+        .toSet()
+        .toList();
+    if (memberIds.isEmpty) {
+      _memberProfiles = const {};
+      return;
+    }
+    final profiles = await _loadUserProfiles(memberIds);
+    _memberProfiles = Map.unmodifiable({
+      for (final profile in profiles) profile.uid: profile,
+    });
+  }
+
+  UserProfile? _memberProfileByEmail(String email) {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+    for (final profile in _memberProfiles.values) {
+      if (profile.emailLower == normalized) return profile;
+    }
+    return null;
+  }
+
+  String _memberDisplayLabel(String userId) {
+    if (userId == _userId) return 'You';
+    final profile = _memberProfiles[userId];
+    if (profile != null && profile.displayLabel.isNotEmpty) {
+      return profile.displayLabel;
+    }
+    return _shortId(userId);
   }
 
   void _applySavedState(SavedState saved, {bool persistLocal = true}) {
@@ -722,6 +817,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveDisplayName(state.displayName);
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     PersistenceService.saveCalendarTitle(state.calendarTitle);
+    PersistenceService.saveSelectedCalendarId(state.selectedCalendarId);
     PersistenceService.saveCalendarNameConfirmed(state.calendarNameConfirmed);
     PersistenceService.saveIntroOnboardingCompleted(
       state.introOnboardingCompleted,
@@ -752,13 +848,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  bool _applyCalendarMetadata(CalendarMetadata metadata) {
+  bool _applyCalendarMetadata(
+    CalendarMetadata metadata, {
+    bool rememberSelection = false,
+  }) {
     final changed = _calendarId != metadata.calendarId ||
         _calendarTitle != metadata.title ||
         _calendarOwnerUserId != metadata.ownerUserId ||
         _calendarMemberUserIds.join('|') != metadata.memberUserIds.join('|');
 
     _calendarId = metadata.calendarId;
+    if (rememberSelection) {
+      _preferredCalendarId = metadata.calendarId;
+    }
     _calendarTitle = metadata.title;
     _calendarOwnerUserId = metadata.ownerUserId;
     _calendarMemberUserIds = List.unmodifiable(metadata.memberUserIds);
@@ -767,6 +869,7 @@ class AppState extends ChangeNotifier {
 
   void _clearCalendarMetadata() {
     _calendarId = null;
+    _preferredCalendarId = null;
     if (!_calendarNameConfirmed) {
       _calendarTitle = FirestoreSyncService.defaultCalendarTitle;
     }
@@ -798,6 +901,7 @@ class AppState extends ChangeNotifier {
       displayName: _displayName,
       displayNameConfirmed: _displayNameConfirmed,
       calendarTitle: _calendarTitle,
+      selectedCalendarId: _calendarId,
       calendarNameConfirmed: _calendarNameConfirmed,
       introOnboardingCompleted: _introOnboardingCompleted,
       difficultyEnabled: _difficultyEnabled,
@@ -961,6 +1065,16 @@ class AppState extends ChangeNotifier {
   static String _capitalize(String value) {
     if (value.isEmpty) return value;
     return '${value.characters.first.toUpperCase()}${value.substring(1)}';
+  }
+
+  static String? _normalizeNullableId(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String _shortId(String id) {
+    if (id.length <= 8) return id;
+    return '${id.substring(0, 8)}...';
   }
 }
 
