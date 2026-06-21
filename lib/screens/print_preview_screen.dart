@@ -25,17 +25,37 @@ class PrintPreviewScreen extends StatelessWidget {
   }
 }
 
-class _PrintPreviewView extends StatelessWidget {
+class _PrintPreviewView extends StatefulWidget {
   const _PrintPreviewView();
 
-  void _handlePrint(BuildContext context) {
-    if (triggerBrowserPrint()) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content:
-            Text('Use your browser or device print option to print this page.'),
-      ),
-    );
+  @override
+  State<_PrintPreviewView> createState() => _PrintPreviewViewState();
+}
+
+class _PrintPreviewViewState extends State<_PrintPreviewView> {
+  // Screen-only navigation/print controls are removed from the widget tree
+  // (not just visually hidden) for the one frame in which the browser
+  // print dialog is triggered, so Flutter web's canvas-painted output for
+  // that frame contains only the calendar content. `triggerBrowserPrint()`
+  // blocks until the print dialog closes on the main browsers this app
+  // targets, so it is safe to restore controls right after it returns.
+  bool _printing = false;
+
+  void _handlePrint() {
+    setState(() => _printing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final printed = triggerBrowserPrint();
+      if (!mounted) return;
+      setState(() => _printing = false);
+      if (!printed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Use your browser or device print option to print this page.'),
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -48,20 +68,6 @@ class _PrintPreviewView extends StatelessWidget {
     return Scaffold(
       key: const ValueKey('print-preview-screen'),
       backgroundColor: surfaceWhite,
-      appBar: AppBar(
-        backgroundColor: surfaceWhite,
-        elevation: 0,
-        foregroundColor: textPrimary,
-        title: const Text('Print preview'),
-        actions: [
-          IconButton(
-            key: const ValueKey('print-preview-print-button'),
-            onPressed: () => _handlePrint(context),
-            icon: const Icon(Icons.print_rounded),
-            tooltip: 'Print',
-          ),
-        ],
-      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
@@ -71,6 +77,10 @@ class _PrintPreviewView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (!_printing) ...[
+                    _ScreenControlsRow(onPrint: _handlePrint),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
                     state.calendarTitle,
                     key: const ValueKey('print-preview-calendar-title'),
@@ -102,6 +112,44 @@ class _PrintPreviewView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Back/print controls shown only on screen. Removed from the tree
+/// (rather than just hidden) while [PrintPreviewScreen] triggers the
+/// browser print dialog, so this row never appears in printed/PDF output.
+class _ScreenControlsRow extends StatelessWidget {
+  const _ScreenControlsRow({required this.onPrint});
+
+  final VoidCallback onPrint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          key: const ValueKey('print-preview-back-button'),
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: textPrimary),
+        ),
+        Expanded(
+          child: Text(
+            'Print preview',
+            style: GoogleFonts.dmSans(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: textPrimary,
+            ),
+          ),
+        ),
+        IconButton(
+          key: const ValueKey('print-preview-print-button'),
+          onPressed: onPrint,
+          icon: const Icon(Icons.print_rounded, color: textPrimary),
+          tooltip: 'Print',
+        ),
+      ],
     );
   }
 }

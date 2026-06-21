@@ -1603,6 +1603,51 @@ void main() {
     expect(find.text('Print preview'), findsOneWidget);
   });
 
+  testWidgets(
+      'Print preview removes back arrow and label while printing, keeps content',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.text('Print preview'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('print-preview-back-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('print-preview-print-button')));
+    await tester.pump();
+
+    // The frame rendered the instant browser print is triggered must not
+    // contain the back arrow or the "Print preview" label, since that
+    // frame is what a canvas-rendered Flutter web app's print output
+    // captures. Calendar content stays present.
+    expect(find.text('Print preview'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('print-preview-back-button')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-calendar-title')),
+      findsOneWidget,
+    );
+
+    await tester.pump();
+
+    expect(find.text('Print preview'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('print-preview-back-button')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Print preview renders calendar title, week range, and days',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});

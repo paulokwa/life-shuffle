@@ -1347,3 +1347,28 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Settings > Export / print now offers both Copy text and Open print view. The print preview is a read-only, print-friendly weekly view of the selected calendar with a working browser-print button on web. No PDF export, output-detail toggles, Firestore rules, ICS/feed behavior, or sharing/lifecycle features were changed.
 - **Next recommended step**: Decide whether PDF export, output-detail toggles, or calendar create/leave/delete lifecycle is the next export/print or V1 lane to build.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - Remove app navigation chrome from printed calendar output
+
+- **Goal**: Fix a manual print test finding that the printed/PDF page from the print preview screen included the in-app back arrow and "Print preview" label above the calendar content, which should not appear in printed output.
+- **Summary**: Flutter web paints the whole app to a single canvas (no per-widget DOM nodes for `@media print` CSS to target), so the only reliable way to keep navigation chrome out of `window.print()` output is to remove it from the widget tree for the exact frame the browser captures. Removed `PrintPreviewScreen`'s `Scaffold.appBar` (which supplied the default back arrow, "Print preview" title, and print action) and replaced it with an in-body `_ScreenControlsRow` (back arrow, "Print preview" label, print button) rendered above the printable calendar content. Converted the view to a `StatefulWidget` with a `_printing` flag: tapping print sets `_printing = true`, waits one frame via `WidgetsBinding.instance.addPostFrameCallback` so the chrome-free tree actually paints, calls `triggerBrowserPrint()`, then restores `_printing = false` and shows the existing non-web fallback SnackBar if printing wasn't triggered. Because `window.print()` blocks script execution until the print dialog closes on the mainstream browsers this app targets, the controls row is genuinely absent from the canvas for the frame the browser snapshots, and reappears immediately after. The calendar title, week range, and day/activity content are unaffected and remain visible the whole time, including during the print-triggering frame.
+- **Files changed**:
+  - `lib/screens/print_preview_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/SESSION_LOG.md`
+  - `docs/V1_AUDIT.md`
+- **Decisions made**:
+  - No app-generated PDF export was added. Browser Print → Save as PDF (using this now-clean print view) is accepted as sufficient for V1; PDF generation stays a separate, unstarted roadmap item.
+  - Remove the controls row from the tree entirely while printing (not just visually dim/disable it), since Flutter web's canvas rendering has no equivalent of CSS `display: none` for an individual widget at print time.
+  - Keep on-screen navigation usable via a plain back `IconButton` in the body instead of relying on browser/OS back, since this app does not wire browser history to its `Navigator`.
+- **Tests run**:
+  - `dart format lib/screens/print_preview_screen.dart test/widget_test.dart`.
+  - `flutter test` - passed, 111/111 tests, including a new test confirming the back arrow and "Print preview" label are absent from the widget tree during the exact frame print is triggered (while calendar title content remains present), and that both controls reappear on the next frame.
+  - `flutter analyze --no-fatal-infos` - passed; same 18 info-level lints as before (no new issues).
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with no whitespace issues.
+- **Current state**: The print preview screen's back arrow and "Print preview" label are excluded from the frame captured by browser print, so PDF/print output now starts with the calendar title and week range as intended. On-screen, the controls are visible and usable as before, disappearing only for the instant printing is triggered.
+- **Next recommended step**: None pending for this fix. Future PDF export or output-detail toggles remain separate, unstarted roadmap items.
+- **Open questions**: None.
