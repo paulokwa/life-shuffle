@@ -15,7 +15,16 @@
       "PowerShell(Get-Item \"$env:USERPROFILE\\\\flutter_sdk.zip\" -ErrorAction SilentlyContinue | Select-Object Length, LastWriteTime)",
       "Bash(git check-ignore *)",
       "Bash(curl -s *)",
-      "PowerShell(flutter --version*)"
+      "PowerShell(flutter --version*)",
+      "Bash(gh pr create --base main --head feature/month-generation-grid --title 'Add literal calendar-month generation and read-only month grid' --body ' *)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "Bash(command -v gh)",
+      "PowerShell(if \\(-not $?\\) { \"gh not found in PATH\" })",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); gh --version; gh auth status)",
+      "PowerShell(if \\($env:GH_TOKEN\\) { \"GH_TOKEN is set\" } else { \"GH_TOKEN not set\" }; if \\($env:GITHUB_TOKEN\\) { \"GITHUB_TOKEN is set\" } else { \"GITHUB_TOKEN not set\" })",
+      "PowerShell(if \\($env:GH_TOKEN\\) { \"GH_TOKEN is set\" } else { \"GH_TOKEN not set\" })",
+      "PowerShell(if \\($env:GITHUB_TOKEN\\) { \"GITHUB_TOKEN is set\" } else { \"GITHUB_TOKEN not set\" })",
+      "Bash(git switch *)"
     ]
   }
 }
