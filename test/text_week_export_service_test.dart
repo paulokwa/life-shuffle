@@ -397,7 +397,9 @@ void main() {
 
     expect(
       TextWeekExportService.dimensionLabels(
-        activity,
+        difficulty: activity.difficulty,
+        energy: activity.energy,
+        social: activity.social,
         difficultyEnabled: true,
         energyEnabled: false,
         socialEnabled: true,
@@ -406,7 +408,9 @@ void main() {
     );
     expect(
       TextWeekExportService.dimensionLabels(
-        activity,
+        difficulty: activity.difficulty,
+        energy: activity.energy,
+        social: activity.social,
         difficultyEnabled: false,
         energyEnabled: false,
         socialEnabled: false,

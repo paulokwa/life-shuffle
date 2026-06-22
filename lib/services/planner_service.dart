@@ -328,20 +328,24 @@ class PlannerService {
     return 10 - nearestDistance.clamp(0, 7).toInt();
   }
 
+  /// Sort rank for a `h:mm AM/PM` display time (e.g. `7:30 PM`), as minutes
+  /// since midnight so any actual scheduled time sorts correctly - not just
+  /// the fixed set of slots the planner itself generates - since occurrence
+  /// time overrides (see `AppState.editPlannedOccurrence`) let a user enter
+  /// any time. Unparseable input sorts last.
   static int timeRank(String slot) {
-    const order = [
-      '7:00 AM',
-      '9:00 AM',
-      '10:00 AM',
-      '11:00 AM',
-      '12:00 PM',
-      '3:00 PM',
-      '6:30 PM',
-      '7:00 PM',
-      '8:00 PM',
-    ];
-    final i = order.indexOf(slot);
-    return i < 0 ? 99 : i;
+    final parts = slot.trim().split(' ');
+    if (parts.length != 2) return 9999;
+    final timeParts = parts[0].split(':');
+    if (timeParts.length != 2) return 9999;
+    var hour = int.tryParse(timeParts[0]);
+    final minute = int.tryParse(timeParts[1]);
+    if (hour == null || minute == null) return 9999;
+    final meridiem = parts[1].toUpperCase();
+    if (meridiem != 'AM' && meridiem != 'PM') return 9999;
+    if (meridiem == 'PM' && hour != 12) hour += 12;
+    if (meridiem == 'AM' && hour == 12) hour = 0;
+    return hour * 60 + minute;
   }
 
   static String _timeSlotFor(Activity a) {

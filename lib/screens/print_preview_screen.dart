@@ -273,7 +273,9 @@ class _PrintActivityRow extends StatelessWidget {
     final showLock = options.showLockedStatus && activity.locked;
     final dimensionLabels = options.showEnabledDimensions
         ? TextWeekExportService.dimensionLabels(
-            activity.activity,
+            difficulty: activity.difficulty,
+            energy: activity.energy,
+            social: activity.social,
             difficultyEnabled: state.difficultyEnabled,
             energyEnabled: state.energyEnabled,
             socialEnabled: state.socialEnabled,
@@ -631,7 +633,9 @@ class _PrintMonthActivityEntry extends StatelessWidget {
     final showLock = options.showLockedStatus && activity.locked;
     final dimensionLabels = options.showEnabledDimensions
         ? TextWeekExportService.dimensionLabels(
-            activity.activity,
+            difficulty: activity.difficulty,
+            energy: activity.energy,
+            social: activity.social,
             difficultyEnabled: state.difficultyEnabled,
             energyEnabled: state.energyEnabled,
             socialEnabled: state.socialEnabled,

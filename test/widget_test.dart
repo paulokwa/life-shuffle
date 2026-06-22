@@ -3254,6 +3254,41 @@ void main() {
     );
   });
 
+  testWidgets('Print preview reflects an occurrence time/category override',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'print-preview-occurrence-override',
+      title: 'Cook together',
+      category: 'Couple time',
+      durationMinutes: 60,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final plannedDay = appState.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+    appState.editPlannedOccurrence(
+      plannedDay,
+      plannedActivity,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.textContaining('7:30 PM'), findsWidgets);
+    expect(find.textContaining('Social'), findsWidgets);
+    expect(activity.category, 'Couple time');
+  });
+
   testWidgets('Print preview shows a helpful empty-week message',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -5508,8 +5543,8 @@ void main() {
   });
 
   testWidgets(
-      'Plan day sheet shows Edit activity and Remove from this plan actions',
-      (WidgetTester tester) async {
+      'Plan day sheet shows Edit this plan item, Remove from this plan, '
+      'and Edit activity template actions', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -5528,20 +5563,397 @@ void main() {
       find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
       findsOneWidget,
     );
+    expect(find.text('Edit this plan item'), findsOneWidget);
     expect(
       find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
+      findsOneWidget,
+    );
+    expect(find.text('Edit activity template'), findsOneWidget);
   });
 
   testWidgets(
-      'Plan day sheet Edit activity opens the existing activity edit form '
-      'and saving updates the planned item display',
+      "'Edit this plan item' opens a focused occurrence editor, not the "
+      'full activity template form', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-editor-open',
+      title: 'Cook together',
+      category: 'Couple time',
+      durationMinutes: 60,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: true,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('plan-item-editor-sheet')),
+      findsOneWidget,
+    );
+    // "Edit this plan item" is both the day sheet's action label and the
+    // focused editor's own header, so both are on screen at once.
+    expect(find.text('Edit this plan item'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('plan-item-editor-scope-note')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('plan-item-editor-time-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('plan-item-editor-category-field')),
+      findsOneWidget,
+    );
+    expect(find.text('Cook together'), findsWidgets);
+
+    // Source-template/global-rule fields must not appear in the default
+    // occurrence editor - those stay behind the secondary template action.
+    expect(find.text('Preferred time'), findsNothing);
+    expect(find.text('Max per week'), findsNothing);
+    expect(find.text('Allowed days'), findsNothing);
+    expect(find.text('Avoid back-to-back days'), findsNothing);
+    expect(find.text('Use in future plans'), findsNothing);
+  });
+
+  testWidgets(
+      'Plan item editor shows planning dimension fields only when enabled '
+      'in settings', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-editor-dimensions',
+      title: 'Evening run',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      difficulty: 3,
+      energy: 'medium',
+      social: 'solo',
+    );
+    final appState = AppState(activities: [activity]);
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Difficulty'), findsOneWidget);
+    expect(find.text('Energy'), findsOneWidget);
+    expect(find.text('Social'), findsOneWidget);
+    expect(find.text('3/5'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('Solo'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Plan item editor Save updates only the occurrence time, leaving the '
+      'source activity untouched', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-editor-save-time',
+      title: 'Cook together',
+      category: 'Couple time',
+      durationMinutes: 60,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('plan-item-editor-time-field')),
+      '7:30 PM',
+    );
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(planned.timeSlot, '7:30 PM');
+    expect(activity.preferredTime, 'evening');
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text('7:30 PM'), findsWidgets);
+  });
+
+  test(
+      'editPlannedOccurrence updates only that occurrence and leaves the '
+      'source activity unchanged', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'occurrence-edit-recurring',
+      title: 'Cook together',
+      category: 'Couple time',
+      durationMinutes: 60,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      difficulty: 3,
+      energy: 'medium',
+      social: 'together',
+    );
+    final appState = AppState(activities: [recurring]);
+    appState.setDifficultyEnabled(true);
+    appState.setEnergyEnabled(true);
+    appState.setSocialEnabled(true);
+    appState.generateRange(RangeType.twoWeek);
+
+    final allDays = appState.generatedRange.days;
+    final week1Day =
+        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day =
+        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Item = week1Day.activities.first;
+    final week2Item = week2Day.activities.first;
+
+    appState.editPlannedOccurrence(
+      week1Day,
+      week1Item,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+      difficulty: 5,
+      energy: 'high',
+      social: 'group',
+    );
+
+    expect(week1Item.timeSlot, '7:30 PM');
+    expect(week1Item.category, 'Social');
+    expect(week1Item.difficulty, 5);
+    expect(week1Item.energy, 'high');
+    expect(week1Item.social, 'group');
+
+    expect(week2Item.timeSlot, isNot('7:30 PM'));
+    expect(week2Item.category, 'Couple time');
+    expect(week2Item.difficulty, 3);
+    expect(week2Item.energy, 'medium');
+    expect(week2Item.social, 'together');
+
+    expect(recurring.preferredTime, 'evening');
+    expect(recurring.category, 'Couple time');
+    expect(recurring.difficulty, 3);
+    expect(recurring.energy, 'medium');
+    expect(recurring.social, 'together');
+  });
+
+  test('Occurrence override survives switching plan views', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-override-view-switch',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    appState.generateRange(RangeType.twoWeek);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    appState.setViewMode(RangeType.month);
+    appState.setViewMode(RangeType.week);
+    appState.selectRangeWeekIndex(0);
+
+    expect(planned.timeSlot, '7:30 PM');
+    expect(planned.category, 'Social');
+    expect(
+      appState.generatedRange.days
+          .firstWhere((candidate) => candidate.date == day.date)
+          .activities
+          .first
+          .timeSlot,
+      '7:30 PM',
+    );
+  });
+
+  test(
+      'Occurrence override survives reload through SavedState while the '
+      'source activity stays unchanged', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-override-reload',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    final saved = PersistenceService.load([activity]);
+    final occurrenceKey = '${_dateKey(day.date)}:${activity.id}';
+    expect(saved.occurrenceOverrides[occurrenceKey]?.timeSlot, '7:30 PM');
+    expect(saved.occurrenceOverrides[occurrenceKey]?.category, 'Social');
+    expect(saved.activities.single.category, 'Health / movement');
+
+    final restored = AppState(activities: saved.activities, savedState: saved);
+    final restoredDay = restored.weekPlan.firstWhere(
+      (candidate) => candidate.date == day.date,
+    );
+    final restoredItem = restoredDay.activities.firstWhere(
+      (p) => p.activity.id == activity.id,
+    );
+    expect(restoredItem.timeSlot, '7:30 PM');
+    expect(restoredItem.category, 'Social');
+    expect(restored.activities.single.category, 'Health / movement');
+  });
+
+  test('Regenerate clears stale occurrence overrides', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-override-regenerate',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    appState.regenerate();
+
+    final saved = PersistenceService.load([activity]);
+    expect(saved.occurrenceOverrides, isEmpty);
+  });
+
+  test('generateRange clears stale occurrence overrides', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-override-generate-range',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    appState.generateRange(RangeType.twoWeek);
+
+    final saved = PersistenceService.load([activity]);
+    expect(saved.occurrenceOverrides, isEmpty);
+  });
+
+  test('setPlanStyle clears stale occurrence overrides', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'occurrence-override-plan-style',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    appState.setPlanStyle(PlanStyle.gentle);
+
+    final saved = PersistenceService.load([activity]);
+    expect(saved.occurrenceOverrides, isEmpty);
+  });
+
+  testWidgets(
+      "'Edit activity template' on the day sheet still opens the full "
+      'activity editor and saving updates the source activity',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final activity = Activity(
-      id: 'edit-from-plan',
+      id: 'edit-template-from-plan',
       title: 'Morning walk',
       category: 'Outside',
       durationMinutes: 30,
@@ -5561,14 +5973,14 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
     );
     await tester.pumpAndSettle();
 
-    // "Edit activity" is both the day sheet's action label and the
-    // reused activity editor's own header, so both are on screen at once.
     expect(find.text('Edit activity'), findsWidgets);
     expect(find.widgetWithText(TextFormField, 'Morning walk'), findsOneWidget);
+    expect(find.text('Preferred time'), findsOneWidget);
+    expect(find.text('Max per week'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, 'Sunrise walk');
     await tester.ensureVisible(find.text('Save'));
@@ -5582,9 +5994,9 @@ void main() {
   });
 
   testWidgets(
-      'Plan day sheet keeps Edit activity and Remove from this plan '
-      'available for a future day while check-in stays blocked',
-      (WidgetTester tester) async {
+      'Plan day sheet keeps Edit this plan item, Edit activity template, '
+      'and Remove from this plan available for a future day while '
+      'check-in stays blocked', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -5610,7 +6022,21 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('plan-item-editor-sheet')),
       findsOneWidget,
     );
   });
@@ -5832,6 +6258,44 @@ void main() {
     expect(copiedText, contains('Category:'));
     expect(copiedText, contains('Check-in:'));
     expect(copiedText, contains('Locked:'));
+  });
+
+  testWidgets('Plan Export reflects an occurrence time/category override',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final activity = Activity(
+      id: 'export-occurrence-override',
+      title: 'Cook together',
+      category: 'Couple time',
+      durationMinutes: 60,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+    appState.editPlannedOccurrence(
+      day,
+      planned,
+      timeSlot: '7:30 PM',
+      category: 'Social',
+    );
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(copiedText, isNotNull);
+    expect(copiedText, contains('7:30 PM'));
+    expect(copiedText, contains('Category: Social'));
+    expect(activity.category, 'Couple time');
   });
 
   testWidgets('Plan Export handles an empty week', (WidgetTester tester) async {

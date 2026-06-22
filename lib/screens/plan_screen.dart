@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
+import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/generated_plan_range.dart';
 import '../models/mock_data.dart' show CheckStatus;
@@ -13,7 +14,8 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/status_choice.dart';
-import 'activities_screen.dart' show showActivityFormSheet;
+import 'activities_screen.dart'
+    show DimensionFields, SheetButton, showActivityFormSheet;
 import 'week_review_screen.dart';
 
 class PlanScreen extends StatelessWidget {
@@ -1109,7 +1111,16 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
     AppStateScope.of(context).notifyCheckIn(activity);
   }
 
-  Future<void> _editActivity(PlannedActivity activity) async {
+  Future<void> _editPlannedItem(PlannedActivity activity) async {
+    await showPlanItemEditorSheet(
+      context,
+      day: widget.plan,
+      activity: activity,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _editActivityTemplate(PlannedActivity activity) async {
     await showActivityFormSheet(context, activity: activity.activity);
     // The form sheet mutates the same Activity instance this day's
     // PlannedActivity already points to, so a rebuild is enough to show
@@ -1226,7 +1237,8 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                         canCheckIn: canCheckIn,
                         onStatusSelected: (status) =>
                             _setStatus(activity, status),
-                        onEdit: () => _editActivity(activity),
+                        onEditPlannedItem: () => _editPlannedItem(activity),
+                        onEditTemplate: () => _editActivityTemplate(activity),
                         onRemove: () => _removeFromPlan(activity),
                       );
                     },
@@ -1299,14 +1311,16 @@ class _DaySheetActivityCard extends StatelessWidget {
     required this.activity,
     required this.canCheckIn,
     required this.onStatusSelected,
-    required this.onEdit,
+    required this.onEditPlannedItem,
+    required this.onEditTemplate,
     required this.onRemove,
   });
 
   final PlannedActivity activity;
   final bool canCheckIn;
   final ValueChanged<CheckStatus> onStatusSelected;
-  final VoidCallback onEdit;
+  final VoidCallback onEditPlannedItem;
+  final VoidCallback onEditTemplate;
   final VoidCallback onRemove;
 
   IconData get _icon => switch (activity.category) {
@@ -1432,10 +1446,10 @@ class _DaySheetActivityCard extends StatelessWidget {
             children: [
               GestureDetector(
                 key: ValueKey('day-sheet-edit-activity-${activity.id}'),
-                onTap: onEdit,
+                onTap: onEditPlannedItem,
                 behavior: HitTestBehavior.opaque,
                 child: Text(
-                  'Edit activity',
+                  'Edit this plan item',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1459,7 +1473,308 @@ class _DaySheetActivityCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          GestureDetector(
+            key: ValueKey('day-sheet-edit-template-${activity.id}'),
+            onTap: onEditTemplate,
+            behavior: HitTestBehavior.opaque,
+            child: Text(
+              'Edit activity template',
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: textMuted,
+                decoration: TextDecoration.underline,
+                decorationColor: textMuted,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the focused "Edit this plan item" sheet for [activity]'s
+/// occurrence on [day]. This is the Plan day sheet's primary edit action -
+/// distinct from `showActivityFormSheet`, which edits the reusable source
+/// [Activity] template and stays available here only as a secondary
+/// "Edit activity template" link.
+Future<void> showPlanItemEditorSheet(
+  BuildContext context, {
+  required DayPlan day,
+  required PlannedActivity activity,
+}) {
+  final appState = AppStateScope.of(context);
+
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => AppStateScope(
+      state: appState,
+      child: _PlanItemEditorSheet(day: day, activity: activity),
+    ),
+  );
+}
+
+/// Time-of-day pattern this sheet's time field accepts, e.g. `7:30 PM` or
+/// `7:00am`. Matches the `h:mm AM/PM` shape every other display time in
+/// this app already uses (see `PlannerService.timeRank`,
+/// `IcsCalendarService`, and `TodayScreen`'s upcoming-activity check).
+final RegExp _planItemTimePattern =
+    RegExp(r'^([1-9]|1[0-2]):([0-5][0-9])\s*([AaPp][Mm])$');
+
+class _PlanItemEditorSheet extends StatefulWidget {
+  const _PlanItemEditorSheet({required this.day, required this.activity});
+
+  final DayPlan day;
+  final PlannedActivity activity;
+
+  @override
+  State<_PlanItemEditorSheet> createState() => _PlanItemEditorSheetState();
+}
+
+class _PlanItemEditorSheetState extends State<_PlanItemEditorSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _timeController;
+  late String _category;
+  late int _difficulty;
+  late String _energy;
+  late String _social;
+
+  @override
+  void initState() {
+    super.initState();
+    _timeController = TextEditingController(text: widget.activity.timeSlot);
+    _category = widget.activity.category;
+    _difficulty = widget.activity.difficulty;
+    _energy = widget.activity.energy;
+    _social = widget.activity.social;
+  }
+
+  @override
+  void dispose() {
+    _timeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final hasEnabledDimensions =
+        state.difficultyEnabled || state.energyEnabled || state.socialEnabled;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        key: const ValueKey('plan-item-editor-sheet'),
+        decoration: const BoxDecoration(
+          color: backgroundCream,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: borderWarmStrong,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Edit this plan item',
+                  style: GoogleFonts.lora(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w500,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.activity.title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: primaryTerracotta,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Only changes this planned item. Your activity library '
+                  'stays the same.',
+                  key: const ValueKey('plan-item-editor-scope-note'),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('plan-item-editor-time-field'),
+                  controller: _timeController,
+                  textInputAction: TextInputAction.next,
+                  decoration: _inputDecoration('Scheduled time').copyWith(
+                    hintText: 'e.g. 7:30 PM',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add a time';
+                    }
+                    if (!_planItemTimePattern.hasMatch(value.trim())) {
+                      return 'Use a time like 7:30 PM';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('plan-item-editor-category-field'),
+                  initialValue: _category,
+                  decoration: _inputDecoration('Category'),
+                  items: Activity.categories
+                      .map(
+                        (category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _category = value);
+                  },
+                ),
+                if (hasEnabledDimensions) ...[
+                  const SizedBox(height: 12),
+                  DimensionFields(
+                    difficultyEnabled: state.difficultyEnabled,
+                    energyEnabled: state.energyEnabled,
+                    socialEnabled: state.socialEnabled,
+                    difficulty: _difficulty,
+                    energy: _energy,
+                    social: _social,
+                    onDifficultyChanged: (value) {
+                      setState(() => _difficulty = value);
+                    },
+                    onEnergyChanged: (value) {
+                      setState(() => _energy = value);
+                    },
+                    onSocialChanged: (value) {
+                      setState(() => _social = value);
+                    },
+                    inputDecoration: _inputDecoration,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                GestureDetector(
+                  key: const ValueKey('plan-item-editor-edit-template'),
+                  onTap: _editTemplate,
+                  behavior: HitTestBehavior.opaque,
+                  child: Text(
+                    'Edit activity template',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: textMuted,
+                      decoration: TextDecoration.underline,
+                      decorationColor: textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Changes the reusable activity, including future plans.',
+                  style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SheetButton(
+                        label: 'Cancel',
+                        foreground: textMuted,
+                        background: Colors.transparent,
+                        hasBorder: true,
+                        onTap: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SheetButton(
+                        label: 'Save',
+                        foreground: Colors.white,
+                        background: primaryTerracotta,
+                        onTap: _save,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editTemplate() async {
+    await showActivityFormSheet(context, activity: widget.activity.activity);
+    if (mounted) setState(() {});
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final match = _planItemTimePattern.firstMatch(_timeController.text.trim())!;
+    final normalizedTime =
+        '${match.group(1)}:${match.group(2)} ${match.group(3)!.toUpperCase()}';
+    final state = AppStateScope.of(context);
+    state.editPlannedOccurrence(
+      widget.day,
+      widget.activity,
+      timeSlot: normalizedTime,
+      category: _category,
+      difficulty: state.difficultyEnabled ? _difficulty : null,
+      energy: state.energyEnabled ? _energy : null,
+      social: state.socialEnabled ? _social : null,
+    );
+    Navigator.of(context).pop();
+  }
+
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: GoogleFonts.dmSans(color: textMuted),
+      filled: true,
+      fillColor: surfaceWhite,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: borderWarm),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: borderWarm),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: primaryTerracotta),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: primaryTerracotta),
       ),
     );
   }

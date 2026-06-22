@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
+import '../models/day_plan.dart' show OccurrenceOverride;
 import '../models/range_type.dart';
 
 /// Lightweight local storage for in-session state.
@@ -54,6 +55,7 @@ class PersistenceService {
   static const _keyCheckinMap = 'ls_checkin_map';
   static const _keyLockedMap = 'ls_locked_map';
   static const _keyRemovedMap = 'ls_removed_map';
+  static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -120,6 +122,8 @@ class PersistenceService {
     final checkinMap = _loadCheckinMapBlob() ?? legacyCheckinMap;
     final lockedMap = _loadLockedMapBlob() ?? legacyLockedMap;
     final removedMap = _loadRemovedMapBlob() ?? const <String, bool>{};
+    final occurrenceOverrides = _loadOccurrenceOverridesMapBlob() ??
+        const <String, OccurrenceOverride>{};
 
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
     final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
@@ -166,6 +170,7 @@ class PersistenceService {
       checkinMap: checkinMap,
       lockedMap: lockedMap,
       removedMap: removedMap,
+      occurrenceOverrides: occurrenceOverrides,
     );
   }
 
@@ -303,6 +308,14 @@ class PersistenceService {
   static void saveRemovedMap(Map<String, bool> value) =>
       _prefs.setString(_keyRemovedMap, jsonEncode(value));
 
+  static void saveOccurrenceOverridesMap(
+    Map<String, OccurrenceOverride> value,
+  ) =>
+      _prefs.setString(
+        _keyOccurrenceOverridesMap,
+        jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
+      );
+
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);
     if (raw == null || raw.isEmpty) return null;
@@ -354,6 +367,28 @@ class PersistenceService {
     return null;
   }
 
+  static Map<String, OccurrenceOverride>? _loadOccurrenceOverridesMapBlob() {
+    final raw = _prefs.getString(_keyOccurrenceOverridesMap);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            OccurrenceOverride.fromMap(
+              value is Map ? Map<String, dynamic>.from(value) : const {},
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Fall through to an empty map: a malformed blob is no worse than no
+      // overrides having ever been saved.
+    }
+    return null;
+  }
+
   static List<Activity> _loadActivities(List<Activity> defaultActivities) {
     final raw = _prefs.getString(_keyActivities);
     if (raw == null || raw.isEmpty) {
@@ -394,6 +429,7 @@ class SavedState {
     required this.checkinMap,
     required this.lockedMap,
     this.removedMap = const {},
+    this.occurrenceOverrides = const {},
     this.planStyle = 'balanced',
     this.rangeType = RangeType.week,
     RangeType? viewMode,
@@ -474,6 +510,12 @@ class SavedState {
   /// source [Activity]. See [AppState.removeFromPlan].
   final Map<String, bool> removedMap;
 
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) per-occurrence edits (actual
+  /// scheduled time, category, and enabled planning dimensions) made
+  /// through the focused "Edit this plan item" sheet, without changing the
+  /// source [Activity] template. See [AppState.editPlannedOccurrence].
+  final Map<String, OccurrenceOverride> occurrenceOverrides;
+
   Map<String, dynamic> toMap() {
     return {
       'activities': activities.map((activity) => activity.toMap()).toList(),
@@ -512,6 +554,8 @@ class SavedState {
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
       'removedMap': removedMap,
+      'occurrenceOverrides':
+          occurrenceOverrides.map((key, value) => MapEntry(key, value.toMap())),
     };
   }
 
@@ -573,7 +617,26 @@ class SavedState {
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
       removedMap: Map<String, bool>.from(map['removedMap'] ?? {}),
+      occurrenceOverrides: _readOccurrenceOverrides(
+        map['occurrenceOverrides'],
+      ),
     );
+  }
+
+  static Map<String, OccurrenceOverride> _readOccurrenceOverrides(
+    Object? value,
+  ) {
+    if (value is Map) {
+      return value.map(
+        (key, entry) => MapEntry(
+          key.toString(),
+          OccurrenceOverride.fromMap(
+            entry is Map ? Map<String, dynamic>.from(entry) : const {},
+          ),
+        ),
+      );
+    }
+    return const {};
   }
 
   static int _readInt(Object? value) {

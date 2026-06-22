@@ -97,6 +97,16 @@ class AppState extends ChangeNotifier {
   /// silently re-deleting an occurrence the user just got back via one of
   /// those actions on the next reload. See [removeFromPlan].
   Map<String, bool> _removedOccurrences = {};
+
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) per-occurrence edits (actual
+  /// scheduled time, category, and enabled planning dimensions; see
+  /// [editPlannedOccurrence]), applied to a freshly built [_generatedDays]
+  /// by [_applyOccurrenceOverrides]. Cleared on [regenerate],
+  /// [generateRange], and [setPlanStyle] for the same reason as
+  /// [_removedOccurrences]: those already discard every other non-locked
+  /// customization, and keeping a stale override around would silently
+  /// reapply an edit that belonged to a previous generated plan.
+  Map<String, OccurrenceOverride> _occurrenceOverrides = {};
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -863,6 +873,7 @@ class AppState extends ChangeNotifier {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
     _removedOccurrences = {};
+    _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
@@ -884,6 +895,7 @@ class AppState extends ChangeNotifier {
     _rangeStart = _dateOnly(DateTime.now());
     _selectedRangeWeekIndex = 0;
     _removedOccurrences = {};
+    _occurrenceOverrides = {};
     _generatedDays = _buildPlan();
     _persist();
     notifyListeners();
@@ -908,6 +920,7 @@ class AppState extends ChangeNotifier {
     if (_planStyle == style) return;
     _planStyle = style;
     _removedOccurrences = {};
+    _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
@@ -1052,6 +1065,47 @@ class AppState extends ChangeNotifier {
   void removeFromPlan(DayPlan day, PlannedActivity activity) {
     if (!day.activities.remove(activity)) return;
     _removedOccurrences[_occurrenceKey(day.date, activity.activity.id)] = true;
+    _persist();
+    notifyListeners();
+  }
+
+  /// Edits [activity]'s occurrence on [day] only: the actual scheduled
+  /// time, category, and (when their app-settings dimension toggle is on)
+  /// difficulty/energy/social for this one generated instance - never the
+  /// source [Activity] template; see [updateActivity] to edit that instead.
+  /// [difficulty]/[energy]/[social] should be passed `null` when their
+  /// dimension is disabled, meaning "no occurrence override for this
+  /// field" rather than an explicit value. Persisted by occurrence key
+  /// (see [_applyOccurrenceOverrides]) so the edit survives reload and view
+  /// switching until the next deliberate [regenerate], [generateRange], or
+  /// [setPlanStyle] - those discard the generated plan this override
+  /// belonged to, the same as [removeFromPlan].
+  void editPlannedOccurrence(
+    DayPlan day,
+    PlannedActivity activity, {
+    required String timeSlot,
+    required String category,
+    int? difficulty,
+    String? energy,
+    String? social,
+  }) {
+    activity.timeSlot = timeSlot;
+    activity.categoryOverride = category;
+    activity.difficultyOverride = difficulty;
+    activity.energyOverride = energy;
+    activity.socialOverride = social;
+    day.activities.sort(
+      (a, b) => PlannerService.timeRank(a.timeSlot)
+          .compareTo(PlannerService.timeRank(b.timeSlot)),
+    );
+    _occurrenceOverrides[_occurrenceKey(day.date, activity.activity.id)] =
+        OccurrenceOverride(
+      timeSlot: timeSlot,
+      category: category,
+      difficulty: difficulty,
+      energy: energy,
+      social: social,
+    );
     _persist();
     notifyListeners();
   }
@@ -1306,9 +1360,12 @@ class AppState extends ChangeNotifier {
     }
     _selectedRangeWeekIndex = 0;
     _removedOccurrences = Map<String, bool>.from(saved.removedMap);
+    _occurrenceOverrides =
+        Map<String, OccurrenceOverride>.from(saved.occurrenceOverrides);
     _generatedDays = _buildPlan();
     _applyRemovals();
     _applyOverlays(saved);
+    _applyOccurrenceOverrides();
     _refreshCachedIcs();
 
     if (persistLocal) {
@@ -1465,6 +1522,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveCheckinMap(state.checkinMap);
     PersistenceService.saveLockedMap(state.lockedMap);
     PersistenceService.saveRemovedMap(state.removedMap);
+    PersistenceService.saveOccurrenceOverridesMap(state.occurrenceOverrides);
   }
 
   bool _applyCalendarMetadata(
@@ -1574,6 +1632,8 @@ class AppState extends ChangeNotifier {
       checkinMap: checkinMap,
       lockedMap: lockedMap,
       removedMap: Map<String, bool>.from(_removedOccurrences),
+      occurrenceOverrides:
+          Map<String, OccurrenceOverride>.from(_occurrenceOverrides),
     );
   }
 
@@ -1690,6 +1750,36 @@ class AppState extends ChangeNotifier {
             _removedOccurrences[_occurrenceKey(day.date, pa.activity.id)] ==
             true,
       );
+    }
+  }
+
+  /// Applies saved occurrence-level edits (actual scheduled time, category,
+  /// and planning dimensions; see [editPlannedOccurrence]) to a freshly
+  /// built [_generatedDays], so an edit survives reload/sync the same way
+  /// [_applyOverlays] does for check-ins and locks.
+  void _applyOccurrenceOverrides() {
+    if (_occurrenceOverrides.isEmpty) return;
+    for (final day in _generatedDays) {
+      var changedTimes = false;
+      for (final pa in day.activities) {
+        final override =
+            _occurrenceOverrides[_occurrenceKey(day.date, pa.activity.id)];
+        if (override == null) continue;
+        if (override.timeSlot != null) {
+          pa.timeSlot = override.timeSlot!;
+          changedTimes = true;
+        }
+        pa.categoryOverride = override.category;
+        pa.difficultyOverride = override.difficulty;
+        pa.energyOverride = override.energy;
+        pa.socialOverride = override.social;
+      }
+      if (changedTimes) {
+        day.activities.sort(
+          (a, b) => PlannerService.timeRank(a.timeSlot)
+              .compareTo(PlannerService.timeRank(b.timeSlot)),
+        );
+      }
     }
   }
 

@@ -63,7 +63,9 @@ class TextWeekExportService {
         }
         if (options.showEnabledDimensions) {
           final dims = dimensionLabels(
-            planned.activity,
+            difficulty: planned.difficulty,
+            energy: planned.energy,
+            social: planned.social,
             difficultyEnabled: difficultyEnabled,
             energyEnabled: energyEnabled,
             socialEnabled: socialEnabled,
@@ -82,20 +84,25 @@ class TextWeekExportService {
     return buffer.toString().trimRight();
   }
 
-  /// Compact labels for enabled planning dimensions on [activity], e.g.
-  /// `Difficulty 3/5`. Only includes a dimension when its Settings >
-  /// Activity defaults toggle is on; also used by the print preview so both
-  /// surfaces describe dimensions identically.
-  static List<String> dimensionLabels(
-    Activity activity, {
+  /// Compact labels for enabled planning dimensions, e.g. `Difficulty 3/5`.
+  /// Only includes a dimension when its Settings > Activity defaults toggle
+  /// is on; also used by the print preview so both surfaces describe
+  /// dimensions identically. Callers pass [PlannedActivity.difficulty]/
+  /// `.energy`/`.social` (not the source [Activity]'s) so an occurrence
+  /// override - see `AppState.editPlannedOccurrence` - is reflected here
+  /// too.
+  static List<String> dimensionLabels({
+    required int difficulty,
+    required String energy,
+    required String social,
     required bool difficultyEnabled,
     required bool energyEnabled,
     required bool socialEnabled,
   }) {
     return [
-      if (difficultyEnabled) 'Difficulty ${activity.difficulty}/5',
-      if (energyEnabled) 'Energy: ${Activity.optionLabel(activity.energy)}',
-      if (socialEnabled) 'Social: ${Activity.optionLabel(activity.social)}',
+      if (difficultyEnabled) 'Difficulty $difficulty/5',
+      if (energyEnabled) 'Energy: ${Activity.optionLabel(energy)}',
+      if (socialEnabled) 'Social: ${Activity.optionLabel(social)}',
     ];
   }
 

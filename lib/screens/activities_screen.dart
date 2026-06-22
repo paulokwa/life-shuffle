@@ -666,8 +666,9 @@ class _DimensionChip extends StatelessWidget {
   }
 }
 
-class _DimensionFields extends StatelessWidget {
-  const _DimensionFields({
+class DimensionFields extends StatelessWidget {
+  const DimensionFields({
+    super.key,
     required this.difficultyEnabled,
     required this.energyEnabled,
     required this.socialEnabled,
@@ -944,7 +945,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                 ),
                 if (_hasEnabledDimensions) ...[
                   const SizedBox(height: 12),
-                  _DimensionFields(
+                  DimensionFields(
                     difficultyEnabled: widget.appState.difficultyEnabled,
                     energyEnabled: widget.appState.energyEnabled,
                     socialEnabled: widget.appState.socialEnabled,
@@ -1065,7 +1066,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                 Row(
                   children: [
                     Expanded(
-                      child: _SheetButton(
+                      child: SheetButton(
                         label: 'Cancel',
                         foreground: textMuted,
                         background: Colors.transparent,
@@ -1075,7 +1076,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: _SheetButton(
+                      child: SheetButton(
                         label: 'Save',
                         foreground: Colors.white,
                         background: primaryTerracotta,
@@ -1232,8 +1233,9 @@ class _WeekdaySelector extends StatelessWidget {
   }
 }
 
-class _SheetButton extends StatelessWidget {
-  const _SheetButton({
+class SheetButton extends StatelessWidget {
+  const SheetButton({
+    super.key,
     required this.label,
     required this.foreground,
     required this.background,
