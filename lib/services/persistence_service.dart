@@ -18,6 +18,8 @@ class PersistenceService {
   static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
   static const _keyPlanStyle = 'ls_plan_style';
   static const _keyRangeType = 'ls_range_type';
+  static const _keyViewMode = 'ls_view_mode';
+  static const _keyRangeStartMillis = 'ls_range_start_millis';
   static const _keyDisplayName = 'ls_display_name';
   static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
   static const _keyCalendarTitle = 'ls_calendar_title';
@@ -119,6 +121,11 @@ class PersistenceService {
 
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
     final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
+    final viewMode = rangeTypeFromNameOrNull(_prefs.getString(_keyViewMode));
+    final rangeStartMillis = _prefs.getInt(_keyRangeStartMillis);
+    final rangeStart = rangeStartMillis == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(rangeStartMillis);
 
     return SavedState(
       activities: activities,
@@ -126,6 +133,8 @@ class PersistenceService {
       updatedAtMillis: updatedAtMillis,
       planStyle: planStyle,
       rangeType: rangeType,
+      viewMode: viewMode,
+      rangeStart: rangeStart,
       displayName: displayName,
       displayNameConfirmed: displayNameConfirmed,
       calendarTitle: calendarTitle,
@@ -169,6 +178,12 @@ class PersistenceService {
 
   static void saveRangeType(RangeType value) =>
       _prefs.setString(_keyRangeType, value.name);
+
+  static void saveViewMode(RangeType value) =>
+      _prefs.setString(_keyViewMode, value.name);
+
+  static void saveRangeStartMillis(int? value) =>
+      _saveNullableInt(_keyRangeStartMillis, value);
 
   static void saveDisplayName(String? value) {
     if (value == null || value.trim().isEmpty) {
@@ -358,6 +373,8 @@ class SavedState {
     required this.lockedMap,
     this.planStyle = 'balanced',
     this.rangeType = RangeType.week,
+    RangeType? viewMode,
+    this.rangeStart,
     this.displayName,
     this.displayNameConfirmed = false,
     this.calendarTitle,
@@ -383,13 +400,22 @@ class SavedState {
     this.exportShowCheckInStatus = true,
     this.exportShowLockedStatus = true,
     this.exportShowEnabledDimensions = true,
-  });
+  }) : viewMode = viewMode ?? rangeType;
 
   final List<Activity> activities;
   final int seed;
   final int updatedAtMillis;
   final String planStyle;
   final RangeType rangeType;
+
+  /// How the Plan screen displays [rangeType]'s generated range. Defaults to
+  /// [rangeType] when not given, since saves from before view/horizon were
+  /// separated never recorded a distinct view mode.
+  final RangeType viewMode;
+
+  /// The day the generated range started from. `null` for saves from before
+  /// this was tracked; [AppState] defaults that to today on load.
+  final DateTime? rangeStart;
   final String? displayName;
   final bool displayNameConfirmed;
   final String? calendarTitle;
@@ -426,6 +452,8 @@ class SavedState {
       'updatedAtMillis': updatedAtMillis,
       'planStyle': planStyle,
       'rangeType': rangeType.name,
+      'viewMode': viewMode.name,
+      'rangeStartMillis': rangeStart?.millisecondsSinceEpoch,
       'displayName': displayName,
       'displayNameConfirmed': displayNameConfirmed,
       'calendarTitle': calendarTitle,
@@ -467,6 +495,8 @@ class SavedState {
       updatedAtMillis: _readInt(map['updatedAtMillis']),
       planStyle: (map['planStyle'] as String?) ?? 'balanced',
       rangeType: rangeTypeFromName(map['rangeType'] as String?),
+      viewMode: rangeTypeFromNameOrNull(map['viewMode'] as String?),
+      rangeStart: _readNullableDateTimeMillis(map['rangeStartMillis']),
       displayName: _readNullableString(map['displayName']),
       displayNameConfirmed: _readBool(map['displayNameConfirmed']),
       calendarTitle: _readNullableString(map['calendarTitle']),
@@ -525,6 +555,11 @@ class SavedState {
     if (value is int && value > 0) return value;
     if (value is num && value > 0) return value.toInt();
     return null;
+  }
+
+  static DateTime? _readNullableDateTimeMillis(Object? value) {
+    final millis = _readNullableInt(value);
+    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
   static int _readBoundedInt(

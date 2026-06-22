@@ -23,59 +23,46 @@ class PlanScreen extends StatelessWidget {
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 
-  static String _weekRange(List<DayPlan> plans) {
-    final first = plans.first.date;
-    final last = plans.last.date;
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    if (first.month == last.month) {
-      return 'Week of ${first.day}-${last.day} ${months[last.month - 1]}';
-    }
-    return 'Week of ${first.day} ${months[first.month - 1]} - '
-        '${last.day} ${months[last.month - 1]}';
-  }
-
-  static const _monthNames = [
-    'January',
-    'February',
-    'March',
-    'April',
+  static const _monthAbbrevs = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
     'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
-  static String _rangeLabel(AppState state) {
-    if (state.rangeType == RangeType.month) {
-      final monthDate = state.generatedRange.days.isNotEmpty
-          ? state.generatedRange.days.first.date
-          : DateTime.now();
-      return '${_monthNames[monthDate.month - 1]} ${monthDate.year}';
+  /// Date span label for [plans], e.g. "22-28 Jun" within one month or
+  /// "22 Jun - 5 Jul" when it crosses a month boundary. Used for the week,
+  /// 2-week, and month views alike, since a generated month horizon can
+  /// itself span two calendar months.
+  static String _dateRangeLabel(List<DayPlan> plans) {
+    final first = plans.first.date;
+    final last = plans.last.date;
+    if (first.month == last.month) {
+      return '${first.day}-${last.day} ${_monthAbbrevs[last.month - 1]}';
     }
-    return _weekRange(state.weekPlan);
+    return '${first.day} ${_monthAbbrevs[first.month - 1]} - '
+        '${last.day} ${_monthAbbrevs[last.month - 1]}';
+  }
+
+  static String _rangeLabel(AppState state) {
+    final days = state.viewMode == RangeType.month
+        ? state.generatedRange.days
+        : state.weekPlan;
+    return _dateRangeLabel(days);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final isMonthView = state.rangeType == RangeType.month;
+    final isMonthView = state.viewMode == RangeType.month;
     final plans = state.weekPlan;
     final hasAnyActivities = isMonthView
         ? state.generatedRange.days.any((d) => d.activities.isNotEmpty)
@@ -110,20 +97,24 @@ class PlanScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _RangeTypeControl(
-                    current: state.selectedRangeType,
-                    onChanged: state.setRangeType,
+                    current: state.viewMode,
+                    onChanged: state.setViewMode,
                   ),
-                  if (state.rangeType == RangeType.twoWeek) ...[
+                  if (state.viewMode == RangeType.twoWeek &&
+                      state.hasSufficientRangeForView) ...[
                     const SizedBox(height: 8),
                     _WeekNavControl(
                       selectedIndex: state.selectedRangeWeekIndex,
-                      weekCount: state.generatedWeekCount,
+                      weekCount: 2,
                       onSelected: state.selectRangeWeekIndex,
                     ),
                   ],
-                  if (state.hasPendingRangeTypeChange) ...[
+                  if (!state.hasSufficientRangeForView) ...[
                     const SizedBox(height: 12),
-                    _PendingRangeChangeCard(onGenerate: state.regenerate),
+                    _RangeExpansionCard(
+                      viewMode: state.viewMode,
+                      onGenerate: () => state.generateRange(state.viewMode),
+                    ),
                   ],
                   const SizedBox(height: 16),
                   if (!isMonthView) ...[
@@ -331,10 +322,10 @@ class PlanScreen extends StatelessWidget {
 
 /// Lets the user deliberately choose how much to generate: 1 week,
 /// 2 weeks, or a month. Tapping 1 week or 2 weeks immediately (and
-/// deliberately, since it is an explicit tap) switches [AppState.rangeType]
-/// and regenerates for it. Tapping Month only marks the choice as pending
-/// (see [AppState.hasPendingRangeTypeChange]); building a whole month is
-/// deliberately left to an explicit Regenerate tap.
+/// deliberately switches [AppState.viewMode], a harmless, free view switch
+/// that never regenerates or discards the existing generated range. If the
+/// chosen view needs more days than are currently generated, the Plan
+/// screen shows [_RangeExpansionCard] instead of silently regenerating.
 class _RangeTypeControl extends StatelessWidget {
   const _RangeTypeControl({required this.current, required this.onChanged});
 
@@ -432,17 +423,27 @@ class _WeekNavControl extends StatelessWidget {
   }
 }
 
-/// Shown while [AppState.hasPendingRangeTypeChange] is true, prompting the
-/// user toward the explicit action that actually builds the month plan.
-class _PendingRangeChangeCard extends StatelessWidget {
-  const _PendingRangeChangeCard({required this.onGenerate});
+/// Shown when [AppState.hasSufficientRangeForView] is false: the user is
+/// looking at a view that needs more days than [AppState.generatedRange]
+/// currently has. Generating is a deliberate action distinct from just
+/// looking at a view, so it gets its own explicit button here rather than
+/// happening automatically on a selector tap.
+class _RangeExpansionCard extends StatelessWidget {
+  const _RangeExpansionCard({required this.viewMode, required this.onGenerate});
 
+  final RangeType viewMode;
   final VoidCallback onGenerate;
+
+  String get _label => switch (viewMode) {
+        RangeType.week => '1 week',
+        RangeType.twoWeek => '2 weeks',
+        RangeType.month => 'a month',
+      };
 
   @override
   Widget build(BuildContext context) {
     return LsCard(
-      key: const ValueKey('plan-pending-range-card'),
+      key: const ValueKey('plan-range-expansion-card'),
       color: const Color(0xFFFFF3EC),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,7 +467,7 @@ class _PendingRangeChangeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Month selected',
+                  'More days needed for this view',
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -475,7 +476,7 @@ class _PendingRangeChangeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Tap Regenerate below to build your month plan.',
+                  'Your current plan does not cover $_label yet.',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     color: textMuted,
@@ -485,15 +486,31 @@ class _PendingRangeChangeCard extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          TextButton(
+            key: const ValueKey('plan-range-expansion-generate'),
+            onPressed: onGenerate,
+            style: TextButton.styleFrom(
+              foregroundColor: primaryTerracotta,
+              textStyle: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('Generate'),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Read-only Monday-start grid for a [RangeType.month] range. Cells outside
-/// the generated month are blank and dimmed; in-month cells show the day
-/// number, up to two activity labels, and a `+X more` overflow count.
+/// Read-only Monday-start grid for a [RangeType.month] range. The grid
+/// spans whole calendar weeks for layout (it may itself cross a calendar
+/// month boundary, since the generated range no longer is a literal
+/// calendar month); cells before [GeneratedPlanRange.start] or after
+/// [GeneratedPlanRange.end] are blank and dimmed, in-range cells show the
+/// day number, up to two activity labels, and a `+X more` overflow count.
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({required this.range, required this.onDayTap});
 
@@ -503,17 +520,17 @@ class _MonthGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final days = range.days;
-    final monthStart = days.first.date;
-    final monthEnd = days.last.date;
+    final rangeStart = range.start;
+    final rangeEnd = range.end;
     final gridStart = DateTime(
-      monthStart.year,
-      monthStart.month,
-      monthStart.day - (monthStart.weekday - 1),
+      rangeStart.year,
+      rangeStart.month,
+      rangeStart.day - (rangeStart.weekday - 1),
     );
     final gridEnd = DateTime(
-      monthEnd.year,
-      monthEnd.month,
-      monthEnd.day + (DateTime.sunday - monthEnd.weekday),
+      rangeEnd.year,
+      rangeEnd.month,
+      rangeEnd.day + (DateTime.sunday - rangeEnd.weekday),
     );
     final dayByKey = {
       for (final day in days) PlanScreen._dateKey(day.date): day,
@@ -551,13 +568,14 @@ class _MonthGrid extends StatelessWidget {
             ),
             itemBuilder: (context, index) {
               final date = gridStart.add(Duration(days: index));
-              final inMonth = date.month == monthStart.month;
+              final inRange =
+                  !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
               final plan = dayByKey[PlanScreen._dateKey(date)] ??
                   DayPlan(date: date, activities: []);
               return _MonthDayCell(
                 plan: plan,
-                inMonth: inMonth,
-                onTap: inMonth ? () => onDayTap(plan) : null,
+                inRange: inRange,
+                onTap: inRange ? () => onDayTap(plan) : null,
               );
             },
           ),
@@ -592,12 +610,12 @@ class _WeekdayHeader extends StatelessWidget {
 class _MonthDayCell extends StatelessWidget {
   const _MonthDayCell({
     required this.plan,
-    required this.inMonth,
+    required this.inRange,
     this.onTap,
   });
 
   final DayPlan plan;
-  final bool inMonth;
+  final bool inRange;
   final VoidCallback? onTap;
 
   @override
@@ -606,22 +624,22 @@ class _MonthDayCell extends StatelessWidget {
     final hiddenCount = plan.activities.length - visibleActivities.length;
     return GestureDetector(
       key: ValueKey(
-        inMonth
+        inRange
             ? 'month-grid-day-${PlanScreen._dateKey(plan.date)}'
-            : 'month-grid-out-of-month-cell-${PlanScreen._dateKey(plan.date)}',
+            : 'month-grid-out-of-range-cell-${PlanScreen._dateKey(plan.date)}',
       ),
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: inMonth ? backgroundCream : const Color(0xFFF2EEE7),
+          color: inRange ? backgroundCream : const Color(0xFFF2EEE7),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: inMonth ? borderWarm : const Color(0x0A2C2A26),
+            color: inRange ? borderWarm : const Color(0x0A2C2A26),
           ),
         ),
-        child: inMonth
+        child: inRange
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1021,6 +1039,7 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final canCheckIn = AppState.canCheckIn(widget.plan.date);
     return Container(
       key: const ValueKey('day-checkin-sheet'),
       constraints: BoxConstraints(
@@ -1056,7 +1075,9 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                       Text(
                         widget.plan.activities.isEmpty
                             ? 'No planned items to check in.'
-                            : 'Mark what happened. No typing needed.',
+                            : canCheckIn
+                                ? 'Mark what happened. No typing needed.'
+                                : 'Check in after this day.',
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
                           color: textMuted,
@@ -1085,6 +1106,7 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                       final activity = widget.plan.activities[index];
                       return _DaySheetActivityCard(
                         activity: activity,
+                        canCheckIn: canCheckIn,
                         onStatusSelected: (status) =>
                             _setStatus(activity, status),
                       );
@@ -1156,10 +1178,12 @@ class _EmptyDaySheetBody extends StatelessWidget {
 class _DaySheetActivityCard extends StatelessWidget {
   const _DaySheetActivityCard({
     required this.activity,
+    required this.canCheckIn,
     required this.onStatusSelected,
   });
 
   final PlannedActivity activity;
+  final bool canCheckIn;
   final ValueChanged<CheckStatus> onStatusSelected;
 
   IconData get _icon => switch (activity.category) {
@@ -1234,44 +1258,51 @@ class _DaySheetActivityCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.done,
-                selectedStatus: activity.status,
-                label: 'Done',
-                selectedColor: accentSage,
-                onTap: onStatusSelected,
-              ),
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.partly,
-                selectedStatus: activity.status,
-                label: 'Partly',
-                selectedColor: sand,
-                onTap: onStatusSelected,
-              ),
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.skipped,
-                selectedStatus: activity.status,
-                label: 'Skipped',
-                selectedColor: textMuted,
-                onTap: onStatusSelected,
-              ),
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.none,
-                selectedStatus: activity.status,
-                label: 'Unchecked',
-                selectedColor: primaryTerracotta,
-                onTap: onStatusSelected,
-              ),
-            ],
-          ),
+          if (canCheckIn)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.done,
+                  selectedStatus: activity.status,
+                  label: 'Done',
+                  selectedColor: accentSage,
+                  onTap: onStatusSelected,
+                ),
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.partly,
+                  selectedStatus: activity.status,
+                  label: 'Partly',
+                  selectedColor: sand,
+                  onTap: onStatusSelected,
+                ),
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.skipped,
+                  selectedStatus: activity.status,
+                  label: 'Skipped',
+                  selectedColor: textMuted,
+                  onTap: onStatusSelected,
+                ),
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.none,
+                  selectedStatus: activity.status,
+                  label: 'Unchecked',
+                  selectedColor: primaryTerracotta,
+                  onTap: onStatusSelected,
+                ),
+              ],
+            )
+          else
+            Text(
+              'Check in after this day.',
+              key: const ValueKey('day-sheet-future-notice'),
+              style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+            ),
         ],
       ),
     );

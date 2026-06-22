@@ -113,7 +113,10 @@ class _WeekReviewView extends StatelessWidget {
                                     padding: const EdgeInsets.only(
                                       bottom: 10,
                                     ),
-                                    child: _WeekReviewItemCard(activity: a),
+                                    child: _WeekReviewItemCard(
+                                      activity: a,
+                                      canCheckIn: AppState.canCheckIn(day.date),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -131,9 +134,10 @@ class _WeekReviewView extends StatelessWidget {
 }
 
 class _WeekReviewItemCard extends StatelessWidget {
-  const _WeekReviewItemCard({required this.activity});
+  const _WeekReviewItemCard({required this.activity, required this.canCheckIn});
 
   final PlannedActivity activity;
+  final bool canCheckIn;
 
   IconData get _icon => switch (activity.category) {
         'Creative' => Icons.menu_book_rounded,
@@ -212,36 +216,42 @@ class _WeekReviewItemCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.done,
-                selectedStatus: activity.status,
-                label: 'Done',
-                selectedColor: accentSage,
-                onTap: (status) => _setStatus(context, status),
-              ),
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.partly,
-                selectedStatus: activity.status,
-                label: 'Partly',
-                selectedColor: sand,
-                onTap: (status) => _setStatus(context, status),
-              ),
-              StatusChoice(
-                activityId: activity.id,
-                status: CheckStatus.skipped,
-                selectedStatus: activity.status,
-                label: 'Skipped',
-                selectedColor: textMuted,
-                onTap: (status) => _setStatus(context, status),
-              ),
-            ],
-          ),
+          if (canCheckIn)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.done,
+                  selectedStatus: activity.status,
+                  label: 'Done',
+                  selectedColor: accentSage,
+                  onTap: (status) => _setStatus(context, status),
+                ),
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.partly,
+                  selectedStatus: activity.status,
+                  label: 'Partly',
+                  selectedColor: sand,
+                  onTap: (status) => _setStatus(context, status),
+                ),
+                StatusChoice(
+                  activityId: activity.id,
+                  status: CheckStatus.skipped,
+                  selectedStatus: activity.status,
+                  label: 'Skipped',
+                  selectedColor: textMuted,
+                  onTap: (status) => _setStatus(context, status),
+                ),
+              ],
+            )
+          else
+            Text(
+              'Check in after this day.',
+              style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+            ),
         ],
       ),
     );

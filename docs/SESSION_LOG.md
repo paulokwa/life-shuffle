@@ -1722,3 +1722,38 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Plan screen supports Week / 2 weeks / Month, with Month generating a literal calendar month via Monday-aligned internal chunking and rendering a read-only grid. Not yet pushed - this branch (`feature/month-generation-grid`) is local-only pending review.
 - **Next recommended step**: Push and open the integration PR; then decide whether the next MVP 2 calendar slice is monthly print (slice 4) or export/output-detail polish across all three range views (slice 5).
 - **Open questions**: None.
+
+---
+
+## 2026-06-22 (continued) - MVP 2 range/view UX correction (slice 3b), before monthly print
+
+- **Goal**: Fix three UX issues manual testing surfaced in slice 3 (switching the range selector away from Month and back required regenerating again; the selector behaved like a destructive action instead of a harmless view switch; literal-calendar-month generation pulled in many past days once "today" was late in the month) before building monthly print, per explicit product direction to separate "planning horizon" (what's generated) from "view mode" (how it's displayed) and to anchor all ranges at today rather than calendar boundaries.
+- **Summary**: Split `AppState`'s single `_rangeType` into `_rangeType` (the generated horizon's shape, unchanged meaning) and a new `_viewMode` (how the Plan screen currently displays it). `setViewMode()` replaces `setRangeType()` for the Week/2 weeks/Month selector and is now always free: it only changes `_viewMode`, never regenerates or touches `_generatedDays`. A new `generateRange(type)` is the one deliberate action that builds a fresh horizon (sets `_rangeType`, `_viewMode`, and a new persisted `_rangeStart` to today, then regenerates with no carried-over locks); the old "pending range type" mechanism (`_pendingRangeType`/`hasPendingRangeTypeChange`) is gone entirely since nothing needs to defer generation anymore — the Plan screen instead shows a "Generate" CTA (`_RangeExpansionCard`) whenever `AppState.hasSufficientRangeForView` is false (the current view needs more days than are actually generated). `RangeType` gained a `horizonDays(start)` extension (week=7, twoWeek=14, month=next-month-same-day minus `start`, so it varies 28-31 days and is never a literal calendar month) and `RangePlannerService`'s three separate generation paths were replaced by one day-count-driven `_generateHorizon()` that chunks 7-day `PlannerService` calls from `start` and clips to exactly `horizonDays(start)` days, guaranteeing no range ever includes a day before its `start`. Persisted a new `rangeStart` (the day the active range was generated from) so reloading the app reconstructs the exact same range deterministically instead of silently re-anchoring to a new "today" and reshuffling everything on every load — this was the load-bearing fix, since the old design's "stability across reloads" relied entirely on the anchor being a stable Monday-of-week/1st-of-month, which breaks once the anchor is "today" and changes daily. `_collectLocked()`/`_buildPlan()`'s locked-item carry-over switched from day-offset-from-origin keys to plain `DateTime` keys, since an origin that can now move (`generateRange`) made offset-based keys unsafe. `weekPlan` keeps returning a 7-day slice for Today/Progress/print/ICS (first 7 days for week view, the selected page for twoWeek view, the 7-day window containing today for month view), falling back to the first available days when the current view needs more than what's generated; it returns the same `_generatedDays` instance rather than a copy whenever no slicing is actually needed, since two existing Progress tests rely on mutating `weekPlan` in place. Fixed a real bug in `_MonthGrid` while touching it: its in-range/out-of-range cell check compared `date.month == monthStart.month`, which silently mis-dimmed legitimate generated days once a ~30-day month horizon (as opposed to a literal calendar month) spans two calendar months — replaced with a check against the generated range's actual start/end dates, and renamed the cell key prefix from `out-of-month` to `out-of-range` to match. Added a future check-in guard: `AppState.canCheckIn(date)` (today or earlier) gates the Done/Partly/Skipped/Unchecked controls in both the day check-in sheet and week review, showing "Check in after this day." for any later date; the past-only catch-up/one-by-one screens were untouched since they already only ever show past unchecked items.
+- **Files changed**:
+  - `lib/models/range_type.dart`
+  - `lib/models/generated_plan_range.dart`
+  - `lib/services/range_planner_service.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/plan_screen.dart`
+  - `lib/screens/week_review_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - `generateRange(type)` always starts fresh with no carried-over locked items, even if `type` matches what's already generated, keeping it a clean "new horizon" action distinct from `regenerate()` (which reshuffles unlocked items within the same window/start date and never moves `rangeStart`).
+  - `generateRange(type)` also sets `viewMode = type`: generating a shape implies wanting to look at it, since the only place that calls it is the expansion CTA for the view the user is already on.
+  - Old saves without a recorded `viewMode` default it to `rangeType` (not hardcoded to week), and old saves without a `rangeStart` default to today on load - both handled as fallbacks in `SavedState`/`AppState._applySavedState` rather than a one-time migration, so this needed no Firestore rule or schema-version change.
+  - Kept the future check-in guard UI-only (hide/disable the buttons) rather than rejecting status writes in `AppState.notifyCheckIn`/`toggleLock`, matching the literal ask ("disable or hide check-in actions") and because the model layer has no clean way to know which date an already-mutated `PlannedActivity.status` belongs to.
+  - Did not build a custom N-day horizon UI in this slice; designed the model (`RangeType.horizonDays`, the day-count-driven generator) so one can be added later without another rewrite, and parked the UI/cap/navigation design in `docs/PARKING_LOT.md`.
+- **Tests run**:
+  - `flutter test` - passed, 198/198 tests (rewrote ~20 tests that exercised the removed pending-range mechanism or literal-calendar-month assumptions; added ~20 new tests for view/horizon separation, today-anchored generation with no past days, the month-grid cross-month-boundary fix, and the future check-in guard).
+  - `flutter analyze --no-fatal-infos` - passed, same pre-existing info-level lints only, no new warnings/errors.
+  - `dart format` - ran on all touched Dart files.
+  - `flutter build web` - passed.
+  - `git diff --check` - passed.
+  - Confirmed `docs/MASTER_PLAN.md`, `firestore.rules`, `netlify/`, and ICS feed behavior untouched, the parked historical-archive/trends idea was not implemented, and `tool/serviceAccountKey.json` remains untracked.
+- **Current state**: Switching Week/2 weeks/Month on the Plan screen never regenerates or loses data; a "Generate" CTA appears only when the current view genuinely needs more days than exist. All three range types are today-anchored and future-facing. Future dates can't be checked in from the day sheet or week review. Monthly print is still not implemented.
+- **Next recommended step**: Slice 4 - monthly print, now safe to build on top of a corrected, non-destructive range/view model.
+- **Open questions**: None.

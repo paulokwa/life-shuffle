@@ -12,11 +12,9 @@ class RangePlannerService {
 
   static const _daysPerWeek = 7;
 
-  /// Generates a [GeneratedPlanRange] starting at [start]. For
-  /// [RangeType.week] and [RangeType.twoWeek], [start] must be the Monday
-  /// of the first generated week, matching [PlannerService.generate]'s
-  /// existing contract. For [RangeType.month], [start] is any date in the
-  /// target calendar month.
+  /// Generates a [GeneratedPlanRange] of [type] covering
+  /// `type.horizonDays(start)` consecutive days starting at [start]
+  /// (normally today). Never includes a day before [start].
   static GeneratedPlanRange generate({
     required RangeType type,
     required DateTime start,
@@ -48,140 +46,48 @@ class RangePlannerService {
     Map<int, List<PlannedActivity>> scheduledContext =
         const <int, List<PlannedActivity>>{},
   }) {
-    switch (type) {
-      case RangeType.week:
-        final weekResult = PlannerService.generateWithDiagnostics(
-          weekStart: start,
-          pool: pool,
-          seed: seed,
-          planStyle: planStyle,
-          difficultyAware: difficultyAware,
-          scheduledContext: scheduledContext,
-        );
-        return RangePlannerGenerationResult(
-          range: GeneratedPlanRange(type: type, days: weekResult.plan),
-          targetActivityCount: weekResult.targetActivityCount,
-          scheduledActivityCount: weekResult.scheduledActivityCount,
-          enabledActivityCount: weekResult.enabledActivityCount,
-        );
-      case RangeType.twoWeek:
-        return _generateTwoWeek(
-          start: start,
-          pool: pool,
-          seed: seed,
-          planStyle: planStyle,
-          difficultyAware: difficultyAware,
-          scheduledContext: scheduledContext,
-        );
-      case RangeType.month:
-        return _generateMonth(
-          start: start,
-          pool: pool,
-          seed: seed,
-          planStyle: planStyle,
-          difficultyAware: difficultyAware,
-          scheduledContext: scheduledContext,
-        );
-    }
-  }
-
-  /// Generates two Monday-aligned 7-day chunks via [PlannerService],
-  /// stitching them into 14 days. [scheduledContext] is global-day-indexed
-  /// (0-6 for week 1, 7-13 for week 2) and split per chunk before being
-  /// passed down; week 2 additionally receives week 1's final day under
-  /// key `-1` so no-consecutive-days and difficulty spacing carry across
-  /// the Sunday-to-Monday boundary. Each week gets its own seed
-  /// (`seed`, `seed + 1`) so they don't shuffle identically.
-  static RangePlannerGenerationResult _generateTwoWeek({
-    required DateTime start,
-    required List<Activity> pool,
-    required int seed,
-    required PlanStyle planStyle,
-    required bool difficultyAware,
-    required Map<int, List<PlannedActivity>> scheduledContext,
-  }) {
-    final week1Start = start;
-    final week2Start = start.add(const Duration(days: _daysPerWeek));
-
-    final week1Context = <int, List<PlannedActivity>>{
-      for (final entry in scheduledContext.entries)
-        if (entry.key >= 0 && entry.key < _daysPerWeek) entry.key: entry.value,
-    };
-    final week2LockedContext = <int, List<PlannedActivity>>{
-      for (final entry in scheduledContext.entries)
-        if (entry.key >= _daysPerWeek && entry.key < _daysPerWeek * 2)
-          entry.key - _daysPerWeek: entry.value,
-    };
-
-    final week1 = PlannerService.generateWithDiagnostics(
-      weekStart: week1Start,
+    return _generateHorizon(
+      type: type,
+      start: start,
+      dayCount: type.horizonDays(start),
       pool: pool,
       seed: seed,
       planStyle: planStyle,
       difficultyAware: difficultyAware,
-      scheduledContext: week1Context,
-    );
-
-    final week2Context = <int, List<PlannedActivity>>{
-      ...week2LockedContext,
-      -1: week1.plan.last.activities,
-    };
-    final week2 = PlannerService.generateWithDiagnostics(
-      weekStart: week2Start,
-      pool: pool,
-      seed: seed + 1,
-      planStyle: planStyle,
-      difficultyAware: difficultyAware,
-      scheduledContext: week2Context,
-    );
-
-    return RangePlannerGenerationResult(
-      range: GeneratedPlanRange(
-        type: RangeType.twoWeek,
-        days: [...week1.plan, ...week2.plan],
-      ),
-      targetActivityCount:
-          week1.targetActivityCount + week2.targetActivityCount,
-      scheduledActivityCount:
-          week1.scheduledActivityCount + week2.scheduledActivityCount,
-      enabledActivityCount: week1.enabledActivityCount,
+      scheduledContext: scheduledContext,
     );
   }
 
-  /// Generates Monday-aligned 7-day chunks via [PlannerService] covering
-  /// [start]'s calendar month, then clips the result down to that month's
-  /// actual days (the first/last chunk may extend into the previous or
-  /// next month). [scheduledContext] is global-day-indexed relative to the
-  /// Monday-aligned start of the first chunk (which may fall before the
-  /// 1st of the month) and is split per chunk before being passed down,
-  /// the same scheme [_generateTwoWeek] uses for two chunks. Each chunk
-  /// after the first additionally receives the previous chunk's final day
-  /// under key `-1` so no-consecutive-days and difficulty spacing carry
-  /// across every week boundary in the month. Each chunk gets its own seed
-  /// (`seed + chunkIndex`) so weeks don't shuffle identically.
-  static RangePlannerGenerationResult _generateMonth({
+  /// Generates [dayCount] consecutive days starting at [start] via
+  /// Planner-aligned 7-day chunks, stitching them together. [scheduledContext]
+  /// is global-day-indexed relative to [start] (0-6 for chunk 1, 7-13 for
+  /// chunk 2, and so on) and is split per chunk before being passed down;
+  /// each chunk after the first additionally receives the previous chunk's
+  /// final day under key `-1` so no-consecutive-days and difficulty spacing
+  /// carry across every chunk boundary. Each chunk gets its own seed
+  /// (`seed + chunkIndex`) so chunks don't shuffle identically. The final
+  /// chunk may generate a few days past [dayCount]; those are clipped off
+  /// rather than ever generating a day before [start].
+  static RangePlannerGenerationResult _generateHorizon({
+    required RangeType type,
     required DateTime start,
+    required int dayCount,
     required List<Activity> pool,
     required int seed,
     required PlanStyle planStyle,
     required bool difficultyAware,
     required Map<int, List<PlannedActivity>> scheduledContext,
   }) {
-    final monthStart = DateTime(start.year, start.month, 1);
-    final monthEnd = DateTime(start.year, start.month + 1, 0);
-    final internalStart = PlannerService.mondayOf(monthStart);
-    final internalEnd = PlannerService.mondayOf(monthEnd)
-        .add(const Duration(days: _daysPerWeek - 1));
-
     final allDays = <DayPlan>[];
     var targetActivityCount = 0;
     var scheduledActivityCount = 0;
     var enabledActivityCount = 0;
     var previousChunkLastDay = const <PlannedActivity>[];
-    var chunkStart = internalStart;
+    var chunkStart = start;
     var chunkIndex = 0;
+    var generatedCount = 0;
 
-    while (!chunkStart.isAfter(internalEnd)) {
+    while (generatedCount < dayCount) {
       final chunkOffset = chunkIndex * _daysPerWeek;
       final chunkContext = <int, List<PlannedActivity>>{
         for (final entry in scheduledContext.entries)
@@ -208,19 +114,20 @@ class RangePlannerService {
       allDays.addAll(chunk.plan);
       previousChunkLastDay = chunk.plan.last.activities;
 
+      generatedCount += _daysPerWeek;
       chunkStart = chunkStart.add(const Duration(days: _daysPerWeek));
       chunkIndex++;
     }
 
-    final monthDays = allDays
+    final horizonEnd = start.add(Duration(days: dayCount - 1));
+    final clippedDays = allDays
         .where(
-          (day) =>
-              !day.date.isBefore(monthStart) && !day.date.isAfter(monthEnd),
+          (day) => !day.date.isBefore(start) && !day.date.isAfter(horizonEnd),
         )
         .toList();
 
     return RangePlannerGenerationResult(
-      range: GeneratedPlanRange(type: RangeType.month, days: monthDays),
+      range: GeneratedPlanRange(type: type, days: clippedDays),
       targetActivityCount: targetActivityCount,
       scheduledActivityCount: scheduledActivityCount,
       enabledActivityCount: enabledActivityCount,
