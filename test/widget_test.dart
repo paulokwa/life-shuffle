@@ -5529,6 +5529,16 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
+
+    // Today's planned day still actively invites check-in.
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+        matching: find.text('Check in'),
+      ),
+      findsOneWidget,
+    );
+
     await tester
         .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
     await tester.pumpAndSettle();
@@ -5628,6 +5638,29 @@ void main() {
     );
     expect(find.text('Cook together'), findsWidgets);
 
+    // The time field is a tap-to-pick control, not free-text entry: it
+    // shows the current time as plain text and opens the real
+    // showTimePicker dialog on tap, rather than a TextFormField the user
+    // has to type into.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('plan-item-editor-time-field')),
+        matching: find.byType(TextFormField),
+      ),
+      findsNothing,
+    );
+    expect(find.text(planned.timeSlot), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('plan-item-editor-time-field')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(TimePickerDialog),
+        matching: find.text('Cancel'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     // Source-template/global-rule fields must not appear in the default
     // occurrence editor - those stay behind the secondary template action.
     expect(find.text('Preferred time'), findsNothing);
@@ -5710,10 +5743,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('plan-item-editor-time-field')),
-      '7:30 PM',
-    );
+    // "Cook together" + evening + Couple time generates "8:00 PM" - pick a
+    // new time through the real showTimePicker control rather than typing,
+    // switching to its built-in text-input entry mode only because
+    // computing dial-drag geometry would be far more brittle than driving
+    // the picker's own keyboard-input toggle.
+    expect(find.text('8:00 PM'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('plan-item-editor-time-field')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Switch to text input mode'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '7');
+    await tester.enterText(find.byType(TextField).at(1), '30');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('7:30 PM'), findsWidgets);
+
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -6011,9 +6059,21 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
     );
-    await tester.tap(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
+
+    // The future day card itself does not invite check-in...
+    final cardFinder =
+        find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}'));
+    expect(
+      find.descendant(of: cardFinder, matching: find.text('Check in')),
+      findsNothing,
     );
+    expect(
+      find.descendant(of: cardFinder, matching: find.text('Upcoming')),
+      findsOneWidget,
+    );
+
+    // ...but tapping it still opens the sheet so edit/remove stay reachable.
+    await tester.tap(cardFinder);
     await tester.pumpAndSettle();
 
     expect(find.text('Done'), findsNothing);
@@ -6172,11 +6232,15 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
+
+    // The now-empty day shows no planned items and, per the rest-day rule,
+    // is no longer tappable to open a check-in sheet.
+    expect(find.text('No planned items.'), findsWidgets);
     await tester
         .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nothing planned for this day'), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
   test(
@@ -6593,6 +6657,27 @@ void main() {
 
     await tester.ensureVisible(outOfRangeCellFinder.first);
     await tester.tap(outOfRangeCellFinder.first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
+  });
+
+  testWidgets(
+      'Tapping an empty in-range month grid cell does not open a '
+      'check-in sheet', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final emptyDay = appState.generatedRange.days.firstWhere(
+      (candidate) => candidate.activities.isEmpty,
+    );
+
+    await _pumpPlanScreen(tester, appState);
+    final cellFinder =
+        find.byKey(ValueKey('month-grid-day-${_dateKey(emptyDay.date)}'));
+    await tester.ensureVisible(cellFinder);
+    await tester.tap(cellFinder);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
@@ -7021,8 +7106,9 @@ void main() {
     );
   });
 
-  testWidgets('Plan empty day opens empty check-in sheet',
-      (WidgetTester tester) async {
+  testWidgets(
+      'Plan empty day does not show Check in and does not open a '
+      'check-in sheet', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -7032,15 +7118,26 @@ void main() {
 
     await _pumpPlanScreen(tester, appState);
 
+    final cardFinder =
+        find.byKey(ValueKey('plan-day-card-${_dateKey(emptyDay.date)}'));
+    expect(
+      find.descendant(of: cardFinder, matching: find.text('Check in')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: cardFinder, matching: find.text('Upcoming')),
+      findsNothing,
+    );
+
+    await tester.tap(cardFinder);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
+
     await tester.tap(
       find.byKey(ValueKey('plan-day-strip-${_dateKey(emptyDay.date)}')),
     );
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
-    expect(find.text('No planned items to check in.'), findsOneWidget);
-    expect(find.text('Nothing planned for this day'), findsOneWidget);
-    expect(find.text('There is nothing to mark right now.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
   test('Progress summary counts past 7 days and excludes future items', () {
