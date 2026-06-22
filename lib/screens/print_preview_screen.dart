@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
+import '../models/generated_plan_range.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/range_type.dart';
 import '../services/browser_print.dart';
 import '../services/planner_service.dart';
 import '../services/text_week_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
+
+String _viewModeLabel(RangeType mode) => switch (mode) {
+      RangeType.week => 'Week view',
+      RangeType.twoWeek => '2-week view',
+      RangeType.month => 'Month view',
+    };
 
 /// Read-only, print-friendly weekly view for the selected calendar.
 ///
@@ -62,9 +70,20 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final sortedPlan = List<DayPlan>.from(state.weekPlan)
+    final viewMode = state.viewMode;
+    final isMonthView = viewMode == RangeType.month;
+    final monthRangeReady = isMonthView && state.hasSufficientRangeForView;
+
+    final sortedWeekPlan = List<DayPlan>.from(state.weekPlan)
       ..sort((a, b) => a.date.compareTo(b.date));
-    final hasAnyPlanned = sortedPlan.any((day) => day.activities.isNotEmpty);
+    final hasAnyPlanned =
+        sortedWeekPlan.any((day) => day.activities.isNotEmpty);
+
+    final rangeLabel = isMonthView
+        ? (monthRangeReady
+            ? TextWeekExportService.weekRangeLabel(state.generatedRange.days)
+            : null)
+        : TextWeekExportService.weekRangeLabel(sortedWeekPlan);
 
     return Scaffold(
       key: const ValueKey('print-preview-screen'),
@@ -74,7 +93,7 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
+              constraints: BoxConstraints(maxWidth: isMonthView ? 960 : 720),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -93,15 +112,32 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    TextWeekExportService.weekRangeLabel(sortedPlan),
-                    key: const ValueKey('print-preview-week-range'),
-                    style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+                    _viewModeLabel(viewMode),
+                    key: const ValueKey('print-preview-view-label'),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: primaryTerracotta,
+                    ),
                   ),
+                  if (rangeLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      rangeLabel,
+                      key: const ValueKey('print-preview-week-range'),
+                      style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+                    ),
+                  ],
                   const SizedBox(height: 24),
-                  if (!hasAnyPlanned)
+                  if (isMonthView)
+                    if (!monthRangeReady)
+                      const _PendingRangeNotice()
+                    else
+                      _PrintMonthGrid(range: state.generatedRange)
+                  else if (!hasAnyPlanned)
                     const _EmptyWeekNotice()
                   else
-                    ...sortedPlan.map(
+                    ...sortedWeekPlan.map(
                       (day) => Padding(
                         padding: const EdgeInsets.only(bottom: 18),
                         child: _PrintDaySection(day: day),
@@ -305,6 +341,277 @@ class _EmptyWeekNotice extends StatelessWidget {
       child: Text(
         'No planned activities this week.',
         style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+      ),
+    );
+  }
+}
+
+/// Shown instead of [_PrintMonthGrid] when Month view is selected but
+/// [AppState.hasSufficientRangeForView] is false. Print preview never
+/// generates on its own — the user must go generate the range first (on the
+/// Plan screen), then come back here to print it.
+class _PendingRangeNotice extends StatelessWidget {
+  const _PendingRangeNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('print-preview-month-pending'),
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(
+        'No generated month range yet. Go to Plan, switch to Month, and tap '
+        'Generate, then come back here to print.',
+        style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+      ),
+    );
+  }
+}
+
+/// Print-friendly Monday-start calendar grid for [AppState.generatedRange]
+/// when [AppState.viewMode] is [RangeType.month]. Mirrors the on-screen
+/// month grid in `plan_screen.dart` (the grid spans whole calendar weeks for
+/// layout and can itself cross a calendar-month boundary; cells before
+/// [GeneratedPlanRange.start] or after [GeneratedPlanRange.end] are blank
+/// and dimmed) but lays out with a [Table] rather than a fixed-aspect-ratio
+/// grid so each row grows to fit however many activities a day has, which
+/// suits print/PDF output better than a fixed-size on-screen grid.
+class _PrintMonthGrid extends StatelessWidget {
+  const _PrintMonthGrid({required this.range});
+
+  final GeneratedPlanRange range;
+
+  static const _weekdayLabels = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final rangeStart = range.start;
+    final rangeEnd = range.end;
+    final gridStart = DateTime(
+      rangeStart.year,
+      rangeStart.month,
+      rangeStart.day - (rangeStart.weekday - 1),
+    );
+    final gridEnd = DateTime(
+      rangeEnd.year,
+      rangeEnd.month,
+      rangeEnd.day + (DateTime.sunday - rangeEnd.weekday),
+    );
+    final dayByKey = {
+      for (final day in range.days) DayPlan.dateKey(day.date): day,
+    };
+    final totalCells = gridEnd.difference(gridStart).inDays + 1;
+    final weekCount = totalCells ~/ 7;
+
+    return Table(
+      key: const ValueKey('print-preview-month-grid'),
+      border: TableBorder.all(color: borderWarm),
+      defaultColumnWidth: const FlexColumnWidth(),
+      children: [
+        TableRow(
+          key: const ValueKey('print-preview-month-grid-weekday-headers'),
+          children: [
+            for (final label in _weekdayLabels) _PrintMonthHeaderCell(label),
+          ],
+        ),
+        for (var week = 0; week < weekCount; week++)
+          TableRow(
+            children: [
+              for (var col = 0; col < 7; col++)
+                _dayCell(
+                    gridStart, week * 7 + col, rangeStart, rangeEnd, dayByKey),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _dayCell(
+    DateTime gridStart,
+    int index,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+    Map<String, DayPlan> dayByKey,
+  ) {
+    final date = gridStart.add(Duration(days: index));
+    final inRange = !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
+    return _PrintMonthDayCell(
+      date: date,
+      plan: dayByKey[DayPlan.dateKey(date)],
+      inRange: inRange,
+    );
+  }
+}
+
+class _PrintMonthHeaderCell extends StatelessWidget {
+  const _PrintMonthHeaderCell(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Center(
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One cell of [_PrintMonthGrid]. Out-of-range cells (before
+/// [GeneratedPlanRange.start] or after [GeneratedPlanRange.end]) render
+/// blank and dimmed; in-range cells show the day number and every planned
+/// activity for that date, each respecting [AppState.exportPrintOptions].
+class _PrintMonthDayCell extends StatelessWidget {
+  const _PrintMonthDayCell({
+    required this.date,
+    required this.plan,
+    required this.inRange,
+  });
+
+  final DateTime date;
+  final DayPlan? plan;
+  final bool inRange;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateKey = DayPlan.dateKey(date);
+    if (!inRange) {
+      return Container(
+        key: ValueKey('print-preview-month-grid-filler-$dateKey'),
+        constraints: const BoxConstraints(minHeight: 64),
+        color: const Color(0xFFF2EEE7),
+      );
+    }
+
+    final state = AppStateScope.of(context);
+    final options = state.exportPrintOptions;
+    final activities = plan?.activities ?? const <PlannedActivity>[];
+
+    return Container(
+      key: ValueKey('print-preview-month-grid-day-$dateKey'),
+      padding: const EdgeInsets.all(4),
+      alignment: Alignment.topLeft,
+      constraints: const BoxConstraints(minHeight: 64),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${date.day}',
+            key: ValueKey('print-preview-month-grid-day-number-$dateKey'),
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: (plan?.isToday ?? false) ? primaryTerracotta : textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          for (final activity in activities)
+            _PrintMonthActivityEntry(
+              activity: activity,
+              options: options,
+              state: state,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact per-activity entry inside a [_PrintMonthDayCell]. Smaller and
+/// denser than [_PrintActivityRow] (the weekly list view's activity row)
+/// since a grid cell has far less room than a full-width day section.
+class _PrintMonthActivityEntry extends StatelessWidget {
+  const _PrintMonthActivityEntry({
+    required this.activity,
+    required this.options,
+    required this.state,
+  });
+
+  final PlannedActivity activity;
+  final ExportPrintOptions options;
+  final AppState state;
+
+  String? _statusLabel() {
+    if (!options.showCheckInStatus) return null;
+    return switch (activity.status) {
+      CheckStatus.done => 'Done',
+      CheckStatus.partly => 'Partly done',
+      CheckStatus.skipped => 'Skipped',
+      CheckStatus.none => null,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final details = [
+      if (options.showTime) activity.timeSlot,
+      if (options.showDuration) activity.activity.duration,
+      if (options.showCategory) activity.category,
+    ].where((part) => part.trim().isNotEmpty).join(' · ');
+    final statusLabel = _statusLabel();
+    final showLock = options.showLockedStatus && activity.locked;
+    final dimensionLabels = options.showEnabledDimensions
+        ? TextWeekExportService.dimensionLabels(
+            activity.activity,
+            difficultyEnabled: state.difficultyEnabled,
+            energyEnabled: state.energyEnabled,
+            socialEnabled: state.socialEnabled,
+          )
+        : const <String>[];
+    final secondaryParts = [
+      if (details.isNotEmpty) details,
+      if (showLock) 'Locked',
+      if (statusLabel != null) statusLabel,
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            activity.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.dmSans(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: textPrimary,
+            ),
+          ),
+          if (secondaryParts.isNotEmpty)
+            Text(
+              secondaryParts.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(fontSize: 8, color: textMuted),
+            ),
+          if (dimensionLabels.isNotEmpty)
+            Text(
+              dimensionLabels.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(fontSize: 8, color: textMuted),
+            ),
+        ],
       ),
     );
   }

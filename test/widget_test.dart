@@ -28,6 +28,7 @@ import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
 import 'package:life_shuffle/services/range_planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
+import 'package:life_shuffle/services/text_week_export_service.dart';
 import 'package:life_shuffle/theme/app_colors.dart';
 import 'package:life_shuffle/widgets/auth_gate.dart';
 import 'package:life_shuffle/widgets/bottom_nav_shell.dart';
@@ -3146,6 +3147,7 @@ void main() {
       find.byKey(const ValueKey('print-preview-week-range')),
       findsOneWidget,
     );
+    expect(find.text('Week view'), findsOneWidget);
     for (final day in appState.weekPlan) {
       expect(find.text(day.fullLabel), findsOneWidget);
     }
@@ -3267,6 +3269,276 @@ void main() {
     await tester.pump();
 
     expect(find.text(difficultyLabel), findsNothing);
+  });
+
+  testWidgets(
+      'Print preview shows a pending message for Month view with no '
+      'generated range, and does not silently generate one',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setViewMode(RangeType.month);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.text('Month view'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('print-preview-month-pending')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-month-grid')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-week-range')),
+      findsNothing,
+    );
+
+    // Opening print preview must never trigger generation on its own.
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.hasSufficientRangeForView, isFalse);
+  });
+
+  testWidgets('Print preview month grid renders a 7-column Monday-start grid',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    final table = tester.widget<Table>(
+      find.byKey(const ValueKey('print-preview-month-grid')),
+    );
+    expect(table.children.first.children.length, 7);
+    for (final row in table.children) {
+      expect(row.children.length, 7);
+    }
+    for (final label in const [
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+  });
+
+  testWidgets(
+      'Print preview month grid shows the generated range label and day '
+      'numbers', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final firstDay = appState.generatedRange.days.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(
+      find.text(
+        TextWeekExportService.weekRangeLabel(appState.generatedRange.days),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        ValueKey(
+          'print-preview-month-grid-day-number-${_dateKey(firstDay.date)}',
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'Print preview month grid shows activity titles in generated date '
+      'cells', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final plannedDay = appState.generatedRange.days.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.text(plannedActivity.title), findsWidgets);
+  });
+
+  testWidgets('Print preview month grid filler cells render blank and dimmed',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    // Matched by key prefix rather than a specific date: which side of the
+    // grid gets padding cells (leading, trailing, or both) depends on which
+    // weekday the generated range's start/end happen to fall on.
+    final fillerFinder = find.byWidgetPredicate((widget) {
+      final key = widget.key;
+      return key is ValueKey<String> &&
+          key.value.startsWith('print-preview-month-grid-filler-');
+    });
+    expect(fillerFinder, findsWidgets);
+
+    final fillerContainer = tester.widget<Container>(fillerFinder.first);
+    expect(fillerContainer.color, const Color(0xFFF2EEE7));
+    expect(
+      find.descendant(of: fillerFinder.first, matching: find.byType(Text)),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Print preview month grid does not dim in-range days that spill into '
+      'the next calendar month', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final lastDay = appState.generatedRange.days.last;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    // The generated range's last day is always in-range, even though a
+    // ~30-day month horizon commonly spills into the next calendar month.
+    expect(
+      find.byKey(
+        ValueKey('print-preview-month-grid-day-${_dateKey(lastDay.date)}'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        ValueKey(
+          'print-preview-month-grid-filler-${_dateKey(lastDay.date)}',
+        ),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Output detail toggles affect month grid activity details',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final plannedDay = appState.generatedRange.days.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final plannedActivity = plannedDay.activities.first;
+    plannedActivity.status = CheckStatus.done;
+    plannedActivity.locked = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.textContaining(plannedActivity.category), findsWidgets);
+    expect(find.textContaining('Done'), findsWidgets);
+    expect(find.textContaining('Locked'), findsWidgets);
+
+    appState.setExportPrintOptions(
+      appState.exportPrintOptions.copyWith(
+        showDuration: false,
+        showCategory: false,
+        showCheckInStatus: false,
+        showLockedStatus: false,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text(plannedActivity.title), findsWidgets);
+    expect(find.textContaining(plannedActivity.category), findsNothing);
+    expect(find.textContaining('Done'), findsNothing);
+    expect(find.textContaining('Locked'), findsNothing);
+  });
+
+  testWidgets(
+      'Print preview does not regenerate an already-generated month range '
+      'on open', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final daysBefore = List<DayPlan>.from(appState.generatedRange.days);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+    await tester.pump();
+
+    expect(appState.generatedRange.days.length, daysBefore.length);
+    expect(
+      appState.generatedRange.days.first.date,
+      daysBefore.first.date,
+    );
+    expect(appState.generatedRange.days.last.date, daysBefore.last.date);
+  });
+
+  testWidgets(
+      'Print preview keeps printing the visible week for 2-week view mode',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.twoWeek);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PrintPreviewScreen(appState: appState),
+      ),
+    );
+
+    expect(find.text('2-week view'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('print-preview-month-grid')),
+      findsNothing,
+    );
+    for (final day in appState.weekPlan) {
+      expect(find.text(day.fullLabel), findsOneWidget);
+    }
   });
 
   test('Publishing metadata enables disables regenerates and persists',
