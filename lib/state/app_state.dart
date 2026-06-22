@@ -67,7 +67,8 @@ typedef LoadUserProfiles = Future<List<UserProfile>> Function(
 /// Screens read from it via [AppStateScope.of(context)].
 class AppState extends ChangeNotifier {
   final List<Activity> activities;
-  late List<DayPlan> _weekPlan;
+  late List<DayPlan> _generatedDays;
+  int _selectedRangeWeekIndex = 0;
   int _seed = 0;
   int _updatedAtMillis = 0;
   PlanStyle _planStyle = PlanStyle.balanced;
@@ -163,16 +164,29 @@ class AppState extends ChangeNotifier {
           _normalizeNullableId(savedState.selectedCalendarId);
       _applySavedState(savedState, persistLocal: false);
     } else {
-      _weekPlan = _buildPlan();
+      _generatedDays = _buildPlan();
     }
   }
 
-  /// The current 7-day slice of [generatedRange]. Only [RangeType.week] is
-  /// generated today, so this is exactly [generatedRange.days].
-  List<DayPlan> get weekPlan => _weekPlan;
+  /// The currently visible 7-day window into [generatedRange]. For
+  /// [RangeType.week] this is the whole generated range; for
+  /// [RangeType.twoWeek] it is whichever week [selectedRangeWeekIndex]
+  /// points at. Switching the visible week via [selectRangeWeekIndex]
+  /// changes this without regenerating anything.
+  List<DayPlan> get weekPlan {
+    if (_rangeType != RangeType.twoWeek) return _generatedDays;
+    final start = _selectedRangeWeekIndex * 7;
+    return _generatedDays.sublist(start, start + 7);
+  }
+
   RangeType get rangeType => _rangeType;
   GeneratedPlanRange get generatedRange =>
-      GeneratedPlanRange(type: _rangeType, days: _weekPlan);
+      GeneratedPlanRange(type: _rangeType, days: _generatedDays);
+
+  /// Number of 7-day weeks in the currently generated range: 1 for
+  /// [RangeType.week], 2 for [RangeType.twoWeek].
+  int get generatedWeekCount => _rangeType == RangeType.twoWeek ? 2 : 1;
+  int get selectedRangeWeekIndex => _selectedRangeWeekIndex;
   PlanStyle get planStyle => _planStyle;
   bool get canUndoLastRegeneration => _lastRegenerationSnapshot != null;
   String? get plannerConflictMessage => _plannerConflictMessage;
@@ -341,8 +355,9 @@ class AppState extends ChangeNotifier {
           _applySavedState(remote.state, persistLocal: false);
           _persistLocal(_currentSavedState());
           // Re-derive rather than re-save remote.state verbatim:
-          // _applySavedState just rebuilt _weekPlan against "now", which may
-          // be a different calendar week than the cached ICS in remote.state.
+          // _applySavedState just rebuilt _generatedDays against "now", which
+          // may be a different calendar week than the cached ICS in
+          // remote.state.
           await _saveStateToFirestore(uid, _calendarId!, _currentSavedState());
           notifyListeners();
         } else {
@@ -753,7 +768,7 @@ class AppState extends ChangeNotifier {
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
-    _weekPlan = _buildPlan(lockedItems: _collectLocked());
+    _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
   }
@@ -776,7 +791,30 @@ class AppState extends ChangeNotifier {
   void setPlanStyle(PlanStyle style) {
     if (_planStyle == style) return;
     _planStyle = style;
-    _weekPlan = _buildPlan(lockedItems: _collectLocked());
+    _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    _persist();
+    notifyListeners();
+  }
+
+  /// Switches which 7-day week of a [RangeType.twoWeek] range [weekPlan]
+  /// shows, without regenerating anything. No-op for [RangeType.week].
+  void selectRangeWeekIndex(int index) {
+    if (_rangeType != RangeType.twoWeek) return;
+    final clamped = index.clamp(0, generatedWeekCount - 1);
+    if (_selectedRangeWeekIndex == clamped) return;
+    _selectedRangeWeekIndex = clamped;
+    notifyListeners();
+  }
+
+  /// Deliberately switches the generated range type and regenerates for
+  /// it, preserving currently locked items by exact date. [RangeType.month]
+  /// is not implemented yet, so requests for it are silently ignored.
+  void setRangeType(RangeType type) {
+    if (type == RangeType.month) return;
+    if (_rangeType == type) return;
+    _rangeType = type;
+    _selectedRangeWeekIndex = 0;
+    _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
   }
@@ -904,7 +942,7 @@ class AppState extends ChangeNotifier {
   }
 
   List<(DayPlan, List<PlannedActivity>)> pastUncheckedByDay({DateTime? now}) =>
-      pastUncheckedFrom(_weekPlan, now: now);
+      pastUncheckedFrom(weekPlan, now: now);
 
   bool hasPastUnchecked({DateTime? now}) =>
       pastUncheckedByDay(now: now).isNotEmpty;
@@ -1111,7 +1149,8 @@ class AppState extends ChangeNotifier {
       final idx = activities.indexWhere((a) => a.id == entry.key);
       if (idx >= 0) activities[idx].enabled = entry.value;
     }
-    _weekPlan = _buildPlan();
+    _selectedRangeWeekIndex = 0;
+    _generatedDays = _buildPlan();
     _applyOverlays(saved);
     _refreshCachedIcs();
 
@@ -1326,7 +1365,9 @@ class AppState extends ChangeNotifier {
 
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
-    for (final day in _weekPlan) {
+    // Save check-ins/locks for the whole generated range, not just the
+    // visible week, so the non-visible week of a twoWeek range survives.
+    for (final day in _generatedDays) {
       final dateKey = DayPlan.dateKey(day.date);
       for (final pa in day.activities) {
         final occurrenceKey = '$dateKey:${pa.activity.id}';
@@ -1372,10 +1413,14 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// Locked items across the whole generated range, keyed by global day
+  /// index (0-6 for a week range, 0-13 for a twoWeek range), so
+  /// regeneration preserves locks on both weeks regardless of which one
+  /// is currently visible.
   Map<int, List<PlannedActivity>> _collectLocked() {
     final result = <int, List<PlannedActivity>>{};
-    for (var i = 0; i < _weekPlan.length; i++) {
-      result[i] = _weekPlan[i].activities.where((a) => a.locked).toList();
+    for (var i = 0; i < _generatedDays.length; i++) {
+      result[i] = _generatedDays[i].activities.where((a) => a.locked).toList();
     }
     return result;
   }
@@ -1428,19 +1473,23 @@ class AppState extends ChangeNotifier {
     if (!generation.hasBlockedActivitySlots) return null;
     final count = generation.unfilledActivityCount;
     final slotLabel = count == 1 ? 'slot was' : 'slots were';
-    return 'This week is lighter than expected because $count activity '
+    return 'This plan is lighter than expected because $count activity '
         '$slotLabel blocked by rules. Try relaxing weekdays, increasing max '
         'per week, turning off no-consecutive-days, or choosing a lighter '
         'plan style.';
   }
 
-  /// Applies saved check-in/lock state to [_weekPlan], preferring the
+  /// Applies saved check-in/lock state to [_generatedDays] (the whole
+  /// generated range, not just the visible week), preferring the
   /// occurrence key (`yyyy-MM-dd:activityId`) and falling back to the
   /// legacy bare activity-id key so saved data from before the occurrence
-  /// key migration still applies to the current week. The next [_persist]
-  /// rewrites everything under occurrence keys (see [_currentSavedState]).
+  /// key migration still applies. (Legacy bare-id entries only ever exist
+  /// on a [RangeType.week] range, since any document new enough to have
+  /// [RangeType.twoWeek] has already been saved at least once under
+  /// occurrence keys.) The next [_persist] rewrites everything under
+  /// occurrence keys (see [_currentSavedState]).
   void _applyOverlays(SavedState saved) {
-    for (final day in _weekPlan) {
+    for (final day in _generatedDays) {
       final dateKey = DayPlan.dateKey(day.date);
       for (final pa in day.activities) {
         final id = pa.activity.id;
@@ -1492,10 +1541,12 @@ class AppState extends ChangeNotifier {
       _cachedIcsUpdatedAtMillis = null;
       return;
     }
+    // Publishes the visible week slice only for now; the feed does not yet
+    // publish a full twoWeek range.
     _cachedIcsText = IcsCalendarService.generate(
       calendarId: _calendarId ?? _feedToken ?? 'local-calendar',
       calendarTitle: _calendarTitle,
-      plan: _weekPlan,
+      plan: weekPlan,
     );
     _cachedIcsUpdatedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }

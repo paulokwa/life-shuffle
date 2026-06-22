@@ -3859,19 +3859,168 @@ void main() {
     expect(viaRange.hasBlockedActivitySlots, direct.hasBlockedActivitySlots);
   });
 
-  test('RangePlannerService does not yet generate twoWeek or month ranges', () {
+  test('RangePlannerService does not yet generate month ranges', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
-    for (final type in [RangeType.twoWeek, RangeType.month]) {
-      expect(
-        () => RangePlannerService.generateWithDiagnostics(
-          type: type,
-          start: weekStart,
-          pool: const [],
-          seed: 1,
-        ),
-        throwsUnimplementedError,
+    expect(
+      () => RangePlannerService.generateWithDiagnostics(
+        type: RangeType.month,
+        start: weekStart,
+        pool: const [],
+        seed: 1,
+      ),
+      throwsUnimplementedError,
+    );
+  });
+
+  test(
+      'RangePlannerService generates 14 days spanning two Monday-aligned '
+      'weeks for twoWeek', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final result = RangePlannerService.generateWithDiagnostics(
+      type: RangeType.twoWeek,
+      start: weekStart,
+      pool: PlannerService.defaultActivities,
+      seed: 7,
+    );
+
+    expect(result.range.type, RangeType.twoWeek);
+    expect(result.range.days.length, 14);
+    expect(result.range.days.first.date, weekStart);
+    expect(
+      result.range.days.last.date,
+      weekStart.add(const Duration(days: 13)),
+    );
+    expect(result.range.days[7].date, weekStart.add(const Duration(days: 7)));
+  });
+
+  test(
+      'RangePlannerService resets max-per-week separately for each week '
+      'in a twoWeek range', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'reset-1',
+      title: 'Once a week',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final range = RangePlannerService.generate(
+      type: RangeType.twoWeek,
+      start: weekStart,
+      pool: [activity],
+      seed: 5,
+    );
+
+    final week1Count = range.days
+        .sublist(0, 7)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+    final week2Count = range.days
+        .sublist(7, 14)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+
+    // If max-per-week did not reset for week 2, week2Count would be 0
+    // because week 1 already used up the only allowed placement.
+    expect(week1Count, 1);
+    expect(week2Count, 1);
+  });
+
+  test(
+      'PlannerService scheduledContext boundary day blocks '
+      'no-consecutive-days on the next chunk\'s day 0', () {
+    final weekStart = DateTime(2026, 6, 22); // Monday
+    final activity = Activity(
+      id: 'boundary-1',
+      title: 'Boundary check',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: true,
+    );
+    final boundaryActivity = PlannedActivity(
+      activity: activity,
+      timeSlot: '10:00 AM',
+    );
+
+    // seed search, not arbitrary: finds a seed where the lone pool
+    // candidate is actually placed on day 0 with no boundary context, so
+    // the assertion below proves the boundary context is what blocks it
+    // rather than the day simply having no target slot.
+    int? workingSeed;
+    for (var seed = 0; seed < 50; seed++) {
+      final plan = PlannerService.generate(
+        weekStart: weekStart,
+        pool: [activity],
+        seed: seed,
       );
+      if (plan.first.activities.any((a) => a.activity.id == activity.id)) {
+        workingSeed = seed;
+        break;
+      }
     }
+    expect(workingSeed, isNotNull,
+        reason: 'no seed under 50 placed the activity on day 0');
+
+    final withBoundary = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: workingSeed!,
+      scheduledContext: {
+        -1: [boundaryActivity],
+      },
+    );
+
+    expect(
+      withBoundary.first.activities.any((a) => a.activity.id == activity.id),
+      isFalse,
+    );
+  });
+
+  test(
+      'RangePlannerService prevents no-consecutive-days across the '
+      'Sunday-to-Monday week boundary', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'boundary-range-1',
+      title: 'Boundary range check',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: true,
+    );
+
+    // seed search, not arbitrary: finds a seed where the lone pool
+    // candidate actually lands on week 1's Sunday, so the boundary
+    // assertion below has something real to block.
+    List<DayPlan>? workingDays;
+    for (var seed = 0; seed < 50; seed++) {
+      final range = RangePlannerService.generate(
+        type: RangeType.twoWeek,
+        start: weekStart,
+        pool: [activity],
+        seed: seed,
+      );
+      final sundayHasActivity =
+          range.days[6].activities.any((a) => a.activity.id == activity.id);
+      if (sundayHasActivity) {
+        workingDays = range.days;
+        break;
+      }
+    }
+    expect(workingDays, isNotNull,
+        reason: 'no seed under 50 placed the activity on week 1 Sunday');
+
+    final mondayHasActivity = workingDays![7].activities.any(
+          (a) => a.activity.id == activity.id,
+        );
+    expect(mondayHasActivity, isFalse);
   });
 
   test('Difficulty disabled keeps old planner behavior', () {
@@ -4308,6 +4457,138 @@ void main() {
     expect(saved.lockedMap[secondKey], isFalse);
   });
 
+  test('weekPlan defaults to the week 1 slice when rangeType is twoWeek',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setRangeType(RangeType.twoWeek);
+
+    expect(appState.rangeType, RangeType.twoWeek);
+    expect(appState.selectedRangeWeekIndex, 0);
+    expect(appState.generatedRange.days.length, 14);
+    expect(appState.weekPlan.length, 7);
+    expect(
+      appState.weekPlan.map((d) => d.date),
+      appState.generatedRange.days.sublist(0, 7).map((d) => d.date),
+    );
+  });
+
+  test('Navigating to week 2 changes the visible week without regenerating',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.twoWeek);
+    final fullRangeBefore = appState.generatedRange.days;
+
+    appState.selectRangeWeekIndex(1);
+
+    expect(appState.selectedRangeWeekIndex, 1);
+    expect(appState.weekPlan.length, 7);
+    expect(appState.weekPlan.first.date, fullRangeBefore[7].date);
+    // Same list instance: switching the visible week did not regenerate.
+    expect(appState.generatedRange.days, same(fullRangeBefore));
+  });
+
+  test('Switching back to 1 week preserves existing weekly behavior', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final originalWeek1 = _dayPlanSignature(appState.weekPlan);
+
+    appState.setRangeType(RangeType.twoWeek);
+    appState.setRangeType(RangeType.week);
+
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.generatedRange.days.length, 7);
+    expect(_dayPlanSignature(appState.weekPlan), originalWeek1);
+  });
+
+  test('AppState.setRangeType ignores month since it is not implemented yet',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setRangeType(RangeType.month);
+
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.generatedRange.days.length, 7);
+  });
+
+  test('Check-ins are independent across dates in a 2-week range', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'twoweek-checkin',
+      title: 'Recurring activity',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [recurring]);
+    appState.setRangeType(RangeType.twoWeek);
+
+    final allDays = appState.generatedRange.days;
+    final week1Day =
+        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day =
+        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Item = week1Day.activities.first;
+    final week2Item = week2Day.activities.first;
+
+    week1Item.status = CheckStatus.done;
+    appState.notifyCheckIn(week1Item);
+    week2Item.status = CheckStatus.skipped;
+    appState.notifyCheckIn(week2Item);
+
+    expect(week1Item.status, CheckStatus.done);
+    expect(week2Item.status, CheckStatus.skipped);
+
+    final saved = PersistenceService.load([recurring]);
+    final week1Key = '${_dateKey(week1Day.date)}:${recurring.id}';
+    final week2Key = '${_dateKey(week2Day.date)}:${recurring.id}';
+    expect(saved.checkinMap[week1Key], CheckStatus.done.index);
+    expect(saved.checkinMap[week2Key], CheckStatus.skipped.index);
+  });
+
+  test('Locks are independent across dates in a 2-week range', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'twoweek-locked',
+      title: 'Recurring activity',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [recurring]);
+    appState.setRangeType(RangeType.twoWeek);
+
+    final allDays = appState.generatedRange.days;
+    final week1Day =
+        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day =
+        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Item = week1Day.activities.first;
+    final week2Item = week2Day.activities.first;
+
+    appState.toggleLock(week1Item);
+
+    expect(week1Item.locked, isTrue);
+    expect(week2Item.locked, isFalse);
+
+    final saved = PersistenceService.load([recurring]);
+    final week1Key = '${_dateKey(week1Day.date)}:${recurring.id}';
+    final week2Key = '${_dateKey(week2Day.date)}:${recurring.id}';
+    expect(saved.lockedMap[week1Key], isTrue);
+    expect(saved.lockedMap[week2Key], isFalse);
+  });
+
   testWidgets('Plan day card opens a day check-in sheet',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -4416,6 +4697,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(WeekReviewScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'Plan range control switches to 2 weeks and week nav changes the '
+      'visible week', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await _pumpPlanScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('plan-week-nav-0')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('plan-range-twoWeek')));
+    await tester.pumpAndSettle();
+
+    expect(appState.rangeType, RangeType.twoWeek);
+    expect(find.byKey(const ValueKey('plan-week-nav-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-week-nav-1')), findsOneWidget);
+    final week1Date = appState.weekPlan.first.date;
+
+    await tester.tap(find.byKey(const ValueKey('plan-week-nav-1')));
+    await tester.pumpAndSettle();
+
+    expect(appState.selectedRangeWeekIndex, 1);
+    expect(appState.weekPlan.first.date, isNot(week1Date));
+
+    await tester.tap(find.byKey(const ValueKey('plan-range-week')));
+    await tester.pumpAndSettle();
+
+    expect(appState.rangeType, RangeType.week);
+    expect(find.byKey(const ValueKey('plan-week-nav-0')), findsNothing);
   });
 
   testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',

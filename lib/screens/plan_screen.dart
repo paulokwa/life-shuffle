@@ -5,6 +5,7 @@ import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
@@ -78,7 +79,20 @@ class PlanScreen extends StatelessWidget {
                     _weekRange(plans),
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
+                  _RangeTypeControl(
+                    current: state.rangeType,
+                    onChanged: state.setRangeType,
+                  ),
+                  if (state.rangeType == RangeType.twoWeek) ...[
+                    const SizedBox(height: 8),
+                    _WeekNavControl(
+                      selectedIndex: state.selectedRangeWeekIndex,
+                      weekCount: state.generatedWeekCount,
+                      onSelected: state.selectRangeWeekIndex,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   _DayStrip(plans: plans, onDayTap: openDaySheet),
                   const SizedBox(height: 16),
                   if (state.remoteUpdatedElsewhere) ...[
@@ -271,6 +285,106 @@ class PlanScreen extends StatelessWidget {
         state: state,
         child: _DayCheckInSheet(plan: plan),
       ),
+    );
+  }
+}
+
+/// Lets the user deliberately choose how much to generate: 1 week or
+/// 2 weeks. Tapping an option immediately (and deliberately, since it is
+/// an explicit tap) switches [AppState.rangeType] and regenerates for it.
+/// Month is intentionally not offered yet.
+class _RangeTypeControl extends StatelessWidget {
+  const _RangeTypeControl({required this.current, required this.onChanged});
+
+  final RangeType current;
+  final ValueChanged<RangeType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const options = [
+      (RangeType.week, '1 week'),
+      (RangeType.twoWeek, '2 weeks'),
+    ];
+    return Row(
+      children: options.map((option) {
+        final (type, label) = option;
+        final selected = type == current;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            key: ValueKey('plan-range-${type.name}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(type),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? primaryTerracotta : Colors.transparent,
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(
+                  color: selected ? primaryTerracotta : borderWarmStrong,
+                ),
+              ),
+              child: Text(
+                label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? Colors.white : textPrimary,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// Lets the user pick which 7-day week of a generated 2-week range is
+/// visible below, without regenerating anything.
+class _WeekNavControl extends StatelessWidget {
+  const _WeekNavControl({
+    required this.selectedIndex,
+    required this.weekCount,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final int weekCount;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(weekCount, (index) {
+        final selected = index == selectedIndex;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            key: ValueKey('plan-week-nav-$index'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onSelected(index),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? warmBeige : Colors.transparent,
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(
+                  color: selected ? primaryTerracotta : borderWarmStrong,
+                ),
+              ),
+              child: Text(
+                'Week ${index + 1}',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? primaryTerracotta : textPrimary,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 }

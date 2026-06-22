@@ -1657,3 +1657,36 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The range-planning foundation exists but is invisible: every calendar still only ever generates/displays one week, `rangeType` always defaults to and saves as `week`, and there is no UI to change it yet. Check-ins and locks are now scoped to the exact occurrence date under the hood, fixing the latent bug where the same recurring activity on two different dates would have shared check-in/lock state.
 - **Next recommended step**: Slice 2 - generate a real 2-week range and add week-by-week navigation UI; this needs a small `PlannerService` extension so no-consecutive-days and difficulty spacing carry adjacency context across the week-chunk boundary (today `scheduledContext` only carries hard-day counts across calls, not adjacency).
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - MVP 2 range foundation slice 2: 2-week generation and week-by-week navigation
+
+- **Goal**: Implement real `RangeType.twoWeek` generation and a simple Plan-screen way to view it week-by-week, without building month UI, keeping existing 1-week behavior unchanged.
+- **Summary**: `RangePlannerService.generateWithDiagnostics()` now generates `RangeType.twoWeek` by calling `PlannerService` twice (one Monday-aligned 7-day chunk per week, seeds `seed`/`seed + 1`) and stitching the two `List<DayPlan>` outputs into 14 days; `scheduledContext` passed in is global-day-indexed (0-6/7-13) and split per chunk. `RangeType.month` still throws `UnimplementedError`. Extended `PlannerService.generateWithDiagnostics()` with a small, backward-compatible change: `scheduledContext` entries now also seed same/adjacent-day tracking (previously they only fed difficulty hard-day spacing), so `RangePlannerService` can pass week 1's final day under context key `-1` and week 2's no-consecutive-days/difficulty spacing correctly see across the Sunday-to-Monday boundary. `AppState` renamed its internal plan field to `_generatedDays` (the full generated range, 7 or 14 days) and added `weekPlan` as a computed visible-7-day-window getter (identical to the full range for `RangeType.week`, a `sublist` for `RangeType.twoWeek`), plus `generatedWeekCount`, `selectedRangeWeekIndex`, `selectRangeWeekIndex()` (pure view switch, no regeneration, not persisted), and `setRangeType()` (deliberate regeneration preserving currently locked items, silently ignores `RangeType.month`). Check-in/lock persistence (`_currentSavedState`, `_collectLocked`, `_applyOverlays`) now operates on the full `_generatedDays` range so both weeks survive a save/regenerate regardless of which week is visible; Progress/Today/print/export/ICS continue reading the visible `weekPlan` slice unchanged, per the slice's scope. Plan screen gained a simple "1 week / 2 weeks" pill control and a "Week 1 / Week 2" pill control (shown only for `twoWeek`); both are plain `AppState` calls, no new state in the widget itself.
+- **Files changed**:
+  - `lib/services/planner_service.dart`
+  - `lib/services/range_planner_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Carry cross-chunk boundary continuity entirely through the existing `scheduledContext` parameter (negative day-index convention) rather than adding a new parameter, since hard-day-count carry-forward already worked this way - this kept the `PlannerService` change to one line plus a new same/adjacent-day seeding helper.
+  - Selecting a range type is the deliberate trigger (tapping "2 weeks" immediately regenerates, same precedent as the existing Plan Style picker); no separate confirmation step.
+  - `selectedRangeWeekIndex` is session-only, not persisted - resets to week 1 on every load/restore, matching how other transient view state (like the check-in prompt dismissal) already behaves in this codebase.
+  - Progress, Today's past-unchecked detection, print/export, and the ICS feed intentionally keep reading only the visible `weekPlan` slice for now, not the full `twoWeek` range, per this slice's explicit scope; only the core persistence path (`_currentSavedState`/`_collectLocked`/`_applyOverlays`) had to become range-aware to avoid losing the non-visible week's check-ins/locks on save.
+  - `setRangeType(RangeType.month)` is a silent no-op (not a thrown error) since there is no UI path to reach it yet and AppState should not crash if one is added carelessly later.
+- **Tests run**:
+  - `dart format` via bundled Dart on all touched files (`test/widget_test.dart` reformatted; the four lib files were already formatted).
+  - `flutter test` - passed, 176/176 tests, including 11 new tests (14-day twoWeek generation, max-per-week resetting per week, a `PlannerService`-level boundary test and a `RangePlannerService`-level boundary test for no-consecutive-days across the Sunday-to-Monday seam, `weekPlan` defaulting to week 1, week-2 navigation without regeneration, round-tripping back to 1 week preserving week 1's exact content, `setRangeType(month)` being a safe no-op, independent check-in/lock state across the two weeks of a twoWeek range, and a Plan-screen widget test exercising the new range/week-nav controls end to end) and all 165 prior tests still passing unchanged. One slice-1 test ("RangePlannerService does not yet generate twoWeek or month ranges") was updated to only assert `month` throws, since `twoWeek` is now implemented.
+  - `flutter analyze --no-fatal-infos` - passed (exit 0), same 18 pre-existing info-level lints, no new warnings/errors.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains `.gitignore`-matched and untracked.
+  - Confirmed `firestore.rules`, `netlify/`, `lib/services/ics_calendar_service.dart`, `docs/MASTER_PLAN.md`, and `docs/V1_AUDIT.md` are untouched.
+- **Current state**: Users can deliberately switch the Plan screen between a 1-week and a real, independently-generated 2-week range, and navigate week 1/week 2 of a generated 2-week range without losing locks or check-ins on either week. Month range/grid/print remain unimplemented. ICS feed and Progress/Today still only reflect the visible week, not the full 2-week range.
+- **Next recommended step**: Slice 3 - generate a real calendar-month range and a read-only month grid view, reusing the same `RangePlannerService`/boundary-context approach (month chunks decompose into Monday-aligned weeks, clipped to in-month dates).
+- **Open questions**: None.

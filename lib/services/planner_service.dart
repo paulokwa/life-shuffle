@@ -72,6 +72,8 @@ class PlannerService {
       DateTime(d.year, d.month, d.day - (d.weekday - 1));
 
   /// Generates a 7-day plan from [pool], shuffled with [seed].
+  ///
+  /// See [generateWithDiagnostics] for what [scheduledContext] carries.
   static List<DayPlan> generate({
     required DateTime weekStart,
     required List<Activity> pool,
@@ -91,6 +93,12 @@ class PlannerService {
     ).plan;
   }
 
+  /// [scheduledContext] carries day-indexed activity context from outside
+  /// this single 7-day call, keyed by day index relative to [weekStart].
+  /// Indexes 0-6 are normally same-week locked items; [RangePlannerService]
+  /// also passes the previous generated week's final day under key `-1` so
+  /// no-consecutive-days and difficulty spacing can see across the boundary
+  /// between two generated weeks (e.g. Sunday into the next Monday).
   static PlannerGenerationResult generateWithDiagnostics({
     required DateTime weekStart,
     required List<Activity> pool,
@@ -115,7 +123,7 @@ class PlannerService {
 
     final plans = <DayPlan>[];
     final scheduledCounts = <String, int>{};
-    final scheduledDays = <String, List<int>>{};
+    final scheduledDays = _scheduledDaysFromContext(scheduledContext);
     final hardDayCounts = _hardDayCountsFrom(scheduledContext);
     var targetActivityCount = 0;
     var scheduledActivityCount = 0;
@@ -268,6 +276,23 @@ class PlannerService {
       );
     });
     return shuffled.first;
+  }
+
+  /// Seeds same/adjacent-day tracking from [scheduledContext] (see
+  /// [generateWithDiagnostics]) so no-consecutive-days can see placements
+  /// from outside this single call. Activities already excluded from
+  /// [pool] (such as locked items) are unaffected since they're never
+  /// evaluated against this map.
+  static Map<String, List<int>> _scheduledDaysFromContext(
+    Map<int, List<PlannedActivity>> scheduledContext,
+  ) {
+    final result = <String, List<int>>{};
+    for (final entry in scheduledContext.entries) {
+      for (final item in entry.value) {
+        result.putIfAbsent(item.activity.id, () => <int>[]).add(entry.key);
+      }
+    }
+    return result;
   }
 
   static Map<int, int> _hardDayCountsFrom(
