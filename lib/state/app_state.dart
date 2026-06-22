@@ -73,6 +73,7 @@ class AppState extends ChangeNotifier {
   int _updatedAtMillis = 0;
   PlanStyle _planStyle = PlanStyle.balanced;
   RangeType _rangeType = RangeType.week;
+  RangeType? _pendingRangeType;
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -171,17 +172,42 @@ class AppState extends ChangeNotifier {
   /// The currently visible 7-day window into [generatedRange]. For
   /// [RangeType.week] this is the whole generated range; for
   /// [RangeType.twoWeek] it is whichever week [selectedRangeWeekIndex]
-  /// points at. Switching the visible week via [selectRangeWeekIndex]
-  /// changes this without regenerating anything.
+  /// points at; for [RangeType.month] it is the Monday-aligned week
+  /// containing today (days outside the generated month are blank), since
+  /// the month view itself is a read-only grid rather than a paged 7-day
+  /// window. Switching the visible week via [selectRangeWeekIndex] changes
+  /// this without regenerating anything.
   List<DayPlan> get weekPlan {
-    if (_rangeType != RangeType.twoWeek) return _generatedDays;
-    final start = _selectedRangeWeekIndex * 7;
-    return _generatedDays.sublist(start, start + 7);
+    switch (_rangeType) {
+      case RangeType.week:
+        return _generatedDays;
+      case RangeType.twoWeek:
+        final start = _selectedRangeWeekIndex * 7;
+        return _generatedDays.sublist(start, start + 7);
+      case RangeType.month:
+        final weekStart = PlannerService.mondayOf(DateTime.now());
+        return List<DayPlan>.generate(7, (i) {
+          final date = weekStart.add(Duration(days: i));
+          for (final day in _generatedDays) {
+            if (_isSameDate(day.date, date)) return day;
+          }
+          return DayPlan(date: date, activities: []);
+        });
+    }
   }
 
   RangeType get rangeType => _rangeType;
   GeneratedPlanRange get generatedRange =>
       GeneratedPlanRange(type: _rangeType, days: _generatedDays);
+
+  /// The range type the selector currently highlights. Equal to
+  /// [rangeType] except while [hasPendingRangeTypeChange] is true, in
+  /// which case it reflects the not-yet-generated choice instead.
+  RangeType get selectedRangeType => _pendingRangeType ?? _rangeType;
+
+  /// Whether [setRangeType] picked [RangeType.month] without generating
+  /// it yet. [regenerate] resolves this on its next call.
+  bool get hasPendingRangeTypeChange => _pendingRangeType != null;
 
   /// Number of 7-day weeks in the currently generated range: 1 for
   /// [RangeType.week], 2 for [RangeType.twoWeek].
@@ -765,10 +791,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Regenerates the current range, or commits a pending range-type
+  /// change (see [setRangeType]) and generates that instead. Locked items
+  /// only carry over when the range type stays the same; a pending
+  /// range-type change starts fresh since the previous range's locked
+  /// items belong to a different shape of plan.
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
-    _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    final pending = _pendingRangeType;
+    if (pending != null) {
+      _rangeType = pending;
+      _pendingRangeType = null;
+      _selectedRangeWeekIndex = 0;
+      _generatedDays = _buildPlan();
+    } else {
+      _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    }
     _persist();
     notifyListeners();
   }
@@ -806,12 +845,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Deliberately switches the generated range type and regenerates for
-  /// it, preserving currently locked items by exact date. [RangeType.month]
-  /// is not implemented yet, so requests for it are silently ignored.
+  /// Switches which range type the selector highlights. [RangeType.week]
+  /// and [RangeType.twoWeek] regenerate immediately, preserving currently
+  /// locked items by exact date, matching how they've always worked.
+  /// [RangeType.month] only marks the choice as pending (see
+  /// [hasPendingRangeTypeChange]); call [regenerate] to actually build the
+  /// month plan, since generating a whole month is a deliberate action
+  /// rather than something a selector tap should trigger by itself.
   void setRangeType(RangeType type) {
-    if (type == RangeType.month) return;
-    if (_rangeType == type) return;
+    if (selectedRangeType == type) return;
+    if (type == RangeType.month) {
+      _pendingRangeType = type;
+      notifyListeners();
+      return;
+    }
+    _pendingRangeType = null;
+    if (_rangeType == type) {
+      notifyListeners();
+      return;
+    }
     _rangeType = type;
     _selectedRangeWeekIndex = 0;
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
@@ -948,6 +1000,9 @@ class AppState extends ChangeNotifier {
       pastUncheckedByDay(now: now).isNotEmpty;
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static bool _isSameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   // ─── Private ─────────────────────────────────────────────────────────────
 
@@ -1108,6 +1163,7 @@ class AppState extends ChangeNotifier {
     _updatedAtMillis = saved.updatedAtMillis;
     _planStyle = _parsePlanStyle(saved.planStyle);
     _rangeType = saved.rangeType;
+    _pendingRangeType = null;
     _displayName = saved.displayName;
     _displayNameConfirmed =
         saved.displayNameConfirmed && saved.displayName != null;
@@ -1413,23 +1469,43 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  /// Locked items across the whole generated range, keyed by global day
-  /// index (0-6 for a week range, 0-13 for a twoWeek range), so
-  /// regeneration preserves locks on both weeks regardless of which one
-  /// is currently visible.
+  /// The date generation anchors to for the current [_rangeType]: the
+  /// Monday of the current week for [RangeType.week]/[RangeType.twoWeek],
+  /// or the 1st of the current calendar month for [RangeType.month].
+  DateTime _rangeAnchor() {
+    final now = DateTime.now();
+    if (_rangeType == RangeType.month) return DateTime(now.year, now.month, 1);
+    return PlannerService.mondayOf(now);
+  }
+
+  /// The Monday-aligned day-index origin matching
+  /// [RangePlannerService]'s internal addressing for [_rangeAnchor], used
+  /// to key locked items by day offset rather than by array position so a
+  /// month range's clipped, non-contiguous day list still lines up
+  /// correctly (see [_collectLocked]).
+  DateTime _schedulingOrigin() => PlannerService.mondayOf(_rangeAnchor());
+
+  /// Locked items across the whole generated range, keyed by day offset
+  /// from [_schedulingOrigin] (0-6 for a week range, 0-13 for a twoWeek
+  /// range, and a possibly sparse range for a month range since its first
+  /// and last weeks are clipped to in-month days), so regeneration
+  /// preserves locks regardless of which day is currently visible.
   Map<int, List<PlannedActivity>> _collectLocked() {
+    final origin = _schedulingOrigin();
     final result = <int, List<PlannedActivity>>{};
-    for (var i = 0; i < _generatedDays.length; i++) {
-      result[i] = _generatedDays[i].activities.where((a) => a.locked).toList();
+    for (final day in _generatedDays) {
+      final index = day.date.difference(origin).inDays;
+      result[index] = day.activities.where((a) => a.locked).toList();
     }
     return result;
   }
 
   List<DayPlan> _buildPlan({Map<int, List<PlannedActivity>>? lockedItems}) {
-    final weekStart = PlannerService.mondayOf(DateTime.now());
-    final weekIndex =
-        weekStart.millisecondsSinceEpoch ~/ (1000 * 60 * 60 * 24 * 7);
-    final seed = weekIndex + _seed * 1000;
+    final anchor = _rangeAnchor();
+    final origin = _schedulingOrigin();
+    final periodIndex =
+        origin.millisecondsSinceEpoch ~/ (1000 * 60 * 60 * 24 * 7);
+    final seed = periodIndex + _seed * 1000;
 
     final lockedIds = lockedItems == null
         ? <String>{}
@@ -1441,7 +1517,7 @@ class AppState extends ChangeNotifier {
 
     final generation = RangePlannerService.generateWithDiagnostics(
       type: _rangeType,
-      start: weekStart,
+      start: anchor,
       pool: pool,
       seed: seed,
       planStyle: _planStyle,
@@ -1452,11 +1528,11 @@ class AppState extends ChangeNotifier {
     final plan = generation.range.days;
 
     if (lockedItems != null) {
-      for (var i = 0; i < plan.length; i++) {
-        final dayLocked = lockedItems[i] ?? [];
+      for (final day in plan) {
+        final dayLocked = lockedItems[day.date.difference(origin).inDays] ?? [];
         if (dayLocked.isNotEmpty) {
-          plan[i].activities.addAll(dayLocked);
-          plan[i].activities.sort(
+          day.activities.addAll(dayLocked);
+          day.activities.sort(
                 (a, b) => PlannerService.timeRank(a.timeSlot)
                     .compareTo(PlannerService.timeRank(b.timeSlot)),
               );
