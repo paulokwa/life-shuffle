@@ -88,6 +88,15 @@ class AppState extends ChangeNotifier {
   /// re-anchoring to a new "today" (and reshuffling everything) on every
   /// load; only [generateRange] deliberately moves this forward.
   late DateTime _rangeStart;
+
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) "Remove from this plan"
+  /// choices, applied to a freshly built [_generatedDays] by
+  /// [_applyRemovals]. Cleared on [regenerate], [generateRange], and
+  /// [setPlanStyle] since those already discard every other non-locked
+  /// customization; keeping a stale entry around would otherwise risk
+  /// silently re-deleting an occurrence the user just got back via one of
+  /// those actions on the next reload. See [removeFromPlan].
+  Map<String, bool> _removedOccurrences = {};
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -830,6 +839,7 @@ class AppState extends ChangeNotifier {
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
+    _removedOccurrences = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
@@ -850,6 +860,7 @@ class AppState extends ChangeNotifier {
     _viewMode = type;
     _rangeStart = _dateOnly(DateTime.now());
     _selectedRangeWeekIndex = 0;
+    _removedOccurrences = {};
     _generatedDays = _buildPlan();
     _persist();
     notifyListeners();
@@ -873,6 +884,7 @@ class AppState extends ChangeNotifier {
   void setPlanStyle(PlanStyle style) {
     if (_planStyle == style) return;
     _planStyle = style;
+    _removedOccurrences = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _persist();
     notifyListeners();
@@ -1005,6 +1017,24 @@ class AppState extends ChangeNotifier {
     _persist();
     notifyListeners();
   }
+
+  /// Removes only [activity]'s occurrence on [day] from the current
+  /// generated plan. Does not touch [activities] (the activity library), so
+  /// the source activity stays in the library and enabled for future
+  /// regeneration — see [updateActivity] to edit it instead, or
+  /// [setActivityEnabled] to stop generating it going forward. Persisted by
+  /// occurrence key (see [_applyRemovals]) so the removal survives reload
+  /// and view switching until the next deliberate [regenerate],
+  /// [generateRange], or [setPlanStyle].
+  void removeFromPlan(DayPlan day, PlannedActivity activity) {
+    if (!day.activities.remove(activity)) return;
+    _removedOccurrences[_occurrenceKey(day.date, activity.activity.id)] = true;
+    _persist();
+    notifyListeners();
+  }
+
+  static String _occurrenceKey(DateTime date, String activityId) =>
+      '${DayPlan.dateKey(date)}:$activityId';
 
   /// Past (strictly before [now], defaulting to [DateTime.now]), unchecked
   /// activities in [plans], grouped by day. A pure function of its inputs so
@@ -1252,7 +1282,9 @@ class AppState extends ChangeNotifier {
       if (idx >= 0) activities[idx].enabled = entry.value;
     }
     _selectedRangeWeekIndex = 0;
+    _removedOccurrences = Map<String, bool>.from(saved.removedMap);
     _generatedDays = _buildPlan();
+    _applyRemovals();
     _applyOverlays(saved);
     _refreshCachedIcs();
 
@@ -1409,6 +1441,7 @@ class AppState extends ChangeNotifier {
     }
     PersistenceService.saveCheckinMap(state.checkinMap);
     PersistenceService.saveLockedMap(state.lockedMap);
+    PersistenceService.saveRemovedMap(state.removedMap);
   }
 
   bool _applyCalendarMetadata(
@@ -1517,6 +1550,7 @@ class AppState extends ChangeNotifier {
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
+      removedMap: Map<String, bool>.from(_removedOccurrences),
     );
   }
 
@@ -1618,6 +1652,21 @@ class AppState extends ChangeNotifier {
         final locked = saved.lockedMap[occurrenceKey] ?? saved.lockedMap[id];
         if (locked != null) pa.locked = locked;
       }
+    }
+  }
+
+  /// Strips any [PlannedActivity] matching a previously removed occurrence
+  /// key out of a freshly built [_generatedDays], so a "Remove from this
+  /// plan" choice (see [removeFromPlan]) survives a reload/sync instead of
+  /// only lasting until the in-memory list is rebuilt from scratch.
+  void _applyRemovals() {
+    if (_removedOccurrences.isEmpty) return;
+    for (final day in _generatedDays) {
+      day.activities.removeWhere(
+        (pa) =>
+            _removedOccurrences[_occurrenceKey(day.date, pa.activity.id)] ==
+            true,
+      );
     }
   }
 

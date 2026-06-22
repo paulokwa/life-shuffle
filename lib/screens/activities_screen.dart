@@ -42,7 +42,7 @@ class ActivitiesScreen extends StatelessWidget {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () => _showActivityForm(context),
+                        onTap: () => showActivityFormSheet(context),
                         child: Container(
                           height: 38,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -170,7 +170,7 @@ class ActivitiesScreen extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ActivityCard(
                           activity: activity,
-                          onEdit: () => _showActivityForm(
+                          onEdit: () => showActivityFormSheet(
                             context,
                             activity: activity,
                           ),
@@ -183,68 +183,6 @@ class ActivitiesScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _showActivityForm(BuildContext context, {Activity? activity}) {
-    final appState = AppStateScope.of(context);
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return _ActivityFormSheet(
-          appState: appState,
-          activity: activity,
-          onSave: ({
-            required String title,
-            required String category,
-            required int durationMinutes,
-            required String preferredTime,
-            required int difficulty,
-            required String energy,
-            required String social,
-            required int maxPerWeek,
-            required List<int> allowedWeekdays,
-            required bool noConsecutiveDays,
-            required bool enabled,
-          }) {
-            if (activity == null) {
-              appState.addActivity(
-                title: title,
-                category: category,
-                durationMinutes: durationMinutes,
-                preferredTime: preferredTime,
-                difficulty: difficulty,
-                energy: energy,
-                social: social,
-                maxPerWeek: maxPerWeek,
-                allowedWeekdays: allowedWeekdays,
-                noConsecutiveDays: noConsecutiveDays,
-                enabled: enabled,
-              );
-            } else {
-              appState.updateActivity(
-                activity.id,
-                title: title,
-                category: category,
-                durationMinutes: durationMinutes,
-                preferredTime: preferredTime,
-                difficulty: difficulty,
-                energy: energy,
-                social: social,
-                maxPerWeek: maxPerWeek,
-                allowedWeekdays: allowedWeekdays,
-                noConsecutiveDays: noConsecutiveDays,
-                enabled: enabled,
-              );
-            }
-            Navigator.of(sheetContext).pop();
-          },
-        );
-      },
     );
   }
 
@@ -261,6 +199,72 @@ class ActivitiesScreen extends StatelessWidget {
       },
     );
   }
+}
+
+/// Opens the activity add/edit form as a bottom sheet. The single editor
+/// behind both [ActivitiesScreen]'s "+ Add"/edit-card taps and the Plan
+/// screen's day sheet "Edit activity" action, so there is only one place
+/// that knows how to add or edit an [Activity].
+Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
+  final appState = AppStateScope.of(context);
+
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return _ActivityFormSheet(
+        appState: appState,
+        activity: activity,
+        onSave: ({
+          required String title,
+          required String category,
+          required int durationMinutes,
+          required String preferredTime,
+          required int difficulty,
+          required String energy,
+          required String social,
+          required int maxPerWeek,
+          required List<int> allowedWeekdays,
+          required bool noConsecutiveDays,
+          required bool enabled,
+        }) {
+          if (activity == null) {
+            appState.addActivity(
+              title: title,
+              category: category,
+              durationMinutes: durationMinutes,
+              preferredTime: preferredTime,
+              difficulty: difficulty,
+              energy: energy,
+              social: social,
+              maxPerWeek: maxPerWeek,
+              allowedWeekdays: allowedWeekdays,
+              noConsecutiveDays: noConsecutiveDays,
+              enabled: enabled,
+            );
+          } else {
+            appState.updateActivity(
+              activity.id,
+              title: title,
+              category: category,
+              durationMinutes: durationMinutes,
+              preferredTime: preferredTime,
+              difficulty: difficulty,
+              energy: energy,
+              social: social,
+              maxPerWeek: maxPerWeek,
+              allowedWeekdays: allowedWeekdays,
+              noConsecutiveDays: noConsecutiveDays,
+              enabled: enabled,
+            );
+          }
+          Navigator.of(sheetContext).pop();
+        },
+      );
+    },
+  );
 }
 
 class _StarterPickerSheet extends StatefulWidget {

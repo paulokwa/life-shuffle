@@ -5306,6 +5306,308 @@ void main() {
     expect(find.text('Unchecked'), findsOneWidget);
   });
 
+  testWidgets(
+      'Plan day sheet shows Edit activity and Remove from this plan actions',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'Plan day sheet Edit activity opens the existing activity edit form '
+      'and saving updates the planned item display',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'edit-from-plan',
+      title: 'Morning walk',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    // "Edit activity" is both the day sheet's action label and the
+    // reused activity editor's own header, so both are on screen at once.
+    expect(find.text('Edit activity'), findsWidgets);
+    expect(find.widgetWithText(TextFormField, 'Morning walk'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, 'Sunrise walk');
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(appState.activities.single.title, 'Sunrise walk');
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text('Sunrise walk'), findsWidgets);
+    expect(find.text('Morning walk'), findsNothing);
+  });
+
+  testWidgets(
+      'Plan day sheet keeps Edit activity and Remove from this plan '
+      'available for a future day while check-in stays blocked',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final tomorrowDate = appState.weekPlan[1].date;
+    final tomorrow = _dayWithActivities(
+      appState,
+      (d) => d.date == tomorrowDate,
+    );
+    final planned = tomorrow.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
+    );
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Done'), findsNothing);
+    expect(
+      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'Remove from this plan removes only that occurrence and keeps the '
+      'activity in the library', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'remove-from-plan',
+      title: 'Evening run',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('remove-from-plan-dialog')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'This only removes it from this generated plan. The activity '
+        'stays in your library.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('remove-from-plan-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(day.activities, isEmpty);
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text('Nothing planned for this day'), findsOneWidget);
+
+    expect(appState.activities, hasLength(1));
+    expect(appState.activities.single.id, 'remove-from-plan');
+    expect(appState.activities.single.enabled, isTrue);
+  });
+
+  testWidgets('Remove from this plan Cancel keeps the occurrence',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'cancel-remove-from-plan',
+      title: 'Evening run',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('remove-from-plan-cancel')));
+    await tester.pumpAndSettle();
+
+    expect(day.activities, contains(planned));
+    expect(find.text(planned.title), findsWidgets);
+  });
+
+  testWidgets('Removed occurrence stays removed after switching plan views',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    // maxPerWeek/allowedWeekdays are wide open so this activity recurs on
+    // many days; the assertions below must target today's occurrence
+    // specifically rather than matching on title text, which appears
+    // elsewhere in the same generated range.
+    final activity = Activity(
+      id: 'remove-and-switch-view',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    appState.generateRange(RangeType.twoWeek);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+
+    appState.removeFromPlan(day, planned);
+    expect(day.activities, isEmpty);
+
+    // Switching views never rebuilds _generatedDays, so the removal must
+    // still hold afterwards regardless of which view is now showing.
+    appState.setViewMode(RangeType.month);
+    appState.setViewMode(RangeType.week);
+    appState.selectRangeWeekIndex(0);
+
+    expect(day.activities, isEmpty);
+    expect(
+      appState.generatedRange.days
+          .firstWhere((candidate) => candidate.date == day.date)
+          .activities,
+      isEmpty,
+    );
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
+    await tester
+        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nothing planned for this day'), findsOneWidget);
+  });
+
+  test(
+      'Remove from this plan survives reload while the source activity '
+      'stays enabled', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'remove-persist',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+
+    appState.removeFromPlan(day, planned);
+
+    final saved = PersistenceService.load([activity]);
+    expect(saved.removedMap['${_dateKey(day.date)}:${activity.id}'], isTrue);
+    expect(saved.activities.single.enabled, isTrue);
+
+    final restored = AppState(activities: saved.activities, savedState: saved);
+    final restoredDay = restored.weekPlan.firstWhere(
+      (candidate) => candidate.date == day.date,
+    );
+    expect(
+      restoredDay.activities.any((p) => p.activity.id == activity.id),
+      isFalse,
+    );
+    expect(restored.activities.single.enabled, isTrue);
+  });
+
+  test('Regenerate clears stale "removed from plan" memory', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final activity = Activity(
+      id: 'remove-then-regenerate',
+      title: 'Daily stretch',
+      category: 'Health / movement',
+      durationMinutes: 15,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _dayWithActivities(appState, (d) => d.isToday);
+    final planned = day.activities.first;
+    appState.removeFromPlan(day, planned);
+
+    appState.regenerate();
+
+    final saved = PersistenceService.load([activity]);
+    expect(saved.removedMap, isEmpty);
+  });
+
   testWidgets('Plan Export copies current week text',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});

@@ -13,6 +13,7 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/status_choice.dart';
+import 'activities_screen.dart' show showActivityFormSheet;
 import 'week_review_screen.dart';
 
 class PlanScreen extends StatelessWidget {
@@ -1036,6 +1037,50 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
     AppStateScope.of(context).notifyCheckIn(activity);
   }
 
+  Future<void> _editActivity(PlannedActivity activity) async {
+    await showActivityFormSheet(context, activity: activity.activity);
+    // The form sheet mutates the same Activity instance this day's
+    // PlannedActivity already points to, so a rebuild is enough to show
+    // the edited title/category here without re-fetching anything.
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _removeFromPlan(PlannedActivity activity) async {
+    final confirmed = await _confirmRemoveFromPlan(context, activity.title);
+    if (confirmed != true || !mounted) return;
+    AppStateScope.of(context).removeFromPlan(widget.plan, activity);
+    setState(() {});
+  }
+
+  static Future<bool?> _confirmRemoveFromPlan(
+    BuildContext context,
+    String activityTitle,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const ValueKey('remove-from-plan-dialog'),
+        title: Text('Remove "$activityTitle" from this plan?'),
+        content: const Text(
+          'This only removes it from this generated plan. The activity '
+          'stays in your library.',
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('remove-from-plan-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const ValueKey('remove-from-plan-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
@@ -1109,6 +1154,8 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                         canCheckIn: canCheckIn,
                         onStatusSelected: (status) =>
                             _setStatus(activity, status),
+                        onEdit: () => _editActivity(activity),
+                        onRemove: () => _removeFromPlan(activity),
                       );
                     },
                   ),
@@ -1180,11 +1227,15 @@ class _DaySheetActivityCard extends StatelessWidget {
     required this.activity,
     required this.canCheckIn,
     required this.onStatusSelected,
+    required this.onEdit,
+    required this.onRemove,
   });
 
   final PlannedActivity activity;
   final bool canCheckIn;
   final ValueChanged<CheckStatus> onStatusSelected;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
 
   IconData get _icon => switch (activity.category) {
         'Creative' => Icons.menu_book_rounded,
@@ -1199,6 +1250,7 @@ class _DaySheetActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: ValueKey('day-sheet-activity-${activity.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: surfaceWhite,
@@ -1303,6 +1355,38 @@ class _DaySheetActivityCard extends StatelessWidget {
               key: const ValueKey('day-sheet-future-notice'),
               style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
             ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              GestureDetector(
+                key: ValueKey('day-sheet-edit-activity-${activity.id}'),
+                onTap: onEdit,
+                behavior: HitTestBehavior.opaque,
+                child: Text(
+                  'Edit activity',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: primaryTerracotta,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              GestureDetector(
+                key: ValueKey('day-sheet-remove-activity-${activity.id}'),
+                onTap: onRemove,
+                behavior: HitTestBehavior.opaque,
+                child: Text(
+                  'Remove from this plan',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

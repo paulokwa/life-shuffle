@@ -53,6 +53,7 @@ class PersistenceService {
   static const _pfxLocked = 'ls_lk_';
   static const _keyCheckinMap = 'ls_checkin_map';
   static const _keyLockedMap = 'ls_locked_map';
+  static const _keyRemovedMap = 'ls_removed_map';
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -118,6 +119,7 @@ class PersistenceService {
     // current week only and rewrites it in occurrence-keyed form on next save.
     final checkinMap = _loadCheckinMapBlob() ?? legacyCheckinMap;
     final lockedMap = _loadLockedMapBlob() ?? legacyLockedMap;
+    final removedMap = _loadRemovedMapBlob() ?? const <String, bool>{};
 
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
     final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
@@ -163,6 +165,7 @@ class PersistenceService {
       enabledMap: enabledMap,
       checkinMap: checkinMap,
       lockedMap: lockedMap,
+      removedMap: removedMap,
     );
   }
 
@@ -297,6 +300,9 @@ class PersistenceService {
   static void saveLockedMap(Map<String, bool> value) =>
       _prefs.setString(_keyLockedMap, jsonEncode(value));
 
+  static void saveRemovedMap(Map<String, bool> value) =>
+      _prefs.setString(_keyRemovedMap, jsonEncode(value));
+
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);
     if (raw == null || raw.isEmpty) return null;
@@ -328,6 +334,22 @@ class PersistenceService {
       }
     } catch (_) {
       // Fall through to the legacy per-activity-id scan.
+    }
+    return null;
+  }
+
+  static Map<String, bool>? _loadRemovedMapBlob() {
+    final raw = _prefs.getString(_keyRemovedMap);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value is bool && value),
+        );
+      }
+    } catch (_) {
+      // No legacy format for removed occurrences to fall back to.
     }
     return null;
   }
@@ -371,6 +393,7 @@ class SavedState {
     required this.enabledMap,
     required this.checkinMap,
     required this.lockedMap,
+    this.removedMap = const {},
     this.planStyle = 'balanced',
     this.rangeType = RangeType.week,
     RangeType? viewMode,
@@ -445,6 +468,12 @@ class SavedState {
   final Map<String, int> checkinMap;
   final Map<String, bool> lockedMap;
 
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) record of "Remove from this
+  /// plan" choices: `true` means that occurrence should stay out of the
+  /// generated plan after a reload, without disabling or deleting the
+  /// source [Activity]. See [AppState.removeFromPlan].
+  final Map<String, bool> removedMap;
+
   Map<String, dynamic> toMap() {
     return {
       'activities': activities.map((activity) => activity.toMap()).toList(),
@@ -482,6 +511,7 @@ class SavedState {
       'enabledMap': enabledMap,
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
+      'removedMap': removedMap,
     };
   }
 
@@ -542,6 +572,7 @@ class SavedState {
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
+      removedMap: Map<String, bool>.from(map['removedMap'] ?? {}),
     );
   }
 

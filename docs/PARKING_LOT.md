@@ -58,6 +58,13 @@ If it is exciting but too early, put it here.
   - Data/performance risk: `RangePlannerService` generates one `PlannerService` call per 7-day chunk, so a 365-day horizon means ~53 chunked calls per generation/regeneration. That's unlikely to be a real performance problem (each call is a small in-memory shuffle), but `AppState._buildPlan`'s locked-items map and the checkin/locked maps persisted in `SavedState` would all grow linearly with the horizon length — worth checking SharedPreferences/Firestore document size at the 365-day end before shipping it as a default rather than an opt-in.
   - Keep the existing `RangeType` enum (week/twoWeek/month) for the presets; a custom horizon is most naturally a distinct concept (an explicit day count) rather than a fourth enum value, since `RangeType.horizonDays(start)` is preset-shaped (it returns a fixed/derived day count per type) while a custom horizon is just a stored integer the user picked.
 
+### Delete activity from the activity library
+
+- **Idea**: A real "Delete activity" action (distinct from the existing enable/disable toggle) that removes an `Activity` from the activity library entirely, with strong confirmation, reachable from the Activities screen and/or the Plan screen's day sheet ("Edit activity" / "Remove from this plan" actions, MVP 2 slice 4b).
+- **Why it is useful**: Today the only way to stop an activity from being used is `setActivityEnabled` (disable), which keeps it around forever. Some users will want to actually delete activities they created by mistake or no longer want, rather than accumulate disabled clutter.
+- **Why it is parked**: No delete-the-source-activity flow exists anywhere in the app yet, with or without confirmation. Slice 4b deliberately did not add one to the Plan screen, since a casual implementation there risks a footgun: a user reaching for "remove this one occurrence" could end up deleting the whole activity (and every other occurrence of it) by mistake. A real delete needs: a decision on what happens to already-generated/locked/checked-in occurrences of that activity across the current range, a strong (type-to-confirm, like the existing calendar delete) confirmation, and a single safe implementation reused by both Activities and Plan screens — not two separate ad hoc delete paths.
+- **Possible phase**: Later MVP 2 polish, after slice 5 (export/output-detail polish)
+
 ### Native App Store / Play Store release
 
 - **Idea**: Package Life Shuffle as a real iOS/Android app.
