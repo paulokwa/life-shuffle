@@ -25,7 +25,16 @@
       "PowerShell(if \\($env:GH_TOKEN\\) { \"GH_TOKEN is set\" } else { \"GH_TOKEN not set\" })",
       "PowerShell(if \\($env:GITHUB_TOKEN\\) { \"GITHUB_TOKEN is set\" } else { \"GITHUB_TOKEN not set\" })",
       "Bash(git switch *)",
-      "Bash(echo \"---exit:$?---\")"
+      "Bash(echo \"---exit:$?---\")",
+      "Bash(git diff *)",
+      "Bash(git status *)",
+      "Bash(flutter test *)",
+      "Bash(git log *)",
+      "Bash(flutter analyze *)",
+      "Bash(git ls-files *)",
+      "Bash(flutter build *)",
+      "Bash(git rev-parse *)",
+      "Bash(npm test *)"
     ]
   }
 }
