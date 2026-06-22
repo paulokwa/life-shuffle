@@ -2,6 +2,7 @@ import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/range_type.dart';
 import 'planner_service.dart';
 
 class TextWeekExportService {
@@ -10,6 +11,7 @@ class TextWeekExportService {
   static String generate({
     required String calendarTitle,
     required List<DayPlan> plan,
+    RangeType rangeType = RangeType.week,
     ExportPrintOptions options = const ExportPrintOptions(),
     bool difficultyEnabled = false,
     bool energyEnabled = false,
@@ -22,12 +24,12 @@ class TextWeekExportService {
     final plannedDays =
         sortedPlan.where((day) => day.activities.isNotEmpty).toList();
     final buffer = StringBuffer()
-      ..writeln('$calendarTitle week')
+      ..writeln('$calendarTitle ${_horizonLabel(rangeType)}')
       ..writeln(weekRangeLabel(sortedPlan))
       ..writeln();
 
     if (plannedDays.isEmpty) {
-      buffer.writeln('No planned activities this week.');
+      buffer.writeln(_emptyMessage(rangeType));
       return buffer.toString().trimRight();
     }
 
@@ -139,6 +141,21 @@ class TextWeekExportService {
     ];
     return '${months[date.month - 1]} ${date.day}';
   }
+
+  /// Word following the calendar title in the export header, e.g.
+  /// `Kwame and Laura week` / `... 2 weeks` / `... month`.
+  static String _horizonLabel(RangeType type) => switch (type) {
+        RangeType.week => 'week',
+        RangeType.twoWeek => '2 weeks',
+        RangeType.month => 'month',
+      };
+
+  static String _emptyMessage(RangeType type) => switch (type) {
+        RangeType.week => 'No planned activities this week.',
+        RangeType.twoWeek => 'No planned activities in this 2-week range.',
+        RangeType.month =>
+          'No planned activities in the generated month range.',
+      };
 
   static String _checkStatusLabel(CheckStatus status) {
     return switch (status) {

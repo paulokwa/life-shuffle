@@ -250,15 +250,45 @@ class PlanScreen extends StatelessWidget {
     );
   }
 
+  /// Snack bar text shown after a successful copy, by [AppState.viewMode].
+  static String _exportSuccessMessage(RangeType mode) => switch (mode) {
+        RangeType.week => 'Week plan copied',
+        RangeType.twoWeek => '2-week plan copied',
+        RangeType.month => 'Month plan copied',
+      };
+
+  static String _exportEmptyMessage(RangeType mode) => switch (mode) {
+        RangeType.week => 'No planned activities this week. Empty week '
+            'copied.',
+        RangeType.twoWeek => 'No planned activities in this 2-week range. '
+            'Empty range copied.',
+        RangeType.month => 'No planned activities in the generated month '
+            'range. Empty range copied.',
+      };
+
   static Future<void> _copyWeekPlanText(
     BuildContext context,
     AppState state,
   ) async {
+    final exportDays = state.exportDays;
+    if (exportDays == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No generated month range yet. Tap Generate above, then '
+            'export.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final hasPlannedActivities =
-        state.weekPlan.any((day) => day.activities.isNotEmpty);
+        exportDays.any((day) => day.activities.isNotEmpty);
     final text = TextWeekExportService.generate(
       calendarTitle: state.calendarTitle,
-      plan: state.weekPlan,
+      plan: exportDays,
+      rangeType: state.viewMode,
       options: state.exportPrintOptions,
       difficultyEnabled: state.difficultyEnabled,
       energyEnabled: state.energyEnabled,
@@ -271,7 +301,7 @@ class PlanScreen extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not copy the week plan. Try again.'),
+          content: Text('Could not copy the plan. Try again.'),
         ),
       );
       return;
@@ -282,8 +312,8 @@ class PlanScreen extends StatelessWidget {
       SnackBar(
         content: Text(
           hasPlannedActivities
-              ? 'Week plan copied'
-              : 'No planned activities this week. Empty week copied.',
+              ? _exportSuccessMessage(state.viewMode)
+              : _exportEmptyMessage(state.viewMode),
         ),
       ),
     );
@@ -512,6 +542,17 @@ class _RangeExpansionCard extends StatelessWidget {
 /// calendar month); cells before [GeneratedPlanRange.start] or after
 /// [GeneratedPlanRange.end] are blank and dimmed, in-range cells show the
 /// day number, up to two activity labels, and a `+X more` overflow count.
+/// Whether [date] (already known to be in-range) should show a compact
+/// month label: the first generated/visible date in the range always gets
+/// one even when it isn't the 1st, and the 1st of any later month inside
+/// the range gets one too, so a range spanning two calendar months (e.g.
+/// Jun 22 - Jul 21) stays readable at a glance. Day numbers stay visible
+/// either way; this only adds a small label alongside them.
+bool _showsMonthLabel(DateTime date, DateTime rangeStart) {
+  return date.day == 1 ||
+      PlanScreen._dateKey(date) == PlanScreen._dateKey(rangeStart);
+}
+
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({required this.range, required this.onDayTap});
 
@@ -573,9 +614,15 @@ class _MonthGrid extends StatelessWidget {
                   !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
               final plan = dayByKey[PlanScreen._dateKey(date)] ??
                   DayPlan(date: date, activities: []);
+              final showMonthLabel = inRange &&
+                  _showsMonthLabel(
+                    date,
+                    rangeStart,
+                  );
               return _MonthDayCell(
                 plan: plan,
                 inRange: inRange,
+                showMonthLabel: showMonthLabel,
                 onTap: inRange ? () => onDayTap(plan) : null,
               );
             },
@@ -612,11 +659,13 @@ class _MonthDayCell extends StatelessWidget {
   const _MonthDayCell({
     required this.plan,
     required this.inRange,
+    required this.showMonthLabel,
     this.onTap,
   });
 
   final DayPlan plan;
   final bool inRange;
+  final bool showMonthLabel;
   final VoidCallback? onTap;
 
   @override
@@ -644,16 +693,39 @@ class _MonthDayCell extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '${plan.date.day}',
-                    key: ValueKey(
-                      'month-grid-day-number-${PlanScreen._dateKey(plan.date)}',
-                    ),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: plan.isToday ? primaryTerracotta : textPrimary,
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      if (showMonthLabel) ...[
+                        Text(
+                          PlanScreen._monthAbbrevs[plan.date.month - 1],
+                          key: ValueKey(
+                            'month-grid-month-label-'
+                            '${PlanScreen._dateKey(plan.date)}',
+                          ),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: textMuted,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      Text(
+                        '${plan.date.day}',
+                        key: ValueKey(
+                          'month-grid-day-number-'
+                          '${PlanScreen._dateKey(plan.date)}',
+                        ),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: plan.isToday ? primaryTerracotta : textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   ...visibleActivities.map(

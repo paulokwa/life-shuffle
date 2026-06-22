@@ -128,6 +128,15 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
                       style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                     ),
                   ],
+                  if (viewMode == RangeType.twoWeek) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Printing the visible week only. Use Copy text in '
+                      'Settings for the full generated 2-week range.',
+                      key: const ValueKey('print-preview-two-week-note'),
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   if (isMonthView)
                     if (!monthRangeReady)
@@ -368,6 +377,17 @@ class _PendingRangeNotice extends StatelessWidget {
   }
 }
 
+/// Whether [date] (already known to be in-range) should show a compact
+/// month label in the print grid. Mirrors `plan_screen.dart`'s
+/// `_showsMonthLabel`: the first generated date in the range always gets
+/// one even when it isn't the 1st, and the 1st of any later month inside
+/// the range gets one too, so a range spanning two calendar months stays
+/// readable at a glance on the printed page. Day numbers stay visible
+/// either way.
+bool _showsMonthLabelInPrint(DateTime date, DateTime rangeStart) {
+  return date.day == 1 || DayPlan.dateKey(date) == DayPlan.dateKey(rangeStart);
+}
+
 /// Print-friendly Monday-start calendar grid for [AppState.generatedRange]
 /// when [AppState.viewMode] is [RangeType.month]. Mirrors the on-screen
 /// month grid in `plan_screen.dart` (the grid spans whole calendar weeks for
@@ -389,6 +409,21 @@ class _PrintMonthGrid extends StatelessWidget {
     'Fri',
     'Sat',
     'Sun',
+  ];
+
+  static const _monthAbbrevs = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   @override
@@ -447,6 +482,7 @@ class _PrintMonthGrid extends StatelessWidget {
       date: date,
       plan: dayByKey[DayPlan.dateKey(date)],
       inRange: inRange,
+      showMonthLabel: inRange && _showsMonthLabelInPrint(date, rangeStart),
     );
   }
 }
@@ -483,11 +519,13 @@ class _PrintMonthDayCell extends StatelessWidget {
     required this.date,
     required this.plan,
     required this.inRange,
+    required this.showMonthLabel,
   });
 
   final DateTime date;
   final DayPlan? plan;
   final bool inRange;
+  final bool showMonthLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -513,14 +551,37 @@ class _PrintMonthDayCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '${date.day}',
-            key: ValueKey('print-preview-month-grid-day-number-$dateKey'),
-            style: GoogleFonts.dmSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: (plan?.isToday ?? false) ? primaryTerracotta : textPrimary,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              if (showMonthLabel) ...[
+                Text(
+                  _PrintMonthGrid._monthAbbrevs[date.month - 1],
+                  key: ValueKey(
+                    'print-preview-month-grid-month-label-$dateKey',
+                  ),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: textMuted,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(width: 3),
+              ],
+              Text(
+                '${date.day}',
+                key: ValueKey('print-preview-month-grid-day-number-$dateKey'),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: (plan?.isToday ?? false)
+                      ? primaryTerracotta
+                      : textPrimary,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           for (final activity in activities)

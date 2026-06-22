@@ -253,6 +253,29 @@ class AppState extends ChangeNotifier {
   bool get hasSufficientRangeForView =>
       _generatedDays.length >= _viewMode.horizonDays(_rangeStart);
 
+  /// Days copy text/print should export for the current [viewMode]. Week
+  /// always exports the visible [weekPlan]. Two weeks exports the full
+  /// generated range only when [_rangeType] is itself [RangeType.twoWeek]
+  /// (a true two-week horizon was generated) - [hasSufficientRangeForView]
+  /// alone isn't enough, since a generated month also satisfies the
+  /// two-week length check; otherwise it falls back to the visible week,
+  /// same as the on-screen view. Month returns `null` when
+  /// [hasSufficientRangeForView] is false so callers show a "generate
+  /// first" message instead of silently exporting a stale or partial
+  /// range.
+  List<DayPlan>? get exportDays {
+    switch (_viewMode) {
+      case RangeType.week:
+        return weekPlan;
+      case RangeType.twoWeek:
+        return _rangeType == RangeType.twoWeek && hasSufficientRangeForView
+            ? generatedRange.days
+            : weekPlan;
+      case RangeType.month:
+        return hasSufficientRangeForView ? generatedRange.days : null;
+    }
+  }
+
   int get selectedRangeWeekIndex => _selectedRangeWeekIndex;
   PlanStyle get planStyle => _planStyle;
   bool get canUndoLastRegeneration => _lastRegenerationSnapshot != null;

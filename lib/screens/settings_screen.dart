@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../services/auth_service.dart';
 import '../services/planner_service.dart' show PlanStyle;
@@ -392,7 +393,7 @@ class _ExportPrintCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Export / print this week',
+                      _exportHeading(state.viewMode),
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -401,7 +402,9 @@ class _ExportPrintCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Copy this week as plain text, or open a print-friendly view. Private notes are not included.',
+                      '${_exportSummary(state.viewMode)} Private notes are '
+                      'not included.',
+                      key: const ValueKey('settings-export-print-summary'),
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         height: 1.35,
@@ -549,10 +552,47 @@ class _OutputDetailToggleRow extends StatelessWidget {
   }
 }
 
+/// Heading for [_ExportPrintCard], by [AppState.viewMode].
+String _exportHeading(RangeType mode) => switch (mode) {
+      RangeType.week => 'Export / print this week',
+      RangeType.twoWeek => 'Export / print this 2-week range',
+      RangeType.month => 'Export / print this month',
+    };
+
+/// One-line summary of what Copy text/print actually export for the
+/// current [AppState.viewMode], so switching views never surprises the
+/// user about what they're about to copy or print.
+String _exportSummary(RangeType mode) => switch (mode) {
+      RangeType.week => 'Exports the visible week.',
+      RangeType.twoWeek => 'Copy text exports the generated 2-week range; '
+          'print exports the visible week.',
+      RangeType.month => 'Exports the generated month range.',
+    };
+
+String _exportTextCopiedMessage(RangeType mode) => switch (mode) {
+      RangeType.week => 'Week text copied',
+      RangeType.twoWeek => '2-week text copied',
+      RangeType.month => 'Month text copied',
+    };
+
 void _copyWeekTextExport(BuildContext context, AppState state) {
+  final exportDays = state.exportDays;
+  if (exportDays == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'No generated month range yet. Go to Plan, switch to Month, and '
+          'tap Generate, then come back here to copy.',
+        ),
+      ),
+    );
+    return;
+  }
+
   final text = TextWeekExportService.generate(
     calendarTitle: state.calendarTitle,
-    plan: state.weekPlan,
+    plan: exportDays,
+    rangeType: state.viewMode,
     options: state.exportPrintOptions,
     difficultyEnabled: state.difficultyEnabled,
     energyEnabled: state.energyEnabled,
@@ -560,7 +600,7 @@ void _copyWeekTextExport(BuildContext context, AppState state) {
   );
   Clipboard.setData(ClipboardData(text: text));
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Week text copied')),
+    SnackBar(content: Text(_exportTextCopiedMessage(state.viewMode))),
   );
 }
 

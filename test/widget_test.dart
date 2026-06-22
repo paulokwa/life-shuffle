@@ -2958,6 +2958,81 @@ void main() {
   });
 
   testWidgets(
+      'Settings export/print heading and summary explain what the current '
+      'view mode will copy/print', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Export / print this week'), findsOneWidget);
+    expect(
+      find.textContaining('Exports the visible week.'),
+      findsOneWidget,
+    );
+
+    appState.generateRange(RangeType.twoWeek);
+    await tester.pump();
+
+    expect(find.text('Export / print this 2-week range'), findsOneWidget);
+    expect(
+      find.textContaining('Copy text exports the generated 2-week range'),
+      findsOneWidget,
+    );
+
+    appState.generateRange(RangeType.month);
+    await tester.pump();
+
+    expect(find.text('Export / print this month'), findsOneWidget);
+    expect(
+      find.textContaining('Exports the generated month range.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'Settings Copy text shows a pending message for Month view with no '
+      'generated range, and does not silently generate one',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setViewMode(RangeType.month);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-copy-week-text-export')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-copy-week-text-export')),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Go to Plan, switch to Month'), findsOneWidget);
+    expect(copiedText, isNull);
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.hasSufficientRangeForView, isFalse);
+  });
+
+  testWidgets(
       'Settings shows output detail toggles with useful defaults, no dimension toggle when none enabled',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -3539,6 +3614,132 @@ void main() {
     for (final day in appState.weekPlan) {
       expect(find.text(day.fullLabel), findsOneWidget);
     }
+  });
+
+  testWidgets(
+      'Print preview shows a 2-week visible-week clarification note only '
+      'in 2-week view', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.twoWeek);
+
+    await tester.pumpWidget(
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-two-week-note')),
+      findsOneWidget,
+    );
+
+    appState.setViewMode(RangeType.week);
+    await tester.pumpWidget(
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
+    );
+    expect(
+      find.byKey(const ValueKey('print-preview-two-week-note')),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Print preview month grid shows a month label on the first generated '
+      "date even when it isn't the 1st, and keeps the day number visible",
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final rangeStart = DateTime(2026, 6, 20);
+    final savedState = SavedState(
+      activities: const [],
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.month,
+      viewMode: RangeType.month,
+      rangeStart: rangeStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(activities: const [], savedState: savedState);
+
+    await tester.pumpWidget(
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
+    );
+
+    final labelFinder = find.byKey(
+      ValueKey('print-preview-month-grid-month-label-${_dateKey(rangeStart)}'),
+    );
+    expect(labelFinder, findsOneWidget);
+    expect(tester.widget<Text>(labelFinder).data, 'Jun');
+
+    final dayNumberFinder = find.byKey(
+      ValueKey('print-preview-month-grid-day-number-${_dateKey(rangeStart)}'),
+    );
+    expect(dayNumberFinder, findsOneWidget);
+    expect(tester.widget<Text>(dayNumberFinder).data, '20');
+  });
+
+  testWidgets(
+      'Print preview month grid shows a month label on the 1st of a new '
+      'month inside the range, and keeps the day number visible',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final rangeStart = DateTime(2026, 6, 20);
+    final julyFirst = DateTime(2026, 7, 1);
+    final midRangeDate = DateTime(2026, 6, 21);
+    final savedState = SavedState(
+      activities: const [],
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.month,
+      viewMode: RangeType.month,
+      rangeStart: rangeStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(activities: const [], savedState: savedState);
+
+    await tester.pumpWidget(
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
+    );
+
+    final labelFinder = find.byKey(
+      ValueKey('print-preview-month-grid-month-label-${_dateKey(julyFirst)}'),
+    );
+    expect(labelFinder, findsOneWidget);
+    expect(tester.widget<Text>(labelFinder).data, 'Jul');
+
+    final dayNumberFinder = find.byKey(
+      ValueKey('print-preview-month-grid-day-number-${_dateKey(julyFirst)}'),
+    );
+    expect(dayNumberFinder, findsOneWidget);
+    expect(tester.widget<Text>(dayNumberFinder).data, '1');
+
+    // A day that's neither the range start nor the 1st of a month shows no
+    // label, but its day number stays visible.
+    expect(
+      find.byKey(
+        ValueKey(
+          'print-preview-month-grid-month-label-${_dateKey(midRangeDate)}',
+        ),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              ValueKey(
+                'print-preview-month-grid-day-number-'
+                '${_dateKey(midRangeDate)}',
+              ),
+            ),
+          )
+          .data,
+      '21',
+    );
   });
 
   test('Publishing metadata enables disables regenerates and persists',
@@ -5655,6 +5856,108 @@ void main() {
     expect(copiedText, contains('No planned activities this week.'));
   });
 
+  testWidgets(
+      'Plan Export in 2-week view copies the full generated 2-week range',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.twoWeek);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(find.text('2-week plan copied'), findsOneWidget);
+    final expectedText = TextWeekExportService.generate(
+      calendarTitle: appState.calendarTitle,
+      plan: appState.generatedRange.days,
+      rangeType: RangeType.twoWeek,
+      options: appState.exportPrintOptions,
+      difficultyEnabled: appState.difficultyEnabled,
+      energyEnabled: appState.energyEnabled,
+      socialEnabled: appState.socialEnabled,
+    );
+    // The visible week alone (the first 7 days) is a strict subset of the
+    // full generated 14-day range, so a successful match against the full
+    // range text - not just the visible week's - confirms Copy text didn't
+    // silently fall back to the 7-day view.
+    expect(copiedText, expectedText);
+    expect(appState.generatedRange.days.length, 14);
+  });
+
+  testWidgets(
+      'Plan Export in Month view copies the full generated month range, '
+      'grouped by date', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(find.text('Month plan copied'), findsOneWidget);
+    final expectedText = TextWeekExportService.generate(
+      calendarTitle: appState.calendarTitle,
+      plan: appState.generatedRange.days,
+      rangeType: RangeType.month,
+      options: appState.exportPrintOptions,
+      difficultyEnabled: appState.difficultyEnabled,
+      energyEnabled: appState.energyEnabled,
+      socialEnabled: appState.socialEnabled,
+    );
+    // `expectedText` is built from the exact same full-range day list that
+    // `TextWeekExportService.generate` always groups by date, so matching
+    // it confirms Copy text covers every generated day - not just the
+    // visible 7-day window - grouped by date.
+    expect(copiedText, expectedText);
+    expect(appState.generatedRange.days.length, greaterThan(14));
+  });
+
+  testWidgets(
+      'Plan Export shows a pending message for Month view with no '
+      'generated range, and does not silently generate one',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    String? copiedText;
+    _captureClipboardText((text) => copiedText = text);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setViewMode(RangeType.month);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('plan-export-button')),
+    );
+    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'No generated month range yet. Tap Generate above, then export.',
+      ),
+      findsOneWidget,
+    );
+    expect(copiedText, isNull);
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.hasSufficientRangeForView, isFalse);
+  });
+
   testWidgets('Plan Publish feed points users to Settings',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -5853,6 +6156,97 @@ void main() {
         ValueKey('month-grid-out-of-range-cell-${_dateKey(lastDay.date)}'),
       ),
       findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Month grid shows a month label on the first generated date even '
+      "when it isn't the 1st, and keeps the day number visible",
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final rangeStart = DateTime(2026, 6, 20);
+    final savedState = SavedState(
+      activities: const [],
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.month,
+      viewMode: RangeType.month,
+      rangeStart: rangeStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(activities: const [], savedState: savedState);
+
+    await _pumpPlanScreen(tester, appState);
+
+    final labelFinder = find.byKey(
+      ValueKey('month-grid-month-label-${_dateKey(rangeStart)}'),
+    );
+    expect(labelFinder, findsOneWidget);
+    expect(tester.widget<Text>(labelFinder).data, 'Jun');
+
+    final dayNumberFinder = find.byKey(
+      ValueKey('month-grid-day-number-${_dateKey(rangeStart)}'),
+    );
+    expect(dayNumberFinder, findsOneWidget);
+    expect(tester.widget<Text>(dayNumberFinder).data, '20');
+  });
+
+  testWidgets(
+      'Month grid shows a month label on the 1st of a new month inside '
+      'the range, and keeps the day number visible',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final rangeStart = DateTime(2026, 6, 20);
+    final julyFirst = DateTime(2026, 7, 1);
+    final midRangeDate = DateTime(2026, 6, 21);
+    final savedState = SavedState(
+      activities: const [],
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.month,
+      viewMode: RangeType.month,
+      rangeStart: rangeStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(activities: const [], savedState: savedState);
+
+    await _pumpPlanScreen(tester, appState);
+
+    final labelFinder = find.byKey(
+      ValueKey('month-grid-month-label-${_dateKey(julyFirst)}'),
+    );
+    expect(labelFinder, findsOneWidget);
+    expect(tester.widget<Text>(labelFinder).data, 'Jul');
+
+    final dayNumberFinder = find.byKey(
+      ValueKey('month-grid-day-number-${_dateKey(julyFirst)}'),
+    );
+    expect(dayNumberFinder, findsOneWidget);
+    expect(tester.widget<Text>(dayNumberFinder).data, '1');
+
+    // A day that's neither the range start nor the 1st of a month shows no
+    // label, but its day number stays visible.
+    expect(
+      find.byKey(
+        ValueKey('month-grid-month-label-${_dateKey(midRangeDate)}'),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(
+              ValueKey('month-grid-day-number-${_dateKey(midRangeDate)}'),
+            ),
+          )
+          .data,
+      '21',
     );
   });
 

@@ -3,6 +3,7 @@ import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/export_print_options.dart';
 import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/models/range_type.dart';
 import 'package:life_shuffle/services/text_week_export_service.dart';
 
 void main() {
@@ -287,6 +288,100 @@ void main() {
     );
 
     expect(export, isNot(contains('Difficulty')));
+  });
+
+  test('defaults to the week horizon label and empty message', () {
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [DayPlan(date: DateTime(2026, 6, 15), activities: [])],
+    );
+
+    expect(export, startsWith('Kwame and Laura week'));
+    expect(export, contains('No planned activities this week.'));
+  });
+
+  test('uses the 2-week horizon label and empty message for twoWeek', () {
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [DayPlan(date: DateTime(2026, 6, 15), activities: [])],
+      rangeType: RangeType.twoWeek,
+    );
+
+    expect(export, startsWith('Kwame and Laura 2 weeks'));
+    expect(
+      export,
+      contains('No planned activities in this 2-week range.'),
+    );
+  });
+
+  test(
+      'uses the month horizon label, empty message, and groups the full '
+      'range by date for month', () {
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [
+        DayPlan(
+          date: DateTime(2026, 6, 22),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'walk',
+                title: 'Walk waterfront',
+                category: 'Outside',
+                durationMinutes: 45,
+              ),
+              timeSlot: '6:30 PM',
+            ),
+          ],
+        ),
+        DayPlan(date: DateTime(2026, 6, 30), activities: []),
+        DayPlan(
+          date: DateTime(2026, 7, 5),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'read',
+                title: 'Cafe reading',
+                category: 'Creative',
+                durationMinutes: 60,
+              ),
+              timeSlot: '11:00 AM',
+            ),
+          ],
+        ),
+      ],
+      rangeType: RangeType.month,
+    );
+
+    expect(export, startsWith('Kwame and Laura month'));
+    expect(export, contains('Monday, Jun 22'));
+    expect(export, contains('Walk waterfront'));
+    expect(export, contains('Sunday, Jul 5'));
+    expect(export, contains('Cafe reading'));
+    // The empty in-between day has no activities, so it gets no date
+    // heading of its own - only days with planned activities do.
+    expect(export, isNot(contains('Jun 30')));
+  });
+
+  test('an empty month-range plan uses the month empty message', () {
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Solo getting out',
+      plan: [
+        DayPlan(date: DateTime(2026, 6, 22), activities: []),
+        DayPlan(date: DateTime(2026, 7, 5), activities: []),
+      ],
+      rangeType: RangeType.month,
+    );
+
+    expect(
+      export,
+      [
+        'Solo getting out month',
+        'Jun 22-Jul 5, 2026',
+        '',
+        'No planned activities in the generated month range.',
+      ].join('\n'),
+    );
   });
 
   test('dimensionLabels only returns enabled dimensions', () {
