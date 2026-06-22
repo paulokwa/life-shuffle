@@ -6,16 +6,17 @@ import 'planner_service.dart';
 
 /// Generates a [GeneratedPlanRange] for a given [RangeType], reusing
 /// [PlannerService] internally rather than duplicating its scheduling
-/// logic. [RangeType.week] and [RangeType.twoWeek] are implemented;
-/// [RangeType.month] is a later MVP 2 slice.
+/// logic.
 class RangePlannerService {
   RangePlannerService._();
 
   static const _daysPerWeek = 7;
 
-  /// Generates a [GeneratedPlanRange] starting at [start]. [start] must be
-  /// the Monday of the first generated week, matching
-  /// [PlannerService.generate]'s existing contract.
+  /// Generates a [GeneratedPlanRange] starting at [start]. For
+  /// [RangeType.week] and [RangeType.twoWeek], [start] must be the Monday
+  /// of the first generated week, matching [PlannerService.generate]'s
+  /// existing contract. For [RangeType.month], [start] is any date in the
+  /// target calendar month.
   static GeneratedPlanRange generate({
     required RangeType type,
     required DateTime start,
@@ -73,8 +74,13 @@ class RangePlannerService {
           scheduledContext: scheduledContext,
         );
       case RangeType.month:
-        throw UnimplementedError(
-          'RangePlannerService does not generate $type yet.',
+        return _generateMonth(
+          start: start,
+          pool: pool,
+          seed: seed,
+          planStyle: planStyle,
+          difficultyAware: difficultyAware,
+          scheduledContext: scheduledContext,
         );
     }
   }
@@ -139,6 +145,85 @@ class RangePlannerService {
       scheduledActivityCount:
           week1.scheduledActivityCount + week2.scheduledActivityCount,
       enabledActivityCount: week1.enabledActivityCount,
+    );
+  }
+
+  /// Generates Monday-aligned 7-day chunks via [PlannerService] covering
+  /// [start]'s calendar month, then clips the result down to that month's
+  /// actual days (the first/last chunk may extend into the previous or
+  /// next month). [scheduledContext] is global-day-indexed relative to the
+  /// Monday-aligned start of the first chunk (which may fall before the
+  /// 1st of the month) and is split per chunk before being passed down,
+  /// the same scheme [_generateTwoWeek] uses for two chunks. Each chunk
+  /// after the first additionally receives the previous chunk's final day
+  /// under key `-1` so no-consecutive-days and difficulty spacing carry
+  /// across every week boundary in the month. Each chunk gets its own seed
+  /// (`seed + chunkIndex`) so weeks don't shuffle identically.
+  static RangePlannerGenerationResult _generateMonth({
+    required DateTime start,
+    required List<Activity> pool,
+    required int seed,
+    required PlanStyle planStyle,
+    required bool difficultyAware,
+    required Map<int, List<PlannedActivity>> scheduledContext,
+  }) {
+    final monthStart = DateTime(start.year, start.month, 1);
+    final monthEnd = DateTime(start.year, start.month + 1, 0);
+    final internalStart = PlannerService.mondayOf(monthStart);
+    final internalEnd = PlannerService.mondayOf(monthEnd)
+        .add(const Duration(days: _daysPerWeek - 1));
+
+    final allDays = <DayPlan>[];
+    var targetActivityCount = 0;
+    var scheduledActivityCount = 0;
+    var enabledActivityCount = 0;
+    var previousChunkLastDay = const <PlannedActivity>[];
+    var chunkStart = internalStart;
+    var chunkIndex = 0;
+
+    while (!chunkStart.isAfter(internalEnd)) {
+      final chunkOffset = chunkIndex * _daysPerWeek;
+      final chunkContext = <int, List<PlannedActivity>>{
+        for (final entry in scheduledContext.entries)
+          if (entry.key >= chunkOffset &&
+              entry.key < chunkOffset + _daysPerWeek)
+            entry.key - chunkOffset: entry.value,
+      };
+      if (previousChunkLastDay.isNotEmpty) {
+        chunkContext[-1] = previousChunkLastDay;
+      }
+
+      final chunk = PlannerService.generateWithDiagnostics(
+        weekStart: chunkStart,
+        pool: pool,
+        seed: seed + chunkIndex,
+        planStyle: planStyle,
+        difficultyAware: difficultyAware,
+        scheduledContext: chunkContext,
+      );
+
+      targetActivityCount += chunk.targetActivityCount;
+      scheduledActivityCount += chunk.scheduledActivityCount;
+      enabledActivityCount = chunk.enabledActivityCount;
+      allDays.addAll(chunk.plan);
+      previousChunkLastDay = chunk.plan.last.activities;
+
+      chunkStart = chunkStart.add(const Duration(days: _daysPerWeek));
+      chunkIndex++;
+    }
+
+    final monthDays = allDays
+        .where(
+          (day) =>
+              !day.date.isBefore(monthStart) && !day.date.isAfter(monthEnd),
+        )
+        .toList();
+
+    return RangePlannerGenerationResult(
+      range: GeneratedPlanRange(type: RangeType.month, days: monthDays),
+      targetActivityCount: targetActivityCount,
+      scheduledActivityCount: scheduledActivityCount,
+      enabledActivityCount: enabledActivityCount,
     );
   }
 }

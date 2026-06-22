@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
+import '../models/generated_plan_range.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
@@ -46,11 +47,39 @@ class PlanScreen extends StatelessWidget {
         '${last.day} ${months[last.month - 1]}';
   }
 
+  static const _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
+  static String _rangeLabel(AppState state) {
+    if (state.rangeType == RangeType.month) {
+      final monthDate = state.generatedRange.days.isNotEmpty
+          ? state.generatedRange.days.first.date
+          : DateTime.now();
+      return '${_monthNames[monthDate.month - 1]} ${monthDate.year}';
+    }
+    return _weekRange(state.weekPlan);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
+    final isMonthView = state.rangeType == RangeType.month;
     final plans = state.weekPlan;
-    final hasAnyActivities = plans.any((d) => d.activities.isNotEmpty);
+    final hasAnyActivities = isMonthView
+        ? state.generatedRange.days.any((d) => d.activities.isNotEmpty)
+        : plans.any((d) => d.activities.isNotEmpty);
     final restCount = plans.where((d) => d.activities.isEmpty).length;
 
     void openDaySheet(DayPlan plan) => _openDaySheet(context, state, plan);
@@ -76,12 +105,12 @@ class PlanScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    _weekRange(plans),
+                    _rangeLabel(state),
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 14),
                   _RangeTypeControl(
-                    current: state.rangeType,
+                    current: state.selectedRangeType,
                     onChanged: state.setRangeType,
                   ),
                   if (state.rangeType == RangeType.twoWeek) ...[
@@ -92,9 +121,15 @@ class PlanScreen extends StatelessWidget {
                       onSelected: state.selectRangeWeekIndex,
                     ),
                   ],
+                  if (state.hasPendingRangeTypeChange) ...[
+                    const SizedBox(height: 12),
+                    _PendingRangeChangeCard(onGenerate: state.regenerate),
+                  ],
                   const SizedBox(height: 16),
-                  _DayStrip(plans: plans, onDayTap: openDaySheet),
-                  const SizedBox(height: 16),
+                  if (!isMonthView) ...[
+                    _DayStrip(plans: plans, onDayTap: openDaySheet),
+                    const SizedBox(height: 16),
+                  ],
                   if (state.remoteUpdatedElsewhere) ...[
                     _SyncNoticeCard(
                       message: state.syncMessage!,
@@ -114,7 +149,12 @@ class PlanScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (!hasAnyActivities)
+                  if (isMonthView)
+                    _MonthGrid(
+                      range: state.generatedRange,
+                      onDayTap: openDaySheet,
+                    )
+                  else if (!hasAnyActivities)
                     LsCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,10 +329,12 @@ class PlanScreen extends StatelessWidget {
   }
 }
 
-/// Lets the user deliberately choose how much to generate: 1 week or
-/// 2 weeks. Tapping an option immediately (and deliberately, since it is
-/// an explicit tap) switches [AppState.rangeType] and regenerates for it.
-/// Month is intentionally not offered yet.
+/// Lets the user deliberately choose how much to generate: 1 week,
+/// 2 weeks, or a month. Tapping 1 week or 2 weeks immediately (and
+/// deliberately, since it is an explicit tap) switches [AppState.rangeType]
+/// and regenerates for it. Tapping Month only marks the choice as pending
+/// (see [AppState.hasPendingRangeTypeChange]); building a whole month is
+/// deliberately left to an explicit Regenerate tap.
 class _RangeTypeControl extends StatelessWidget {
   const _RangeTypeControl({required this.current, required this.onChanged});
 
@@ -304,6 +346,7 @@ class _RangeTypeControl extends StatelessWidget {
     const options = [
       (RangeType.week, '1 week'),
       (RangeType.twoWeek, '2 weeks'),
+      (RangeType.month, 'Month'),
     ];
     return Row(
       children: options.map((option) {
@@ -385,6 +428,255 @@ class _WeekNavControl extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// Shown while [AppState.hasPendingRangeTypeChange] is true, prompting the
+/// user toward the explicit action that actually builds the month plan.
+class _PendingRangeChangeCard extends StatelessWidget {
+  const _PendingRangeChangeCard({required this.onGenerate});
+
+  final VoidCallback onGenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('plan-pending-range-card'),
+      color: const Color(0xFFFFF3EC),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0x1AC8603A),
+            ),
+            child: const Icon(
+              Icons.calendar_month_rounded,
+              size: 18,
+              color: primaryTerracotta,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Month selected',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tap Regenerate below to build your month plan.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Read-only Monday-start grid for a [RangeType.month] range. Cells outside
+/// the generated month are blank and dimmed; in-month cells show the day
+/// number, up to two activity labels, and a `+X more` overflow count.
+class _MonthGrid extends StatelessWidget {
+  const _MonthGrid({required this.range, required this.onDayTap});
+
+  final GeneratedPlanRange range;
+  final ValueChanged<DayPlan> onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = range.days;
+    final monthStart = days.first.date;
+    final monthEnd = days.last.date;
+    final gridStart = DateTime(
+      monthStart.year,
+      monthStart.month,
+      monthStart.day - (monthStart.weekday - 1),
+    );
+    final gridEnd = DateTime(
+      monthEnd.year,
+      monthEnd.month,
+      monthEnd.day + (DateTime.sunday - monthEnd.weekday),
+    );
+    final dayByKey = {
+      for (final day in days) PlanScreen._dateKey(day.date): day,
+    };
+    final cellCount = gridEnd.difference(gridStart).inDays + 1;
+
+    return LsCard(
+      key: const ValueKey('plan-month-grid'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            key: ValueKey('month-grid-weekday-headers'),
+            children: [
+              _WeekdayHeader('Mon'),
+              _WeekdayHeader('Tue'),
+              _WeekdayHeader('Wed'),
+              _WeekdayHeader('Thu'),
+              _WeekdayHeader('Fri'),
+              _WeekdayHeader('Sat'),
+              _WeekdayHeader('Sun'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            key: const ValueKey('month-grid-7-column-grid'),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: cellCount,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 0.72,
+            ),
+            itemBuilder: (context, index) {
+              final date = gridStart.add(Duration(days: index));
+              final inMonth = date.month == monthStart.month;
+              final plan = dayByKey[PlanScreen._dateKey(date)] ??
+                  DayPlan(date: date, activities: []);
+              return _MonthDayCell(
+                plan: plan,
+                inMonth: inMonth,
+                onTap: inMonth ? () => onDayTap(plan) : null,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekdayHeader extends StatelessWidget {
+  const _WeekdayHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthDayCell extends StatelessWidget {
+  const _MonthDayCell({
+    required this.plan,
+    required this.inMonth,
+    this.onTap,
+  });
+
+  final DayPlan plan;
+  final bool inMonth;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleActivities = plan.activities.take(2).toList();
+    final hiddenCount = plan.activities.length - visibleActivities.length;
+    return GestureDetector(
+      key: ValueKey(
+        inMonth
+            ? 'month-grid-day-${PlanScreen._dateKey(plan.date)}'
+            : 'month-grid-out-of-month-cell-${PlanScreen._dateKey(plan.date)}',
+      ),
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: inMonth ? backgroundCream : const Color(0xFFF2EEE7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: inMonth ? borderWarm : const Color(0x0A2C2A26),
+          ),
+        ),
+        child: inMonth
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${plan.date.day}',
+                    key: ValueKey(
+                      'month-grid-day-number-${PlanScreen._dateKey(plan.date)}',
+                    ),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: plan.isToday ? primaryTerracotta : textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  ...visibleActivities.map(
+                    (activity) => Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: surfaceWhite,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: borderWarm),
+                        ),
+                        child: Text(
+                          activity.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: categoryIconColor(activity.category),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (hiddenCount > 0)
+                    Text(
+                      '+$hiddenCount more',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: textMuted,
+                      ),
+                    ),
+                ],
+              )
+            : const SizedBox.expand(),
+      ),
     );
   }
 }

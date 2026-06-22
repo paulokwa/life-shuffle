@@ -3859,17 +3859,97 @@ void main() {
     expect(viaRange.hasBlockedActivitySlots, direct.hasBlockedActivitySlots);
   });
 
-  test('RangePlannerService does not yet generate month ranges', () {
-    final weekStart = DateTime(2026, 6, 15); // Monday
-    expect(
-      () => RangePlannerService.generateWithDiagnostics(
-        type: RangeType.month,
-        start: weekStart,
-        pool: const [],
-        seed: 1,
-      ),
-      throwsUnimplementedError,
+  test(
+      'RangePlannerService generates a full calendar month clipped to '
+      'in-month days', () {
+    final anchor = DateTime(2026, 6, 15); // any date in June 2026
+    final result = RangePlannerService.generateWithDiagnostics(
+      type: RangeType.month,
+      start: anchor,
+      pool: PlannerService.defaultActivities,
+      seed: 7,
     );
+
+    expect(result.range.type, RangeType.month);
+    expect(result.range.days.length, 30); // June has 30 days
+    expect(result.range.days.first.date, DateTime(2026, 6, 1));
+    expect(result.range.days.last.date, DateTime(2026, 6, 30));
+    for (final day in result.range.days) {
+      expect(day.date.year, 2026);
+      expect(day.date.month, 6);
+    }
+  });
+
+  test(
+      'RangePlannerService resets max-per-week separately for each week '
+      'in a month range', () {
+    final anchor = DateTime(2026, 6, 1); // Monday, start of the month
+    final activity = Activity(
+      id: 'month-reset-1',
+      title: 'Once a week',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final range = RangePlannerService.generate(
+      type: RangeType.month,
+      start: anchor,
+      pool: [activity],
+      seed: 5,
+    );
+
+    final occurrenceCount = range.days
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+
+    // June 2026 spans 5 Monday-aligned internal weeks; if max-per-week did
+    // not reset each week, this would be capped at 1 for the whole month.
+    expect(occurrenceCount, greaterThan(1));
+  });
+
+  test(
+      'RangePlannerService prevents no-consecutive-days across week '
+      'boundaries within a month range', () {
+    final anchor = DateTime(2026, 6, 1); // Monday, start of the month
+    final activity = Activity(
+      id: 'boundary-month-1',
+      title: 'Boundary month check',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: true,
+    );
+
+    // seed search, not arbitrary: finds a seed where the lone pool
+    // candidate actually lands on week 1's Sunday, so the boundary
+    // assertion below has something real to block. June 1, 2026 is a
+    // Monday so range.days[6] is week 1's Sunday with no leading clip.
+    List<DayPlan>? workingDays;
+    for (var seed = 0; seed < 50; seed++) {
+      final range = RangePlannerService.generate(
+        type: RangeType.month,
+        start: anchor,
+        pool: [activity],
+        seed: seed,
+      );
+      final sundayHasActivity =
+          range.days[6].activities.any((a) => a.activity.id == activity.id);
+      if (sundayHasActivity) {
+        workingDays = range.days;
+        break;
+      }
+    }
+    expect(workingDays, isNotNull,
+        reason: 'no seed under 50 placed the activity on week 1 Sunday');
+
+    final mondayHasActivity = workingDays![7].activities.any(
+          (a) => a.activity.id == activity.id,
+        );
+    expect(mondayHasActivity, isFalse);
   });
 
   test(
@@ -4506,16 +4586,142 @@ void main() {
     expect(_dayPlanSignature(appState.weekPlan), originalWeek1);
   });
 
-  test('AppState.setRangeType ignores month since it is not implemented yet',
+  test('AppState.setRangeType marks month as pending without generating it',
       () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
+    final daysBefore = appState.generatedRange.days;
 
     appState.setRangeType(RangeType.month);
 
+    expect(appState.selectedRangeType, RangeType.month);
+    expect(appState.hasPendingRangeTypeChange, isTrue);
+    // Nothing regenerated yet: still week, same day list instance.
     expect(appState.rangeType, RangeType.week);
-    expect(appState.generatedRange.days.length, 7);
+    expect(appState.generatedRange.days, same(daysBefore));
+  });
+
+  test(
+      'AppState.regenerate commits a pending month selection and builds '
+      'the month', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+
+    appState.regenerate();
+
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    expect(appState.hasPendingRangeTypeChange, isFalse);
+    expect(appState.rangeType, RangeType.month);
+    expect(appState.generatedRange.type, RangeType.month);
+    expect(appState.generatedRange.days.length, daysInMonth);
+    expect(
+      appState.generatedRange.days.first.date,
+      DateTime(now.year, now.month, 1),
+    );
+  });
+
+  test(
+      'Switching away from a pending month selection clears it without '
+      'generating', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+
+    appState.setRangeType(RangeType.week);
+
+    expect(appState.hasPendingRangeTypeChange, isFalse);
+    expect(appState.selectedRangeType, RangeType.week);
+    expect(appState.rangeType, RangeType.week);
+  });
+
+  test('weekPlan during a month range shows the current Monday-aligned week',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+    appState.regenerate();
+
+    final weekStart = PlannerService.mondayOf(DateTime.now());
+    expect(appState.weekPlan.length, 7);
+    expect(appState.weekPlan.first.date, weekStart);
+    expect(
+      appState.weekPlan.last.date,
+      weekStart.add(const Duration(days: 6)),
+    );
+  });
+
+  test('Locked items remain protected during month regeneration', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+    appState.regenerate();
+
+    final lockedDayIndex = appState.generatedRange.days.indexWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final lockedDate = appState.generatedRange.days[lockedDayIndex].date;
+    final lockedItem =
+        appState.generatedRange.days[lockedDayIndex].activities.first;
+    final lockedId = lockedItem.activity.id;
+    final lockedTime = lockedItem.timeSlot;
+
+    appState.toggleLock(lockedItem);
+    appState.regenerate();
+
+    expect(appState.rangeType, RangeType.month);
+    final regeneratedDay = appState.generatedRange.days.firstWhere(
+      (day) => day.date == lockedDate,
+    );
+    final regeneratedLockedItem = regeneratedDay.activities.firstWhere(
+      (planned) => planned.activity.id == lockedId,
+    );
+
+    expect(regeneratedLockedItem.timeSlot, lockedTime);
+    expect(regeneratedLockedItem.locked, isTrue);
+  });
+
+  test('Check-ins persist by occurrence date for a month range', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'month-checkin',
+      title: 'Recurring activity',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 1,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [recurring]);
+    appState.setRangeType(RangeType.month);
+    appState.regenerate();
+
+    final occurrenceDays = appState.generatedRange.days
+        .where((day) => day.activities.isNotEmpty)
+        .toList();
+    expect(occurrenceDays.length, greaterThan(1));
+
+    final firstDay = occurrenceDays.first;
+    final secondDay = occurrenceDays[1];
+    final firstItem = firstDay.activities.first;
+    final secondItem = secondDay.activities.first;
+
+    firstItem.status = CheckStatus.done;
+    appState.notifyCheckIn(firstItem);
+    secondItem.status = CheckStatus.skipped;
+    appState.notifyCheckIn(secondItem);
+
+    final saved = PersistenceService.load([recurring]);
+    final firstKey = '${_dateKey(firstDay.date)}:${recurring.id}';
+    final secondKey = '${_dateKey(secondDay.date)}:${recurring.id}';
+    expect(saved.checkinMap[firstKey], CheckStatus.done.index);
+    expect(saved.checkinMap[secondKey], CheckStatus.skipped.index);
   });
 
   test('Check-ins are independent across dates in a 2-week range', () async {
@@ -4729,6 +4935,91 @@ void main() {
 
     expect(appState.rangeType, RangeType.week);
     expect(find.byKey(const ValueKey('plan-week-nav-0')), findsNothing);
+  });
+
+  testWidgets(
+      'Plan range control selects Month as pending; regenerating builds '
+      'the month grid', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await _pumpPlanScreen(tester, appState);
+
+    expect(find.byKey(const ValueKey('plan-month-grid')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('plan-range-month')));
+    await tester.pumpAndSettle();
+
+    expect(appState.hasPendingRangeTypeChange, isTrue);
+    expect(
+      find.byKey(const ValueKey('plan-pending-range-card')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('plan-month-grid')), findsNothing);
+
+    appState.regenerate();
+    await tester.pumpAndSettle();
+
+    expect(appState.rangeType, RangeType.month);
+    expect(find.byKey(const ValueKey('plan-month-grid')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('month-grid-7-column-grid')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('plan-pending-range-card')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Tapping an in-month grid cell opens the day check-in sheet',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+    appState.regenerate();
+    final day = appState.generatedRange.days.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+
+    await _pumpPlanScreen(tester, appState);
+    final cellFinder =
+        find.byKey(ValueKey('month-grid-day-${_dateKey(day.date)}'));
+    await tester.ensureVisible(cellFinder);
+    await tester.tap(cellFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+    expect(find.text(day.fullLabel), findsWidgets);
+  });
+
+  testWidgets('Tapping an out-of-month grid cell does nothing',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.setRangeType(RangeType.month);
+    appState.regenerate();
+
+    await _pumpPlanScreen(tester, appState);
+
+    // Matched by key prefix rather than a specific date: which side of the
+    // month gets padding cells (leading, trailing, or both) depends on
+    // which weekday the 1st falls on for whichever month "now" is in.
+    final outOfMonthCellFinder = find.byWidgetPredicate((widget) {
+      final key = widget.key;
+      return key is ValueKey<String> &&
+          key.value.startsWith('month-grid-out-of-month-cell-');
+    });
+    expect(outOfMonthCellFinder, findsWidgets);
+
+    await tester.ensureVisible(outOfMonthCellFinder.first);
+    await tester.tap(outOfMonthCellFinder.first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
   testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
