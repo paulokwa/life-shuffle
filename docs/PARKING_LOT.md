@@ -38,6 +38,13 @@ If it is exciting but too early, put it here.
 - **Why it is parked**: Auth/profile work can slow down early momentum. Start local first, then Firebase/anonymous auth later.
 - **Possible phase**: MVP 2 or later
 
+### Historical calendar archive and trends
+
+- **Idea**: Preserve dated plan and check-in history from calendar creation so users can go back through past weeks, two-week ranges, months, and eventually year-style views.
+- **Why it is useful**: Users should be able to see what was planned, done, partly done, skipped, and left unchecked over time, not just the currently generated range. This would also support richer trends, streaks, category breakdowns, and long-term analytics.
+- **Why it is parked**: The current MVP 2 calendar work is focused on generating/viewing/printing current ranges. A true history archive likely needs a deliberate persistence/schema design so regenerated plans do not overwrite historical truth.
+- **Possible phase**: Later MVP 2 analytics/history slice, after the current month generation and print-grid work
+
 ### Native App Store / Play Store release
 
 - **Idea**: Package Life Shuffle as a real iOS/Android app.
