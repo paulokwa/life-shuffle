@@ -1623,3 +1623,37 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Calendar create/select, member self-leave, and owner hard-delete/feed-revocation lifecycle slices are now implemented locally for V1. The only remaining roadmap item currently called out in the top-level "Still to build" line is PDF export.
 - **Next recommended step**: Review and explicitly approve Firestore rules deployment when ready, then deploy the accumulated rules changes in an environment with Firebase CLI installed.
 - **Open questions**: None.
+
+---
+
+## 2026-06-21 (continued) - MVP 2 range foundation slice 1
+
+- **Goal**: Lay the invisible range-planning foundation for MVP 2 (2-week/month support later) without changing any visible MVP 1 behavior: add a `RangeType`/`GeneratedPlanRange` model, a `RangePlannerService` that wraps the existing weekly `PlannerService`, a persisted `rangeType` defaulting to week, and migrate check-in/lock overlays from activity-id keys to occurrence keys (`yyyy-MM-dd:activityId`) so the same activity recurring on different dates can have independent check-in/lock state once longer ranges exist.
+- **Summary**: Added `RangeType` (`week`/`twoWeek`/`month`) and `GeneratedPlanRange` (`{type, days}`) models. Added `RangePlannerService.generate()`/`generateWithDiagnostics()`, which only implements `RangeType.week` today (calls the existing `PlannerService` internally, no scheduling logic duplicated) and throws `UnimplementedError` for `twoWeek`/`month`, which are later slices. `AppState._buildPlan()` now calls `RangePlannerService` instead of `PlannerService` directly, and exposes a new `generatedRange` getter (`weekPlan` is unchanged and is exactly `generatedRange.days` for the week range generated today). Added a persisted `rangeType` field to `SavedState`/`PersistenceService`, defaulting to week and stored through the existing flat Firestore calendar document (no new collection, no rules changes). Check-in/lock overlays (`checkinMap`/`lockedMap`) are now keyed by `'yyyy-MM-dd:activityId'` instead of bare `activityId`; `AppState._applyOverlays()` prefers the occurrence key and falls back to the legacy bare-id key (applied to the current week only) so existing saved devices/documents keep showing the same check-ins/locks, and the next save rewrites everything under occurrence keys. `PersistenceService`'s local SharedPreferences storage for these two maps moved from one-key-per-activity-id to a single JSON blob per map (`saveCheckinMap`/`saveLockedMap`), since occurrence keys can't be enumerated per-activity the old way; the old per-id keys are still read (read-only) as the legacy fallback path. No UI, print, ICS, or Firestore rules changes.
+- **Files changed**:
+  - `lib/models/range_type.dart` (new)
+  - `lib/models/generated_plan_range.dart` (new)
+  - `lib/models/day_plan.dart` (added `DayPlan.dateKey()`)
+  - `lib/services/range_planner_service.dart` (new)
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Name the new service `RangePlannerService`, not `MonthPlannerService`, so the same code path covers week/2-week/month rather than a month-specific service that 2-week would awkwardly share.
+  - Keep `weekPlan` as the existing public surface (now a thin view over `generatedRange.days`) so Today/Plan/print/ICS/check-in/lock screens need zero changes in this slice.
+  - Store `rangeType` as one new flat field rather than introducing a persisted range anchor date: the existing generation math is already a deterministic pure function of `(weekStart, pool, seed, planStyle)`, so "this week" can keep being derived from the wall clock exactly as before.
+  - Migrate check-in/lock overlays to occurrence keys non-destructively: legacy bare-id entries are read as a fallback for the current week only, never written again once anything triggers a save.
+  - Use a JSON blob per map for local SharedPreferences storage of check-ins/locks instead of one preference key per activity id, since occurrence keys are not enumerable from the activity list alone.
+- **Tests run**:
+  - `dart format` via bundled Dart: formatted `lib/models/day_plan.dart`, `lib/state/app_state.dart`, `test/widget_test.dart` (3 changed of 7 checked).
+  - `flutter test` - passed, 165/165 tests, including 11 new tests (SavedState `rangeType` default/round-trip, `AppState` `rangeType` default/persist, `RangePlannerService` week-output parity with `PlannerService`, `RangePlannerService` `UnimplementedError` for twoWeek/month, legacy check-in fallback, legacy lock fallback, occurrence-key rewrite on save, and two tests proving the same recurring activity can have independent check-in/locked state on two different dates within a week) and all 154 pre-existing tests (planner rules, regeneration/undo, lock preservation, day-sheet/week-review check-ins, print preview, text export, ICS, shared calendar create/leave/delete) still passing unchanged.
+  - `flutter analyze --no-fatal-infos` - passed (exit 0), same 18 pre-existing info-level lints, no new warnings/errors.
+  - `flutter build web` - passed with the existing icon-font warning and wasm dry-run note.
+  - `git diff --check` - passed with CRLF normalization warnings only.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains `.gitignore`-matched and untracked.
+- **Current state**: The range-planning foundation exists but is invisible: every calendar still only ever generates/displays one week, `rangeType` always defaults to and saves as `week`, and there is no UI to change it yet. Check-ins and locks are now scoped to the exact occurrence date under the hood, fixing the latent bug where the same recurring activity on two different dates would have shared check-in/lock state.
+- **Next recommended step**: Slice 2 - generate a real 2-week range and add week-by-week navigation UI; this needs a small `PlannerService` extension so no-consecutive-days and difficulty spacing carry adjacency context across the week-chunk boundary (today `scheduledContext` only carries hard-day counts across calls, not adjacency).
+- **Open questions**: None.

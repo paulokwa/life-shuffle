@@ -9,6 +9,7 @@ import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
+import 'package:life_shuffle/models/range_type.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/check_in_catchup_screen.dart';
@@ -25,6 +26,7 @@ import 'package:life_shuffle/state/app_state.dart';
 import 'package:life_shuffle/services/firestore_sync_service.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
 import 'package:life_shuffle/services/planner_service.dart';
+import 'package:life_shuffle/services/range_planner_service.dart';
 import 'package:life_shuffle/services/starter_activity_library.dart';
 import 'package:life_shuffle/theme/app_colors.dart';
 import 'package:life_shuffle/widgets/auth_gate.dart';
@@ -226,6 +228,32 @@ void main() {
 
     final defaulted = SavedState.fromMap(const {});
     expect(defaulted.introOnboardingCompleted, isFalse);
+  });
+
+  test('SavedState defaults missing rangeType to week and round-trips it', () {
+    final defaulted = SavedState.fromMap(const {});
+    expect(defaulted.rangeType, RangeType.week);
+
+    const state = SavedState(
+      activities: [],
+      seed: 0,
+      updatedAtMillis: 100,
+      rangeType: RangeType.week,
+      enabledMap: {},
+      checkinMap: {},
+      lockedMap: {},
+    );
+    final map = state.toMap();
+    expect(map['rangeType'], 'week');
+
+    final restored = SavedState.fromMap(map);
+    expect(restored.rangeType, RangeType.week);
+
+    final fromUnknownValue = SavedState.fromMap({
+      ...map,
+      'rangeType': 'someFutureRangeNotYetSupported',
+    });
+    expect(fromUnknownValue.rangeType, RangeType.week);
   });
 
   testWidgets(
@@ -3794,6 +3822,58 @@ void main() {
     expect(result.hasBlockedActivitySlots, isTrue);
   });
 
+  test(
+      'RangePlannerService week output matches PlannerService for the same '
+      'inputs', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final pool = [
+      Activity(
+        id: 'range-1',
+        title: 'Range check',
+        category: 'Outside',
+        durationMinutes: 30,
+      ),
+    ];
+
+    final direct = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: pool,
+      seed: 7,
+      planStyle: PlanStyle.balanced,
+    );
+    final viaRange = RangePlannerService.generateWithDiagnostics(
+      type: RangeType.week,
+      start: weekStart,
+      pool: pool,
+      seed: 7,
+      planStyle: PlanStyle.balanced,
+    );
+
+    expect(viaRange.range.type, RangeType.week);
+    expect(
+        _dayPlanSignature(viaRange.range.days), _dayPlanSignature(direct.plan));
+    expect(viaRange.targetActivityCount, direct.targetActivityCount);
+    expect(viaRange.scheduledActivityCount, direct.scheduledActivityCount);
+    expect(viaRange.enabledActivityCount, direct.enabledActivityCount);
+    expect(viaRange.unfilledActivityCount, direct.unfilledActivityCount);
+    expect(viaRange.hasBlockedActivitySlots, direct.hasBlockedActivitySlots);
+  });
+
+  test('RangePlannerService does not yet generate twoWeek or month ranges', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    for (final type in [RangeType.twoWeek, RangeType.month]) {
+      expect(
+        () => RangePlannerService.generateWithDiagnostics(
+          type: type,
+          start: weekStart,
+          pool: const [],
+          seed: 1,
+        ),
+        throwsUnimplementedError,
+      );
+    }
+  });
+
   test('Difficulty disabled keeps old planner behavior', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final pool = [
@@ -3985,9 +4065,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
-    final firstPlanned = appState.weekPlan
-        .expand((day) => day.activities)
-        .firstWhere((planned) => planned.activity.id.isNotEmpty);
+    final firstDay = appState.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final firstPlanned = firstDay.activities.first;
+    final occurrenceKey =
+        '${_dateKey(firstDay.date)}:${firstPlanned.activity.id}';
 
     appState.toggleLock(firstPlanned);
     firstPlanned.status = CheckStatus.done;
@@ -4007,8 +4090,8 @@ void main() {
 
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.seed, 0);
-    expect(saved.lockedMap[firstPlanned.activity.id], isTrue);
-    expect(saved.checkinMap[firstPlanned.activity.id], CheckStatus.done.index);
+    expect(saved.lockedMap[occurrenceKey], isTrue);
+    expect(saved.checkinMap[occurrenceKey], CheckStatus.done.index);
   });
 
   test('Undo is unavailable after it is used', () async {
@@ -4048,6 +4131,181 @@ void main() {
     expect(regeneratedLockedItem.timeSlot, lockedTime);
     expect(regeneratedLockedItem.locked, isTrue);
     expect(appState.canUndoLastRegeneration, isTrue);
+  });
+
+  test('AppState defaults rangeType to week and persists it', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    expect(appState.rangeType, RangeType.week);
+    expect(appState.generatedRange.type, RangeType.week);
+    expect(appState.generatedRange.days, same(appState.weekPlan));
+
+    appState.regenerate();
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.rangeType, RangeType.week);
+  });
+
+  test('Legacy activity-id-keyed check-ins still apply to the current week',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final discovery = AppState(activities: PlannerService.defaultActivities);
+    final targetId = discovery.weekPlan
+        .firstWhere((day) => day.activities.isNotEmpty)
+        .activities
+        .first
+        .activity
+        .id;
+
+    SharedPreferences.setMockInitialValues({
+      'ls_ci_$targetId': CheckStatus.done.index,
+    });
+    await PersistenceService.init();
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.checkinMap[targetId], CheckStatus.done.index);
+
+    final restored = AppState(activities: saved.activities, savedState: saved);
+    final restoredItem = restored.weekPlan
+        .expand((day) => day.activities)
+        .firstWhere((a) => a.activity.id == targetId);
+    expect(restoredItem.status, CheckStatus.done);
+  });
+
+  test('Legacy activity-id-keyed locks still apply to the current week',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final discovery = AppState(activities: PlannerService.defaultActivities);
+    final targetId = discovery.weekPlan
+        .firstWhere((day) => day.activities.isNotEmpty)
+        .activities
+        .first
+        .activity
+        .id;
+
+    SharedPreferences.setMockInitialValues({
+      'ls_lk_$targetId': true,
+    });
+    await PersistenceService.init();
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.lockedMap[targetId], isTrue);
+
+    final restored = AppState(activities: saved.activities, savedState: saved);
+    final restoredItem = restored.weekPlan
+        .expand((day) => day.activities)
+        .firstWhere((a) => a.activity.id == targetId);
+    expect(restoredItem.locked, isTrue);
+  });
+
+  test(
+      'Saving rewrites legacy check-in and lock overlays using occurrence '
+      'keys', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final discovery = AppState(activities: PlannerService.defaultActivities);
+    final discoveryDay = discovery.weekPlan.firstWhere(
+      (day) => day.activities.isNotEmpty,
+    );
+    final targetId = discoveryDay.activities.first.activity.id;
+    final occurrenceKey = '${_dateKey(discoveryDay.date)}:$targetId';
+
+    SharedPreferences.setMockInitialValues({
+      'ls_ci_$targetId': CheckStatus.done.index,
+      'ls_lk_$targetId': true,
+    });
+    await PersistenceService.init();
+    final legacySaved =
+        PersistenceService.load(PlannerService.defaultActivities);
+    final restored = AppState(
+      activities: legacySaved.activities,
+      savedState: legacySaved,
+    );
+    final restoredItem = restored.weekPlan
+        .expand((day) => day.activities)
+        .firstWhere((a) => a.activity.id == targetId);
+    expect(restoredItem.status, CheckStatus.done);
+    expect(restoredItem.locked, isTrue);
+
+    // Any mutation triggers a save; nothing here changes the values, but it
+    // exercises the same _persist() path a real check-in/lock action takes.
+    restored.notifyCheckIn(restoredItem);
+
+    final migratedSaved =
+        PersistenceService.load(PlannerService.defaultActivities);
+    expect(migratedSaved.checkinMap[occurrenceKey], CheckStatus.done.index);
+    expect(migratedSaved.lockedMap[occurrenceKey], isTrue);
+    expect(migratedSaved.checkinMap.containsKey(targetId), isFalse);
+    expect(migratedSaved.lockedMap.containsKey(targetId), isFalse);
+  });
+
+  test(
+      'Same activity on two different dates can have different check-in '
+      'statuses', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'recurring-checkin',
+      title: 'Recurring activity',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 2,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [recurring]);
+    final occurrences =
+        appState.weekPlan.where((day) => day.activities.isNotEmpty).toList();
+    expect(occurrences.length, 2);
+
+    final firstItem = occurrences[0].activities.first;
+    final secondItem = occurrences[1].activities.first;
+    firstItem.status = CheckStatus.done;
+    appState.notifyCheckIn(firstItem);
+    secondItem.status = CheckStatus.skipped;
+    appState.notifyCheckIn(secondItem);
+
+    expect(firstItem.status, CheckStatus.done);
+    expect(secondItem.status, CheckStatus.skipped);
+
+    final saved = PersistenceService.load([recurring]);
+    final firstKey = '${_dateKey(occurrences[0].date)}:${recurring.id}';
+    final secondKey = '${_dateKey(occurrences[1].date)}:${recurring.id}';
+    expect(saved.checkinMap[firstKey], CheckStatus.done.index);
+    expect(saved.checkinMap[secondKey], CheckStatus.skipped.index);
+  });
+
+  test(
+      'Same activity on two different dates can have different locked '
+      'states', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final recurring = Activity(
+      id: 'recurring-locked',
+      title: 'Recurring activity',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 2,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [recurring]);
+    final occurrences =
+        appState.weekPlan.where((day) => day.activities.isNotEmpty).toList();
+    expect(occurrences.length, 2);
+
+    final firstItem = occurrences[0].activities.first;
+    final secondItem = occurrences[1].activities.first;
+    appState.toggleLock(firstItem);
+
+    expect(firstItem.locked, isTrue);
+    expect(secondItem.locked, isFalse);
+
+    final saved = PersistenceService.load([recurring]);
+    final firstKey = '${_dateKey(occurrences[0].date)}:${recurring.id}';
+    final secondKey = '${_dateKey(occurrences[1].date)}:${recurring.id}';
+    expect(saved.lockedMap[firstKey], isTrue);
+    expect(saved.lockedMap[secondKey], isFalse);
   });
 
   testWidgets('Plan day card opens a day check-in sheet',
@@ -4226,7 +4484,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.checkinMap[planned.id], CheckStatus.partly.index);
+    expect(
+      saved.checkinMap['${_dateKey(day.date)}:${planned.id}'],
+      CheckStatus.partly.index,
+    );
 
     final restored = AppState(
       activities: saved.activities,
@@ -4381,7 +4642,10 @@ void main() {
     expect(planned.status, CheckStatus.partly);
 
     final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.checkinMap[planned.id], CheckStatus.partly.index);
+    expect(
+      saved.checkinMap['${_dateKey(day.date)}:${planned.id}'],
+      CheckStatus.partly.index,
+    );
 
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pumpAndSettle();

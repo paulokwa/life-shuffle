@@ -6,13 +6,16 @@ import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
+import '../models/generated_plan_range.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
 import '../services/persistence_service.dart';
-import '../services/planner_service.dart'
-    show PlannerGenerationResult, PlannerService, PlanStyle;
+import '../services/planner_service.dart' show PlannerService, PlanStyle;
+import '../services/range_planner_service.dart'
+    show RangePlannerGenerationResult, RangePlannerService;
 
 /// Which sync operation a recorded sync failure came from, used only to
 /// pick the right plain-language wording in [AppState._buildSyncMessage].
@@ -68,6 +71,7 @@ class AppState extends ChangeNotifier {
   int _seed = 0;
   int _updatedAtMillis = 0;
   PlanStyle _planStyle = PlanStyle.balanced;
+  RangeType _rangeType = RangeType.week;
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -163,7 +167,12 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// The current 7-day slice of [generatedRange]. Only [RangeType.week] is
+  /// generated today, so this is exactly [generatedRange.days].
   List<DayPlan> get weekPlan => _weekPlan;
+  RangeType get rangeType => _rangeType;
+  GeneratedPlanRange get generatedRange =>
+      GeneratedPlanRange(type: _rangeType, days: _weekPlan);
   PlanStyle get planStyle => _planStyle;
   bool get canUndoLastRegeneration => _lastRegenerationSnapshot != null;
   String? get plannerConflictMessage => _plannerConflictMessage;
@@ -1060,6 +1069,7 @@ class AppState extends ChangeNotifier {
     _seed = saved.seed;
     _updatedAtMillis = saved.updatedAtMillis;
     _planStyle = _parsePlanStyle(saved.planStyle);
+    _rangeType = saved.rangeType;
     _displayName = saved.displayName;
     _displayNameConfirmed =
         saved.displayNameConfirmed && saved.displayName != null;
@@ -1214,6 +1224,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveSeed(state.seed);
     PersistenceService.saveUpdatedAtMillis(state.updatedAtMillis);
     PersistenceService.savePlanStyle(state.planStyle);
+    PersistenceService.saveRangeType(state.rangeType);
     PersistenceService.saveDisplayName(state.displayName);
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     PersistenceService.saveCalendarTitle(state.calendarTitle);
@@ -1252,12 +1263,8 @@ class AppState extends ChangeNotifier {
     for (final entry in state.enabledMap.entries) {
       PersistenceService.saveEnabled(entry.key, entry.value);
     }
-    for (final entry in state.checkinMap.entries) {
-      PersistenceService.saveCheckin(entry.key, entry.value);
-    }
-    for (final entry in state.lockedMap.entries) {
-      PersistenceService.saveLocked(entry.key, entry.value);
-    }
+    PersistenceService.saveCheckinMap(state.checkinMap);
+    PersistenceService.saveLockedMap(state.lockedMap);
   }
 
   bool _applyCalendarMetadata(
@@ -1320,9 +1327,11 @@ class AppState extends ChangeNotifier {
     final checkinMap = <String, int>{};
     final lockedMap = <String, bool>{};
     for (final day in _weekPlan) {
+      final dateKey = DayPlan.dateKey(day.date);
       for (final pa in day.activities) {
-        checkinMap[pa.activity.id] = pa.status.index;
-        lockedMap[pa.activity.id] = pa.locked;
+        final occurrenceKey = '$dateKey:${pa.activity.id}';
+        checkinMap[occurrenceKey] = pa.status.index;
+        lockedMap[occurrenceKey] = pa.locked;
       }
     }
 
@@ -1331,6 +1340,7 @@ class AppState extends ChangeNotifier {
       seed: _seed,
       updatedAtMillis: updatedAtMillis ?? _updatedAtMillis,
       planStyle: _planStyle.name,
+      rangeType: _rangeType,
       displayName: _displayName,
       displayNameConfirmed: _displayNameConfirmed,
       calendarTitle: _calendarTitle,
@@ -1384,8 +1394,9 @@ class AppState extends ChangeNotifier {
         .where((a) => a.enabled && !lockedIds.contains(a.id))
         .toList();
 
-    final generation = PlannerService.generateWithDiagnostics(
-      weekStart: weekStart,
+    final generation = RangePlannerService.generateWithDiagnostics(
+      type: _rangeType,
+      start: weekStart,
       pool: pool,
       seed: seed,
       planStyle: _planStyle,
@@ -1393,7 +1404,7 @@ class AppState extends ChangeNotifier {
       scheduledContext: lockedItems ?? const <int, List<PlannedActivity>>{},
     );
     _plannerConflictMessage = _buildPlannerConflictMessage(generation);
-    final plan = generation.plan;
+    final plan = generation.range.days;
 
     if (lockedItems != null) {
       for (var i = 0; i < plan.length; i++) {
@@ -1411,7 +1422,9 @@ class AppState extends ChangeNotifier {
     return plan;
   }
 
-  String? _buildPlannerConflictMessage(PlannerGenerationResult generation) {
+  String? _buildPlannerConflictMessage(
+    RangePlannerGenerationResult generation,
+  ) {
     if (!generation.hasBlockedActivitySlots) return null;
     final count = generation.unfilledActivityCount;
     final slotLabel = count == 1 ? 'slot was' : 'slots were';
@@ -1421,17 +1434,25 @@ class AppState extends ChangeNotifier {
         'plan style.';
   }
 
+  /// Applies saved check-in/lock state to [_weekPlan], preferring the
+  /// occurrence key (`yyyy-MM-dd:activityId`) and falling back to the
+  /// legacy bare activity-id key so saved data from before the occurrence
+  /// key migration still applies to the current week. The next [_persist]
+  /// rewrites everything under occurrence keys (see [_currentSavedState]).
   void _applyOverlays(SavedState saved) {
     for (final day in _weekPlan) {
+      final dateKey = DayPlan.dateKey(day.date);
       for (final pa in day.activities) {
         final id = pa.activity.id;
+        final occurrenceKey = '$dateKey:$id';
 
-        final statusIdx = saved.checkinMap[id];
+        final statusIdx =
+            saved.checkinMap[occurrenceKey] ?? saved.checkinMap[id];
         if (statusIdx != null && statusIdx < CheckStatus.values.length) {
           pa.status = CheckStatus.values[statusIdx];
         }
 
-        final locked = saved.lockedMap[id];
+        final locked = saved.lockedMap[occurrenceKey] ?? saved.lockedMap[id];
         if (locked != null) pa.locked = locked;
       }
     }

@@ -174,6 +174,14 @@ Suggested narrow first slice for MVP 2:
 - Browser print / Save as PDF support.
 - No drag/drop, no cell editing, no recurring-events system, no native PDF package, and no full Google/Outlook-style calendar clone in the first slice.
 
+### MVP 2 range foundation progress
+
+- [x] Slice 1 — invisible range/model foundation: `RangeType` (week/twoWeek/month), `GeneratedPlanRange`, and `RangePlannerService` (week-only today, reuses the existing weekly `PlannerService` internally rather than duplicating scheduling logic). Added a persisted `rangeType` field defaulting to week. Migrated check-in/lock overlays from activity-id keys to occurrence keys (`yyyy-MM-dd:activityId`) with backward-compatible legacy fallback, so the same recurring activity can have independent check-in/lock state on different dates once longer ranges exist. No visible change yet: every calendar still only ever generates and displays one week, with the same UI, print, and ICS feed as before.
+- [ ] Slice 2 — generate a real 2-week range and week-by-week navigation (needs a small `PlannerService` extension so no-consecutive-days/difficulty spacing carry context across the week-chunk boundary)
+- [ ] Slice 3 — generate a real calendar-month range and read-only month grid view
+- [ ] Slice 4 — monthly print grid
+- [ ] Slice 5 — export/output-detail polish across week/2-week/month views
+
 ## MVP 3 — AI assistant
 
 Goal: help users who do not know what to add or how to plan.

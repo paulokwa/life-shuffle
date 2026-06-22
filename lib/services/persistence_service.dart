@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
+import '../models/range_type.dart';
 
 /// Lightweight local storage for in-session state.
 /// Wraps SharedPreferences (localStorage on web).
@@ -16,6 +17,7 @@ class PersistenceService {
   static const _keySeed = 'ls_seed';
   static const _keyUpdatedAtMillis = 'ls_updated_at_millis';
   static const _keyPlanStyle = 'ls_plan_style';
+  static const _keyRangeType = 'ls_range_type';
   static const _keyDisplayName = 'ls_display_name';
   static const _keyDisplayNameConfirmed = 'ls_display_name_confirmed';
   static const _keyCalendarTitle = 'ls_calendar_title';
@@ -43,8 +45,12 @@ class PersistenceService {
   static const _keyExportShowEnabledDimensions =
       'ls_export_show_enabled_dimensions';
   static const _pfxEnabled = 'ls_en_';
+  // Legacy per-activity-id keys, read-only: superseded by the occurrence-keyed
+  // blobs below, but old saved devices still have data under these prefixes.
   static const _pfxCheckin = 'ls_ci_';
   static const _pfxLocked = 'ls_lk_';
+  static const _keyCheckinMap = 'ls_checkin_map';
+  static const _keyLockedMap = 'ls_locked_map';
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -87,8 +93,8 @@ class PersistenceService {
     final exportShowEnabledDimensions =
         _prefs.getBool(_keyExportShowEnabledDimensions) ?? true;
     final enabledMap = <String, bool>{};
-    final checkinMap = <String, int>{};
-    final lockedMap = <String, bool>{};
+    final legacyCheckinMap = <String, int>{};
+    final legacyLockedMap = <String, bool>{};
 
     for (final activity in activities) {
       final enabled = _prefs.getBool('$_pfxEnabled${activity.id}');
@@ -98,19 +104,28 @@ class PersistenceService {
       }
 
       final checkin = _prefs.getInt('$_pfxCheckin${activity.id}');
-      if (checkin != null) checkinMap[activity.id] = checkin;
+      if (checkin != null) legacyCheckinMap[activity.id] = checkin;
 
       final locked = _prefs.getBool('$_pfxLocked${activity.id}');
-      if (locked != null) lockedMap[activity.id] = locked;
+      if (locked != null) legacyLockedMap[activity.id] = locked;
     }
 
+    // Occurrence-keyed blobs supersede the legacy per-activity-id keys above.
+    // A device that has never saved under the new app version falls back to
+    // the legacy activity-id-keyed data; AppState applies that to the
+    // current week only and rewrites it in occurrence-keyed form on next save.
+    final checkinMap = _loadCheckinMapBlob() ?? legacyCheckinMap;
+    final lockedMap = _loadLockedMapBlob() ?? legacyLockedMap;
+
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
+    final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
 
     return SavedState(
       activities: activities,
       seed: seed,
       updatedAtMillis: updatedAtMillis,
       planStyle: planStyle,
+      rangeType: rangeType,
       displayName: displayName,
       displayNameConfirmed: displayNameConfirmed,
       calendarTitle: calendarTitle,
@@ -151,6 +166,9 @@ class PersistenceService {
 
   static void savePlanStyle(String value) =>
       _prefs.setString(_keyPlanStyle, value);
+
+  static void saveRangeType(RangeType value) =>
+      _prefs.setString(_keyRangeType, value.name);
 
   static void saveDisplayName(String? value) {
     if (value == null || value.trim().isEmpty) {
@@ -258,11 +276,46 @@ class PersistenceService {
   static void saveEnabled(String id, bool value) =>
       _prefs.setBool('$_pfxEnabled$id', value);
 
-  static void saveCheckin(String id, int value) =>
-      _prefs.setInt('$_pfxCheckin$id', value);
+  static void saveCheckinMap(Map<String, int> value) =>
+      _prefs.setString(_keyCheckinMap, jsonEncode(value));
 
-  static void saveLocked(String id, bool value) =>
-      _prefs.setBool('$_pfxLocked$id', value);
+  static void saveLockedMap(Map<String, bool> value) =>
+      _prefs.setString(_keyLockedMap, jsonEncode(value));
+
+  static Map<String, int>? _loadCheckinMapBlob() {
+    final raw = _prefs.getString(_keyCheckinMap);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            value is int ? value : (value is num ? value.toInt() : 0),
+          ),
+        );
+      }
+    } catch (_) {
+      // Fall through to the legacy per-activity-id scan.
+    }
+    return null;
+  }
+
+  static Map<String, bool>? _loadLockedMapBlob() {
+    final raw = _prefs.getString(_keyLockedMap);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value is bool && value),
+        );
+      }
+    } catch (_) {
+      // Fall through to the legacy per-activity-id scan.
+    }
+    return null;
+  }
 
   static List<Activity> _loadActivities(List<Activity> defaultActivities) {
     final raw = _prefs.getString(_keyActivities);
@@ -304,6 +357,7 @@ class SavedState {
     required this.checkinMap,
     required this.lockedMap,
     this.planStyle = 'balanced',
+    this.rangeType = RangeType.week,
     this.displayName,
     this.displayNameConfirmed = false,
     this.calendarTitle,
@@ -335,6 +389,7 @@ class SavedState {
   final int seed;
   final int updatedAtMillis;
   final String planStyle;
+  final RangeType rangeType;
   final String? displayName;
   final bool displayNameConfirmed;
   final String? calendarTitle;
@@ -370,6 +425,7 @@ class SavedState {
       'seed': seed,
       'updatedAtMillis': updatedAtMillis,
       'planStyle': planStyle,
+      'rangeType': rangeType.name,
       'displayName': displayName,
       'displayNameConfirmed': displayNameConfirmed,
       'calendarTitle': calendarTitle,
@@ -410,6 +466,7 @@ class SavedState {
       seed: _readInt(map['seed']),
       updatedAtMillis: _readInt(map['updatedAtMillis']),
       planStyle: (map['planStyle'] as String?) ?? 'balanced',
+      rangeType: rangeTypeFromName(map['rangeType'] as String?),
       displayName: _readNullableString(map['displayName']),
       displayNameConfirmed: _readBool(map['displayNameConfirmed']),
       calendarTitle: _readNullableString(map['calendarTitle']),

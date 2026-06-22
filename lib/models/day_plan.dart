@@ -26,6 +26,13 @@ class DayPlan {
 
   DayPlan({required this.date, required this.activities});
 
+  /// Stable `yyyy-MM-dd` key for [date], used to scope check-in/lock
+  /// overlays to the exact occurrence date an activity was planned on.
+  static String dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
   bool get isToday {
     final now = DateTime.now();
     return date.year == now.year &&
@@ -42,12 +49,27 @@ class DayPlan {
 
   String get fullLabel {
     const days = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${days[date.weekday - 1]} · ${date.day} ${months[date.month - 1]}';
   }
