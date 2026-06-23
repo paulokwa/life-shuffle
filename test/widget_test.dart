@@ -4629,9 +4629,13 @@ void main() {
     // Flexible fill still reaches balanced style's full 5-per-week target
     // alongside the must-include item, instead of being crowded out by it
     // the way it would be if must-include placements counted against the
-    // day's normal plan-style quota.
-    expect(flexCount, 5);
-    expect(allPlanned.length, 12);
+    // day's normal plan-style quota. It also reaches all 7 days here: the
+    // must-include activity claims every day (including balanced style's 2
+    // zero-target "rest" days), and a zero-target day a must-include item
+    // already claimed gets a minimum flexible target of 1 instead of 0, so
+    // the day isn't reduced to the must-include item alone.
+    expect(flexCount, 7);
+    expect(allPlanned.length, 14);
 
     for (final day in plan) {
       final idsToday = day.activities.map((a) => a.activity.id).toList();
@@ -4673,11 +4677,13 @@ void main() {
       return ids.contains(must.id) && ids.contains(flexible.id);
     });
 
-    // Balanced style targets 5 of the 7 days with 1 flexible slot each;
-    // since the must-include activity claims every day and never blocks
-    // flexible eligibility, those same 5 days should also get the
-    // flexible activity rather than just the must-include item alone.
-    expect(daysWithBoth.length, 5);
+    // Balanced style targets 5 of the 7 days with 1 flexible slot each, and
+    // the must-include activity claims every day including the other 2
+    // (zero-target "rest" days). Since a zero-target day a must-include
+    // item already claimed still gets a minimum flexible target of 1, and
+    // the must-include activity never blocks flexible eligibility, all 7
+    // days end up with both rather than just the must-include item alone.
+    expect(daysWithBoth.length, 7);
   });
 
   test(
@@ -4717,11 +4723,16 @@ void main() {
 
     // Adding a must-include activity to the pool does not change the
     // balanced style's normal flexible target count (5/week) - must
-    // placements are additive on top of it, not subtracted from it.
+    // placements are additive on top of it, not subtracted from it. The
+    // minimum-flexible-target-of-1 top-up for must-claimed zero-target days
+    // is deliberately not counted here either: it's an opportunistic extra
+    // attempt on top of the plan style's ask, not a new formal target.
     expect(withoutMust.targetActivityCount, 5);
     expect(withMust.targetActivityCount, 5);
     expect(withoutMust.scheduledActivityCount, 5);
-    expect(withMust.scheduledActivityCount, 12); // 5 flexible + 7 must
+    // 7 flexible (5 normal + 2 from the must-claimed zero-target days that
+    // got bumped to a minimum target of 1) + 7 must.
+    expect(withMust.scheduledActivityCount, 14);
   });
 
   test(
@@ -4883,6 +4894,185 @@ void main() {
 
     expect(result.scheduledActivityCount, 3);
     expect(result.mustIncludeShortfallCount, 3);
+  });
+
+  test(
+      'Audit reproduction: a 6-day-per-week must-include activity does not '
+      'leave most must-claimed days baseline-only when flexible activities '
+      'are available', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    Activity must() => Activity(
+          id: 'must-eat-together',
+          title: 'Eat Together',
+          category: 'Couple time',
+          durationMinutes: 30,
+          maxPerWeek: 6,
+          allowedWeekdays: [1, 2, 3, 4, 5, 6],
+          mustIncludeInPlans: true,
+        );
+    List<Activity> flexiblePool() => List.generate(
+          6,
+          (i) => Activity(
+            id: 'flex-$i',
+            title: 'Flexible $i',
+            category: 'Outside',
+            durationMinutes: 30,
+            maxPerWeek: 7,
+            allowedWeekdays: Activity.allWeekdays,
+          ),
+        );
+
+    for (final style in PlanStyle.values) {
+      var mustOnlyDays = 0;
+      var totalDaysWithMust = 0;
+      for (var seed = 0; seed < 20; seed++) {
+        final plan = PlannerService.generate(
+          weekStart: weekStart,
+          pool: [must(), ...flexiblePool()],
+          seed: seed,
+          planStyle: style,
+        );
+        for (final day in plan) {
+          final hasMust =
+              day.activities.any((a) => a.activity.id == 'must-eat-together');
+          if (!hasMust) continue;
+          totalDaysWithMust++;
+          final hasFlex =
+              day.activities.any((a) => a.activity.id.startsWith('flex-'));
+          if (!hasFlex) mustOnlyDays++;
+        }
+      }
+
+      expect(totalDaysWithMust, 120); // 20 seeds * 6 must-claimed days/week
+      // Before the rest-day minimum-flexible-target fix, baseline-only days
+      // were common (roughly half of must-claimed days under gentle style,
+      // since it has the most zero-target "rest" days). With enough
+      // flexible activities available, none should be left baseline-only.
+      expect(mustOnlyDays, 0, reason: '$style left must-only days');
+    }
+  });
+
+  test(
+      'A must-claimed zero-target rest day still gets at least one '
+      'flexible activity when one is available', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final must = Activity(
+      id: 'must-rest-day',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
+    );
+    final flexible = Activity(
+      id: 'flex-rest-day',
+      title: 'Flexible pick',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    // Gentle style has the most zero-target "rest" days (4 of 7), so it
+    // most directly exercises the must-claimed-zero-target-day case.
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [must, flexible],
+      seed: 1,
+      planStyle: PlanStyle.gentle,
+    );
+
+    for (final day in plan) {
+      final hasMust = day.activities.any((a) => a.activity.id == must.id);
+      final hasFlex = day.activities.any((a) => a.activity.id == flexible.id);
+      expect(hasMust, isTrue); // must-include claims every day here
+      expect(
+        hasFlex,
+        isTrue,
+        reason: 'day ${day.date} has a must-include item but no flexible '
+            'activity even though one was available',
+      );
+    }
+  });
+
+  test(
+      'Plan-style target activity counts remain unchanged when no '
+      'must-include activity is present', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    // Two interchangeable flexible activities so push style's two-per-day
+    // "rest day" template values can still be fully filled (a single
+    // activity can never fill both slots on the same day - that's the
+    // existing same-day dedup rule, unrelated to this fix).
+    List<Activity> flexiblePool() => List.generate(
+          2,
+          (i) => Activity(
+            id: 'flex-only-$i',
+            title: 'Flexible pick $i',
+            category: 'Outside',
+            durationMinutes: 30,
+            maxPerWeek: 7,
+            allowedWeekdays: Activity.allWeekdays,
+          ),
+        );
+
+    final expectedTotals = {
+      PlanStyle.gentle: 3,
+      PlanStyle.balanced: 5,
+      PlanStyle.push: 7,
+    };
+
+    for (final style in PlanStyle.values) {
+      final result = PlannerService.generateWithDiagnostics(
+        weekStart: weekStart,
+        pool: flexiblePool(),
+        seed: 1,
+        planStyle: style,
+      );
+      expect(result.targetActivityCount, expectedTotals[style]);
+      expect(result.scheduledActivityCount, expectedTotals[style]);
+    }
+  });
+
+  test(
+      'Must-claimed zero-target rest-day flexible fill is deterministic for '
+      'the same seed', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    Activity must() => Activity(
+          id: 'must-deterministic',
+          title: 'Eat Together',
+          category: 'Couple time',
+          durationMinutes: 30,
+          maxPerWeek: 6,
+          allowedWeekdays: [1, 2, 3, 4, 5, 6],
+          mustIncludeInPlans: true,
+        );
+    List<Activity> flexiblePool() => List.generate(
+          6,
+          (i) => Activity(
+            id: 'flex-$i',
+            title: 'Flexible $i',
+            category: 'Outside',
+            durationMinutes: 30,
+            maxPerWeek: 7,
+            allowedWeekdays: Activity.allWeekdays,
+          ),
+        );
+
+    final run1 = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [must(), ...flexiblePool()],
+      seed: 6,
+      planStyle: PlanStyle.gentle,
+    );
+    final run2 = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [must(), ...flexiblePool()],
+      seed: 6,
+      planStyle: PlanStyle.gentle,
+    );
+
+    expect(_dayPlanSignature(run1), _dayPlanSignature(run2));
   });
 
   test(
@@ -5177,9 +5367,11 @@ void main() {
     // Balanced style targets 5 flexible slots/week; the must-include
     // activity claiming up to 6 days/week in both chunks should not shrink
     // that, since must-include placements no longer count against the
-    // normal per-day quota in either chunk.
-    expect(week1FlexCount, 5);
-    expect(week2FlexCount, 5);
+    // normal per-day quota in either chunk. For this seed, both chunks'
+    // zero-target "rest" days also land on a must-claimed weekday, so the
+    // minimum-flexible-target-of-1 top-up reaches all 7 days each week.
+    expect(week1FlexCount, 7);
+    expect(week2FlexCount, 7);
   });
 
   test(

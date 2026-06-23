@@ -180,8 +180,18 @@ class PlannerService {
       // Must-include items above are additive, not subtracted from this
       // count: flexible fill always targets the day's full normal
       // plan-style quota, so a must-include placement never shrinks how
-      // much flexible variety the day gets.
-      for (var j = 0; j < targetCount; j++) {
+      // much flexible variety the day gets. On top of that, a plan-style
+      // "rest day" (targetCount 0) that a must-include item already
+      // claimed still gets a chance at exactly one flexible activity, so
+      // must-include means "added first, the plan still fills the rest
+      // around it," not "this item alone satisfies the day." Days with no
+      // must-include item keep the plan style's normal zero-target rest
+      // days untouched. This doesn't change targetActivityCount: it's an
+      // opportunistic top-up on top of the plan style's ask, not a new
+      // formal target diagnostics should flag as blocked if unfilled.
+      final flexibleAttempts =
+          targetCount == 0 && mustItemsForDay.isNotEmpty ? 1 : targetCount;
+      for (var j = 0; j < flexibleAttempts; j++) {
         final act = _pickActivity(
           pool: activitiesPool,
           weekday: date.weekday,
