@@ -1029,7 +1029,8 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                       ),
                     ),
                     subtitle: Text(
-                      'The planner schedules this first, up to its max per week.',
+                      'The planner adds this first, then still fills the '
+                      'rest of the plan with other activities.',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         color: textMuted,

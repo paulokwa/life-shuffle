@@ -4190,7 +4190,10 @@ void main() {
 
     expect(find.text('Must include in plans'), findsOneWidget);
     expect(
-      find.text('The planner schedules this first, up to its max per week.'),
+      find.text(
+        'The planner adds this first, then still fills the rest of the '
+        'plan with other activities.',
+      ),
       findsOneWidget,
     );
 
@@ -4585,8 +4588,8 @@ void main() {
   });
 
   test(
-      'Must-include activity is scheduled before flexible activities, '
-      'claiming slots they would otherwise fill', () {
+      'Must-include activity is scheduled first but does not crowd out '
+      'flexible variety', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final mustActivity = Activity(
       id: 'must-priority',
@@ -4613,16 +4616,144 @@ void main() {
       weekStart: weekStart,
       pool: [mustActivity, ...flexibleActivities],
       seed: 2,
-      planStyle: PlanStyle.gentle,
+      planStyle: PlanStyle.balanced, // template totals 5 flexible slots/week
     );
 
     final allPlanned = plan.expand((day) => day.activities).toList();
-    expect(allPlanned.length, 7); // must-include claims every day
-    expect(
-      allPlanned.every((a) => a.activity.id == mustActivity.id),
-      isTrue,
+    final mustCount =
+        allPlanned.where((a) => a.activity.id == mustActivity.id).length;
+    final flexCount =
+        allPlanned.where((a) => a.activity.id.startsWith('flex-')).length;
+
+    expect(mustCount, 7); // must-include still claims every allowed day
+    // Flexible fill still reaches balanced style's full 5-per-week target
+    // alongside the must-include item, instead of being crowded out by it
+    // the way it would be if must-include placements counted against the
+    // day's normal plan-style quota.
+    expect(flexCount, 5);
+    expect(allPlanned.length, 12);
+
+    for (final day in plan) {
+      final idsToday = day.activities.map((a) => a.activity.id).toList();
+      expect(idsToday.toSet().length, idsToday.length); // no day duplicates
+    }
+  });
+
+  test(
+      'Flexible activities are still generated on days that already contain '
+      'a must-include activity', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final must = Activity(
+      id: 'must-with-flex',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
     );
-    expect(allPlanned.any((a) => a.activity.id.startsWith('flex-')), isFalse);
+    final flexible = Activity(
+      id: 'flex-with-must',
+      title: 'Flexible pick',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [must, flexible],
+      seed: 4,
+      planStyle: PlanStyle.balanced,
+    );
+
+    final daysWithBoth = plan.where((day) {
+      final ids = day.activities.map((a) => a.activity.id).toSet();
+      return ids.contains(must.id) && ids.contains(flexible.id);
+    });
+
+    // Balanced style targets 5 of the 7 days with 1 flexible slot each;
+    // since the must-include activity claims every day and never blocks
+    // flexible eligibility, those same 5 days should also get the
+    // flexible activity rather than just the must-include item alone.
+    expect(daysWithBoth.length, 5);
+  });
+
+  test(
+      'Must-include placements do not change the plan-style target '
+      'activity count used for diagnostics', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final flexible = Activity(
+      id: 'flex-baseline',
+      title: 'Flexible baseline',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final must = Activity(
+      id: 'must-baseline',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
+    );
+
+    final withoutMust = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: [flexible],
+      seed: 3,
+      planStyle: PlanStyle.balanced,
+    );
+    final withMust = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: [flexible, must],
+      seed: 3,
+      planStyle: PlanStyle.balanced,
+    );
+
+    // Adding a must-include activity to the pool does not change the
+    // balanced style's normal flexible target count (5/week) - must
+    // placements are additive on top of it, not subtracted from it.
+    expect(withoutMust.targetActivityCount, 5);
+    expect(withMust.targetActivityCount, 5);
+    expect(withoutMust.scheduledActivityCount, 5);
+    expect(withMust.scheduledActivityCount, 12); // 5 flexible + 7 must
+  });
+
+  test(
+      'Flexible fill never re-adds a must-include activity on a day beyond '
+      'its claimed subset', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-5-of-6',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 5,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 9,
+      planStyle: PlanStyle.push, // every allowed day also gets a flex slot
+    );
+
+    final occurrences = plan
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+
+    // maxPerWeek still caps it at 5 even though push-style flexible fill
+    // now tries every day, including the one allowed day not in its
+    // claimed must-include subset.
+    expect(occurrences, 5);
   });
 
   test('Must-include activity is skipped entirely when disabled', () {
@@ -5000,6 +5131,55 @@ void main() {
     // its 6-per-week count in both weeks, not just once across the horizon.
     expect(week1MustCount, 6);
     expect(week2MustCount, 6);
+  });
+
+  test(
+      'RangePlannerService still fills the normal flexible quota per week '
+      'when a must-include activity is present in a twoWeek range', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final must = Activity(
+      id: 'must-range-flex',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+    );
+    final flexible = Activity(
+      id: 'flex-range',
+      title: 'Flexible pick',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final range = RangePlannerService.generate(
+      type: RangeType.twoWeek,
+      start: weekStart,
+      pool: [must, flexible],
+      seed: 1,
+      planStyle: PlanStyle.balanced,
+    );
+
+    final week1FlexCount = range.days
+        .sublist(0, 7)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == flexible.id)
+        .length;
+    final week2FlexCount = range.days
+        .sublist(7, 14)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == flexible.id)
+        .length;
+
+    // Balanced style targets 5 flexible slots/week; the must-include
+    // activity claiming up to 6 days/week in both chunks should not shrink
+    // that, since must-include placements no longer count against the
+    // normal per-day quota in either chunk.
+    expect(week1FlexCount, 5);
+    expect(week2FlexCount, 5);
   });
 
   test(

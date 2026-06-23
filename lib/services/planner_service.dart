@@ -122,8 +122,11 @@ class PlannerService {
     template.shuffle(rng);
 
     // Must-include activities are scheduled before flexible suggestions, so
-    // they claim their days first; the flexible loop below then only fills
-    // whatever of each day's template slots remain. Computed before the
+    // they claim their days first. They are additive baseline items, not a
+    // bite out of the day's normal plan-style quota: the flexible loop below
+    // still fills the day's full template target count regardless of how
+    // many must-include items already landed on it, so a must-include
+    // activity can't crowd out normal plan variety. Computed before the
     // flexible loop runs but doesn't consume rng draws unless at least one
     // pool activity has mustIncludeInPlans set, so existing flexible-only
     // pools see unchanged scheduling.
@@ -174,8 +177,11 @@ class PlannerService {
         );
       }
 
-      final remainingSlots = max(0, targetCount - mustItemsForDay.length);
-      for (var j = 0; j < remainingSlots; j++) {
+      // Must-include items above are additive, not subtracted from this
+      // count: flexible fill always targets the day's full normal
+      // plan-style quota, so a must-include placement never shrinks how
+      // much flexible variety the day gets.
+      for (var j = 0; j < targetCount; j++) {
         final act = _pickActivity(
           pool: activitiesPool,
           weekday: date.weekday,

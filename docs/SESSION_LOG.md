@@ -1981,3 +1981,31 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Activities can be marked "Must include in plans" in the editor; the planner guarantees their requested weekly count (subject to allowed days) before filling the rest of the week with flexible suggestions, and the editor prevents saving an impossible max-per-week/allowed-days combination.
 - **Next recommended step**: None queued for this slice. Revisit `docs/PARKING_LOT.md` for what's next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-23 - MVP 2 slice 8b: must-include no longer shrinks flexible variety
+
+- **Goal**: Fix a product issue manual testing found in slice 8 — a heavily must-include activity (e.g. "Eat Together" 6/week) was crowding out flexible suggestions and dominating the plan, because must-include placements counted against each day's normal plan-style quota instead of being additive baseline content.
+- **Summary**: In `PlannerService.generateWithDiagnostics`, must-include placements are still credited up front and still claim their days first, but the flexible fill loop now always targets the day's full plan-style template count (`targetCount`) regardless of how many must-include items already landed on that day - replacing the previous `max(0, targetCount - mustItemsForDay.length)` with just `targetCount`. The existing up-front scheduled-count/scheduled-day bookkeeping (from slice 8's double-booking fix) still prevents flexible fill from ever re-adding a must-include activity on a day it already claimed or beyond its `maxPerWeek` cap, so the change is purely about not shrinking the *other* activities' quota. Updated the "Must include in plans" helper text to "The planner adds this first, then still fills the rest of the plan with other activities." so the UI sets the right expectation.
+- **Files changed**:
+  - `lib/services/planner_service.dart`
+  - `lib/screens/activities_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Must-include placements are additive on top of the normal per-day plan-style quota, never subtracted from it - this was the explicit product correction for this slice, reversing slice 8's `targetCount - mustItemsForDay.length` behavior.
+  - Left `targetActivityCount`/`mustIncludeShortfallCount` diagnostics, the deterministic allowed-days subset selection, the editor's max-per-week clamp, and the no-double-booking bookkeeping untouched, since none of those were the reported problem and the fix is isolated to the flexible loop's iteration bound.
+  - Manual Add-to-plan items were confirmed unaffected either way: they were already merged in after generation by `_applyManualItems()` and never counted against the per-day plan-style quota in the first place, so this change doesn't alter their behavior. Not a surprising finding - manual items and must-include items now both behave as additive, capacity-unaware baseline content, which is consistent rather than coincidental.
+- **Tests run**:
+  - `dart format` on touched Dart files - no changes needed.
+  - `flutter test` - passed, 270/270 tests across all three test files (4 net new in `widget_test.dart`, plus one existing test rewritten in place since it asserted the old crowding-out behavior as if it were correct: rewrote "Must-include activity is scheduled before flexible activities, claiming slots they would otherwise fill" into "...does not crowd out flexible variety"; added "Flexible activities are still generated on days that already contain a must-include activity", "Must-include placements do not change the plan-style target activity count used for diagnostics", "Flexible fill never re-adds a must-include activity on a day beyond its claimed subset", and "RangePlannerService still fills the normal flexible quota per week when a must-include activity is present in a twoWeek range"; also updated the helper-text assertion in the existing editor toggle test).
+  - `flutter analyze --no-fatal-infos` - passed, the same 20 pre-existing info-level lints in unrelated files, no errors.
+  - `flutter build web` - passed.
+  - `git diff --check` - no whitespace errors.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains gitignored/untracked, `docs/MASTER_PLAN.md` untouched, and no exact recurring-event scheduling, drag/drop, date-moving, editable month cells, custom-horizon UI, native PDF, history/archive persistence, Firestore rules changes, or ICS feed/Netlify behavior changes were added.
+- **Current state**: Must-include activities are scheduled first and still guarantee their requested weekly count, but no longer reduce how many flexible activities the planner adds around them - the plan keeps its normal variety alongside the guaranteed baseline item(s).
+- **Next recommended step**: None queued for this slice. Revisit `docs/PARKING_LOT.md` for what's next.
+- **Open questions**: None.
