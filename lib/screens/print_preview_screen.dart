@@ -17,6 +17,12 @@ String _viewModeLabel(RangeType mode) => switch (mode) {
       RangeType.month => 'Month view',
     };
 
+/// Max content width for the printable plan, by whether it's a month grid
+/// (wider) or a week/2-week day list. Shared by the on-screen preview and
+/// the controls-free print-only view so both lay out identically.
+double _printContentMaxWidth(RangeType viewMode) =>
+    viewMode == RangeType.month ? 960 : 720;
+
 /// Read-only, print-friendly weekly view for the selected calendar.
 ///
 /// Pushed as a new route, so [AppState] is passed in explicitly and
@@ -42,30 +48,129 @@ class _PrintPreviewView extends StatefulWidget {
 }
 
 class _PrintPreviewViewState extends State<_PrintPreviewView> {
-  // Screen-only navigation/print controls are removed from the widget tree
-  // (not just visually hidden) for the one frame in which the browser
-  // print dialog is triggered, so Flutter web's canvas-painted output for
-  // that frame contains only the calendar content. `triggerBrowserPrint()`
-  // blocks until the print dialog closes on the main browsers this app
-  // targets, so it is safe to restore controls right after it returns.
-  bool _printing = false;
+  // Pushes a separate, controls-free route to actually trigger the browser
+  // print dialog rather than toggling a flag to hide controls for one
+  // frame of *this* screen. The one-frame approach assumed
+  // `triggerBrowserPrint()` blocks until the print dialog closes, which
+  // holds on desktop browsers but not on mobile (the call returns
+  // immediately while the OS print/PDF UI opens asynchronously) - so
+  // restoring controls right after the call returned could happen well
+  // before the browser/OS actually captured the page, putting the back
+  // arrow and print icon right back into the captured PDF. A separate
+  // route that never has those controls in its tree at all has no such
+  // timing race: whenever the snapshot is taken, there is nothing to hide.
+  Future<void> _handlePrint() async {
+    final state = AppStateScope.of(context);
+    final printed = await Navigator.of(context).push<bool>(
+      PageRouteBuilder<bool>(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, __, ___) => _PrintOnlyView(appState: state),
+      ),
+    );
+    if (!mounted || printed != false) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Use your browser or device print option to print this page.'),
+      ),
+    );
+  }
 
-  void _handlePrint() {
-    setState(() => _printing = true);
+  @override
+  Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    return Scaffold(
+      key: const ValueKey('print-preview-screen'),
+      backgroundColor: surfaceWhite,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: _printContentMaxWidth(state.viewMode),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ScreenControlsRow(onPrint: _handlePrint),
+                  const SizedBox(height: 16),
+                  const _PrintableContent(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen route containing only [_PrintableContent] - no back arrow,
+/// no "Print preview" label, no print icon, ever - shown while the browser
+/// print/PDF dialog is open. [_PrintPreviewView] stays underneath on the
+/// navigation stack with its controls intact, so the user can always get
+/// back to it (system/browser back) and print again.
+class _PrintOnlyView extends StatefulWidget {
+  const _PrintOnlyView({required this.appState});
+
+  final AppState appState;
+
+  @override
+  State<_PrintOnlyView> createState() => _PrintOnlyViewState();
+}
+
+class _PrintOnlyViewState extends State<_PrintOnlyView> {
+  @override
+  void initState() {
+    super.initState();
+    // Waits for this controls-free frame to actually paint before
+    // triggering print, then only pops itself automatically when printing
+    // could not be started at all (non-web). When it did start, this view
+    // is left in place - there's no reliable cross-browser signal that the
+    // print/PDF flow has finished, so auto-restoring controls would
+    // reintroduce the original timing race. The user backs out manually
+    // once they're done.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final printed = triggerBrowserPrint();
-      if (!mounted) return;
-      setState(() => _printing = false);
-      if (!printed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Use your browser or device print option to print this page.'),
-          ),
-        );
+      if (!printed && mounted) {
+        Navigator.of(context).pop(false);
       }
     });
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppStateScope(
+      state: widget.appState,
+      child: Scaffold(
+        key: const ValueKey('print-only-screen'),
+        backgroundColor: surfaceWhite,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: _printContentMaxWidth(widget.appState.viewMode),
+                ),
+                child: const _PrintableContent(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The actual printable plan: calendar title, view/range labels, and the
+/// day list or month grid. Shared, unchanged, between the on-screen
+/// preview (under [_ScreenControlsRow]) and [_PrintOnlyView] (alone), so
+/// both ever show exactly the same plan content.
+class _PrintableContent extends StatelessWidget {
+  const _PrintableContent();
 
   @override
   Widget build(BuildContext context) {
@@ -85,86 +190,69 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
             : null)
         : TextWeekExportService.weekRangeLabel(sortedWeekPlan);
 
-    return Scaffold(
-      key: const ValueKey('print-preview-screen'),
-      backgroundColor: surfaceWhite,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isMonthView ? 960 : 720),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!_printing) ...[
-                    _ScreenControlsRow(onPrint: _handlePrint),
-                    const SizedBox(height: 16),
-                  ],
-                  Text(
-                    state.calendarTitle,
-                    key: const ValueKey('print-preview-calendar-title'),
-                    style: GoogleFonts.lora(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w600,
-                      color: textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _viewModeLabel(viewMode),
-                    key: const ValueKey('print-preview-view-label'),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: primaryTerracotta,
-                    ),
-                  ),
-                  if (rangeLabel != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      rangeLabel,
-                      key: const ValueKey('print-preview-week-range'),
-                      style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
-                    ),
-                  ],
-                  if (viewMode == RangeType.twoWeek) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Printing the visible week only. Use Copy text in '
-                      'Settings for the full generated 2-week range.',
-                      key: const ValueKey('print-preview-two-week-note'),
-                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  if (isMonthView)
-                    if (!monthRangeReady)
-                      const _PendingRangeNotice()
-                    else
-                      _PrintMonthGrid(range: state.generatedRange)
-                  else if (!hasAnyPlanned)
-                    const _EmptyWeekNotice()
-                  else
-                    ...sortedWeekPlan.map(
-                      (day) => Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: _PrintDaySection(day: day),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          state.calendarTitle,
+          key: const ValueKey('print-preview-calendar-title'),
+          style: GoogleFonts.lora(
+            fontSize: 26,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(
+          _viewModeLabel(viewMode),
+          key: const ValueKey('print-preview-view-label'),
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: primaryTerracotta,
+          ),
+        ),
+        if (rangeLabel != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            rangeLabel,
+            key: const ValueKey('print-preview-week-range'),
+            style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+          ),
+        ],
+        if (viewMode == RangeType.twoWeek) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Printing the visible week only. Use Copy text in '
+            'Settings for the full generated 2-week range.',
+            key: const ValueKey('print-preview-two-week-note'),
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+          ),
+        ],
+        const SizedBox(height: 24),
+        if (isMonthView)
+          if (!monthRangeReady)
+            const _PendingRangeNotice()
+          else
+            _PrintMonthGrid(range: state.generatedRange)
+        else if (!hasAnyPlanned)
+          const _EmptyWeekNotice()
+        else
+          ...sortedWeekPlan.map(
+            (day) => Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: _PrintDaySection(day: day),
+            ),
+          ),
+      ],
     );
   }
 }
 
-/// Back/print controls shown only on screen. Removed from the tree
-/// (rather than just hidden) while [PrintPreviewScreen] triggers the
-/// browser print dialog, so this row never appears in printed/PDF output.
+/// Back/print controls for [_PrintPreviewView] only. Printing pushes the
+/// separate, controls-free [_PrintOnlyView] rather than hiding this row in
+/// place, so it never appears in printed/PDF output regardless of when the
+/// browser actually captures the page.
 class _ScreenControlsRow extends StatelessWidget {
   const _ScreenControlsRow({required this.onPrint});
 

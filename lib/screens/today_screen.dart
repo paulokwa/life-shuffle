@@ -4,10 +4,12 @@ import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../state/app_state.dart';
+import '../widgets/bottom_nav_shell.dart' show BottomNavScope, BottomNavTab;
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/activity_plan_card.dart';
+import 'activities_screen.dart' show showActivityFormSheet;
 import 'check_in_one_by_one_screen.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -132,7 +134,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   const SizedBox(height: 12),
                   _ThisWeekCard(planned: planned, done: done, partly: partly),
                   const SizedBox(height: 16),
-                  const _QuickActionsSection(),
+                  _QuickActionsSection(state: state),
                   const SizedBox(height: 16),
                   _TodaysPlanSection(activities: todayActivities),
                 ],
@@ -530,10 +532,13 @@ class _ProgressBar extends StatelessWidget {
 // ─── Quick actions ────────────────────────────────────────────────────────────
 
 class _QuickActionsSection extends StatelessWidget {
-  const _QuickActionsSection();
+  const _QuickActionsSection({required this.state});
+
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
+    final nav = BottomNavScope.maybeOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -551,17 +556,21 @@ class _QuickActionsSection extends StatelessWidget {
           children: [
             Expanded(
               child: QuickActionCard(
+                key: const ValueKey('today-quick-action-add-activity'),
                 label: 'Add activity',
                 icon: Icons.add_rounded,
                 accentColor: primaryTerracotta,
+                onTap: () => showActivityFormSheet(context),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: QuickActionCard(
+                key: const ValueKey('today-quick-action-generate-week'),
                 label: 'Generate week',
                 icon: Icons.bolt_rounded,
                 accentColor: accentSage,
+                onTap: state.regenerate,
               ),
             ),
           ],
@@ -571,17 +580,25 @@ class _QuickActionsSection extends StatelessWidget {
           children: [
             Expanded(
               child: QuickActionCard(
+                key: const ValueKey('today-quick-action-view-plan'),
                 label: 'View plan',
                 icon: Icons.calendar_today_rounded,
                 accentColor: dustySky,
+                onTap: nav == null
+                    ? null
+                    : () => nav.onNavigate(BottomNavTab.plan),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: QuickActionCard(
+                key: const ValueKey('today-quick-action-view-progress'),
                 label: 'View progress',
                 icon: Icons.trending_up_rounded,
                 accentColor: mauve,
+                onTap: nav == null
+                    ? null
+                    : () => nav.onNavigate(BottomNavTab.progress),
               ),
             ),
           ],

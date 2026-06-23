@@ -3155,7 +3155,8 @@ void main() {
   });
 
   testWidgets(
-      'Print preview removes back arrow and label while printing, keeps content',
+      'Printing pushes a controls-free view containing no back arrow, '
+      'label, or print icon, but keeps calendar content',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -3176,22 +3177,51 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('print-preview-print-button')));
     await tester.pump();
 
-    // The frame rendered the instant browser print is triggered must not
-    // contain the back arrow or the "Print preview" label, since that
-    // frame is what a canvas-rendered Flutter web app's print output
-    // captures. Calendar content stays present.
-    expect(find.text('Print preview'), findsNothing);
+    // The pushed print-only view never has the back arrow, the "Print
+    // preview" label, or the print icon in its own subtree, no matter when
+    // the browser/OS actually captures the page for printing - there is
+    // nothing in this route to hide on a timer. Calendar content is still
+    // present, unchanged.
+    final printOnly = find.byKey(const ValueKey('print-only-screen'));
+    expect(printOnly, findsOneWidget);
     expect(
-      find.byKey(const ValueKey('print-preview-back-button')),
+      find.descendant(of: printOnly, matching: find.text('Print preview')),
       findsNothing,
     );
     expect(
-      find.byKey(const ValueKey('print-preview-calendar-title')),
+      find.descendant(
+        of: printOnly,
+        matching: find.byKey(const ValueKey('print-preview-back-button')),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: printOnly,
+        matching: find.byKey(const ValueKey('print-preview-print-button')),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: printOnly,
+        matching: find.byKey(const ValueKey('print-preview-calendar-title')),
+      ),
       findsOneWidget,
     );
 
-    await tester.pump();
+    // `triggerBrowserPrint()` always returns false on the test VM (there is
+    // no browser to trigger), so the print-only view pops itself
+    // automatically and the regular screen's fallback guidance shows.
+    await tester.pumpAndSettle();
 
+    expect(find.byKey(const ValueKey('print-only-screen')), findsNothing);
+    expect(
+      find.text(
+        'Use your browser or device print option to print this page.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Print preview'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('print-preview-back-button')),
@@ -7193,212 +7223,6 @@ void main() {
     expect(saved.removedMap, isEmpty);
   });
 
-  testWidgets('Plan Export copies current week text',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.confirmCalendarTitle('Weekend ideas');
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(find.text('Week plan copied'), findsOneWidget);
-    expect(copiedText, isNotNull);
-    expect(copiedText, contains('Weekend ideas week'));
-    expect(copiedText, contains('Category:'));
-    expect(copiedText, contains('Check-in:'));
-    expect(copiedText, contains('Locked:'));
-  });
-
-  testWidgets('Plan Export reflects an occurrence time/category override',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final activity = Activity(
-      id: 'export-occurrence-override',
-      title: 'Cook together',
-      category: 'Couple time',
-      durationMinutes: 60,
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-    );
-    final appState = AppState(activities: [activity]);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
-    appState.editPlannedOccurrence(
-      day,
-      planned,
-      timeSlot: '7:30 PM',
-      category: 'Social',
-    );
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(copiedText, isNotNull);
-    expect(copiedText, contains('7:30 PM'));
-    expect(copiedText, contains('Category: Social'));
-    expect(activity.category, 'Couple time');
-  });
-
-  testWidgets('Plan Export handles an empty week', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final appState = AppState(activities: const []);
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(
-      find.text('No planned activities this week. Empty week copied.'),
-      findsOneWidget,
-    );
-    expect(copiedText, contains('No planned activities this week.'));
-  });
-
-  testWidgets(
-      'Plan Export in 2-week view copies the full generated 2-week range',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.twoWeek);
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(find.text('2-week plan copied'), findsOneWidget);
-    final expectedText = TextWeekExportService.generate(
-      calendarTitle: appState.calendarTitle,
-      plan: appState.generatedRange.days,
-      rangeType: RangeType.twoWeek,
-      options: appState.exportPrintOptions,
-      difficultyEnabled: appState.difficultyEnabled,
-      energyEnabled: appState.energyEnabled,
-      socialEnabled: appState.socialEnabled,
-    );
-    // The visible week alone (the first 7 days) is a strict subset of the
-    // full generated 14-day range, so a successful match against the full
-    // range text - not just the visible week's - confirms Copy text didn't
-    // silently fall back to the 7-day view.
-    expect(copiedText, expectedText);
-    expect(appState.generatedRange.days.length, 14);
-  });
-
-  testWidgets(
-      'Plan Export in Month view copies the full generated month range, '
-      'grouped by date', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(find.text('Month plan copied'), findsOneWidget);
-    final expectedText = TextWeekExportService.generate(
-      calendarTitle: appState.calendarTitle,
-      plan: appState.generatedRange.days,
-      rangeType: RangeType.month,
-      options: appState.exportPrintOptions,
-      difficultyEnabled: appState.difficultyEnabled,
-      energyEnabled: appState.energyEnabled,
-      socialEnabled: appState.socialEnabled,
-    );
-    // `expectedText` is built from the exact same full-range day list that
-    // `TextWeekExportService.generate` always groups by date, so matching
-    // it confirms Copy text covers every generated day - not just the
-    // visible 7-day window - grouped by date.
-    expect(copiedText, expectedText);
-    expect(appState.generatedRange.days.length, greaterThan(14));
-  });
-
-  testWidgets(
-      'Plan Export shows a pending message for Month view with no '
-      'generated range, and does not silently generate one',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.setViewMode(RangeType.month);
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-export-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-export-button')));
-    await tester.pump();
-
-    expect(
-      find.text(
-        'No generated month range yet. Tap Generate above, then export.',
-      ),
-      findsOneWidget,
-    );
-    expect(copiedText, isNull);
-    expect(appState.rangeType, RangeType.week);
-    expect(appState.hasSufficientRangeForView, isFalse);
-  });
-
-  testWidgets('Plan Publish feed points users to Settings',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('plan-publish-feed-button')),
-    );
-    await tester.tap(find.byKey(const ValueKey('plan-publish-feed-button')));
-    await tester.pump();
-
-    expect(
-      find.text('Publishing controls are in Settings.'),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('Plan Review week button opens the week review screen',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -7507,6 +7331,46 @@ void main() {
       find.byKey(const ValueKey('plan-range-expansion-card')),
       findsNothing,
     );
+  });
+
+  testWidgets(
+      'Plan range control lays out without overflow at narrow mobile '
+      'widths and still switches views', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    addTearDown(tester.view.reset);
+    // No activities, so the day list renders the plain "No plan yet" card
+    // rather than `_DayBlock`/`_PlanRow` - this test is scoped to the range
+    // selector only, and a long category chip in `_PlanRow` has its own,
+    // separate, pre-existing overflow at very narrow widths that's out of
+    // scope here.
+    final appState = AppState(activities: const []);
+
+    for (final width in [320.0, 375.0, 414.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1.0;
+
+      await _pumpPlanScreen(tester, appState);
+      await tester.pumpAndSettle();
+
+      // A segmented control sized to share the available width exactly
+      // (each option in an `Expanded`) cannot overflow regardless of how
+      // narrow the screen is, unlike a `Row` of independently-padded pills.
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('plan-range-control')), findsOneWidget);
+      expect(find.byKey(const ValueKey('plan-range-week')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('plan-range-twoWeek')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('plan-range-month')), findsOneWidget);
+    }
+
+    await tester.tap(find.byKey(const ValueKey('plan-range-month')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(appState.viewMode, RangeType.month);
   });
 
   testWidgets('Tapping an in-range grid cell opens the day check-in sheet',
@@ -7694,6 +7558,52 @@ void main() {
   });
 
   testWidgets(
+      'Month grid highlights today with a terracotta border and a TODAY '
+      'label, leaving other days unchanged',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    appState.generateRange(RangeType.month);
+    final today = appState.generatedRange.days.first.date;
+    final todayKey = _dateKey(today);
+    final otherDay = appState.generatedRange.days[5];
+    final otherKey = _dateKey(otherDay.date);
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey('month-grid-today-label-$todayKey')),
+      findsOneWidget,
+    );
+    expect(find.text('TODAY'), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('month-grid-month-label-$todayKey')),
+      findsNothing,
+    );
+
+    final todayCell = tester.widget<Container>(
+      find.byKey(ValueKey('month-grid-day-cell-$todayKey')),
+    );
+    final todayBorder =
+        (todayCell.decoration as BoxDecoration).border! as Border;
+    expect(todayBorder.top.color, primaryTerracotta);
+
+    // A non-today in-range day keeps the plain border and shows no label.
+    expect(
+      find.byKey(ValueKey('month-grid-today-label-$otherKey')),
+      findsNothing,
+    );
+    final otherCell = tester.widget<Container>(
+      find.byKey(ValueKey('month-grid-day-cell-$otherKey')),
+    );
+    final otherBorder =
+        (otherCell.decoration as BoxDecoration).border! as Border;
+    expect(otherBorder.top.color, borderWarm);
+  });
+
+  testWidgets(
       'Month grid cell shows a compact item-count summary instead of '
       'full activity chips, and renders without overflow at a narrow '
       'mobile width', (WidgetTester tester) async {
@@ -7701,9 +7611,7 @@ void main() {
     await PersistenceService.init();
     addTearDown(tester.view.reset);
     // 414 logical px (e.g. iPhone 11/XR width) - narrow enough to exercise
-    // month-grid cell sizing, but wide enough to sidestep a separate,
-    // pre-existing overflow in _RangeTypeControl's fixed-width row below
-    // ~400px that predates and is unrelated to this month-grid fix.
+    // month-grid cell sizing on a real phone width.
     tester.view.physicalSize = const Size(414, 800);
     tester.view.devicePixelRatio = 1.0;
 
@@ -7935,6 +7843,112 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CheckInOneByOneScreen), findsOneWidget);
+  });
+
+  testWidgets('Today quick action Add activity opens the activity form sheet',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(state: appState, child: const TodayScreen()),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-add-activity')),
+    );
+    await tester.pumpAndSettle();
+
+    // "Max per week" only appears on the activity template form (not
+    // elsewhere on the Today screen), so finding it confirms the sheet
+    // actually opened rather than just that the tap didn't crash.
+    expect(find.text('Max per week'), findsOneWidget);
+  });
+
+  testWidgets('Today quick action Generate week calls AppState.regenerate',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    expect(appState.canUndoLastRegeneration, isFalse);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(state: appState, child: const TodayScreen()),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-generate-week')),
+    );
+    await tester.pump();
+
+    // `regenerate()` always records an undo snapshot, so this becoming
+    // true is proof the quick action actually called it.
+    expect(appState.canUndoLastRegeneration, isTrue);
+  });
+
+  testWidgets(
+      'Today quick actions View plan and View progress request the right '
+      'bottom nav tab', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    int? requestedTab;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: BottomNavScope(
+            onNavigate: (index) => requestedTab = index,
+            child: const TodayScreen(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-view-plan')),
+    );
+    await tester.pump();
+    expect(requestedTab, BottomNavTab.plan);
+
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-view-progress')),
+    );
+    await tester.pump();
+    expect(requestedTab, BottomNavTab.progress);
+  });
+
+  testWidgets(
+      'Today quick actions View plan and View progress are inert without '
+      'a BottomNavScope ancestor', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(state: appState, child: const TodayScreen()),
+      ),
+    );
+
+    // No BottomNavScope ancestor (e.g. TodayScreen tested in isolation):
+    // tapping must not throw.
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-view-plan')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('today-quick-action-view-progress')),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

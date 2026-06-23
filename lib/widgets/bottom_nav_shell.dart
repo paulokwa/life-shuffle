@@ -7,6 +7,40 @@ import '../screens/activities_screen.dart';
 import '../screens/progress_screen.dart';
 import '../screens/settings_screen.dart';
 
+/// Tab indices for [BottomNavShell], matching its `_items`/`_screens` order.
+/// Lets descendant screens (via [BottomNavScope]) request a tab switch
+/// without hard-coding raw indices at the call site.
+abstract final class BottomNavTab {
+  static const today = 0;
+  static const plan = 1;
+  static const activities = 2;
+  static const progress = 3;
+  static const settings = 4;
+}
+
+/// Exposes [BottomNavShell]'s tab switch to descendant screens (e.g. the
+/// Today screen's quick actions jumping to Plan/Progress) without a second
+/// `Navigator`/route stack. Absent when a screen is hosted outside the
+/// shell (e.g. in isolation in a test), so callers should use
+/// [BottomNavScope.maybeOf] and treat a null result as "no tab navigation
+/// available here" rather than throwing.
+class BottomNavScope extends InheritedWidget {
+  const BottomNavScope({
+    super.key,
+    required this.onNavigate,
+    required super.child,
+  });
+
+  final ValueChanged<int> onNavigate;
+
+  static BottomNavScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BottomNavScope>();
+
+  @override
+  bool updateShouldNotify(BottomNavScope oldWidget) =>
+      onNavigate != oldWidget.onNavigate;
+}
+
 class BottomNavShell extends StatefulWidget {
   const BottomNavShell({super.key});
 
@@ -33,15 +67,20 @@ class _BottomNavShellState extends State<BottomNavShell> {
     SettingsScreen(),
   ];
 
+  void _goToTab(int index) => setState(() => _index = index);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundCream,
-      body: IndexedStack(index: _index, children: _screens),
+      body: BottomNavScope(
+        onNavigate: _goToTab,
+        child: IndexedStack(index: _index, children: _screens),
+      ),
       bottomNavigationBar: _LifeShuffleBottomNav(
         currentIndex: _index,
         items: _items,
-        onTap: (i) => setState(() => _index = i),
+        onTap: _goToTab,
       ),
     );
   }

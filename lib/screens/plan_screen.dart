@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/text_week_export_service.dart';
 import '../theme/app_colors.dart';
 import '../models/activity.dart';
 import '../models/day_plan.dart';
@@ -214,28 +212,6 @@ class PlanScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _OutlineButton(
-                          key: const ValueKey('plan-export-button'),
-                          label: 'Export',
-                          onTap: () => _copyWeekPlanText(context, state),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _OutlineButton(
-                          key: const ValueKey('plan-publish-feed-button'),
-                          label: 'Publish feed',
-                          onTap: () => _showPublishingInSettingsMessage(
-                            context,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: _OutlineButton(
@@ -253,86 +229,11 @@ class PlanScreen extends StatelessWidget {
     );
   }
 
-  /// Snack bar text shown after a successful copy, by [AppState.viewMode].
-  static String _exportSuccessMessage(RangeType mode) => switch (mode) {
-        RangeType.week => 'Week plan copied',
-        RangeType.twoWeek => '2-week plan copied',
-        RangeType.month => 'Month plan copied',
-      };
-
-  static String _exportEmptyMessage(RangeType mode) => switch (mode) {
-        RangeType.week => 'No planned activities this week. Empty week '
-            'copied.',
-        RangeType.twoWeek => 'No planned activities in this 2-week range. '
-            'Empty range copied.',
-        RangeType.month => 'No planned activities in the generated month '
-            'range. Empty range copied.',
-      };
-
-  static Future<void> _copyWeekPlanText(
-    BuildContext context,
-    AppState state,
-  ) async {
-    final exportDays = state.exportDays;
-    if (exportDays == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No generated month range yet. Tap Generate above, then '
-            'export.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final hasPlannedActivities =
-        exportDays.any((day) => day.activities.isNotEmpty);
-    final text = TextWeekExportService.generate(
-      calendarTitle: state.calendarTitle,
-      plan: exportDays,
-      rangeType: state.viewMode,
-      options: state.exportPrintOptions,
-      difficultyEnabled: state.difficultyEnabled,
-      energyEnabled: state.energyEnabled,
-      socialEnabled: state.socialEnabled,
-    );
-
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not copy the plan. Try again.'),
-        ),
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          hasPlannedActivities
-              ? _exportSuccessMessage(state.viewMode)
-              : _exportEmptyMessage(state.viewMode),
-        ),
-      ),
-    );
-  }
-
   static void _openWeekReview(BuildContext context, AppState state) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => WeekReviewScreen(appState: state),
       ),
-    );
-  }
-
-  static void _showPublishingInSettingsMessage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Publishing controls are in Settings.')),
     );
   }
 
@@ -360,50 +261,92 @@ class PlanScreen extends StatelessWidget {
 /// that never regenerates or discards the existing generated range. If the
 /// chosen view needs more days than are currently generated, the Plan
 /// screen shows [_RangeExpansionCard] instead of silently regenerating.
+///
+/// Laid out as a compact segmented control - one outer track with each
+/// option taking an equal [Expanded] share - rather than a `Row` of
+/// independently-padded pills, so the total width is always exactly the
+/// available width and it cannot overflow on narrow phone screens (as low
+/// as 320px). Each label scales down (never up) via [FittedBox] as a second
+/// line of defense if a segment ever gets too tight to fit its text.
 class _RangeTypeControl extends StatelessWidget {
   const _RangeTypeControl({required this.current, required this.onChanged});
 
   final RangeType current;
   final ValueChanged<RangeType> onChanged;
 
+  static const _options = [
+    (RangeType.week, '1 week'),
+    (RangeType.twoWeek, '2 weeks'),
+    (RangeType.month, 'Month'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    const options = [
-      (RangeType.week, '1 week'),
-      (RangeType.twoWeek, '2 weeks'),
-      (RangeType.month, 'Month'),
-    ];
-    return Row(
-      children: options.map((option) {
-        final (type, label) = option;
-        final selected = type == current;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            key: ValueKey('plan-range-${type.name}'),
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onChanged(type),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: selected ? primaryTerracotta : Colors.transparent,
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(
-                  color: selected ? primaryTerracotta : borderWarmStrong,
-                ),
-              ),
-              child: Text(
-                label,
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : textPrimary,
-                ),
+    return Container(
+      key: const ValueKey('plan-range-control'),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: warmBeige,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        children: [
+          for (final (type, label) in _options)
+            Expanded(
+              child: _RangeTypeSegment(
+                type: type,
+                label: label,
+                selected: type == current,
+                onTap: () => onChanged(type),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RangeTypeSegment extends StatelessWidget {
+  const _RangeTypeSegment({
+    required this.type,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final RangeType type;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      key: ValueKey('plan-range-${type.name}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected ? primaryTerracotta : Colors.transparent,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        alignment: Alignment.center,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : textPrimary,
+            ),
           ),
-        );
-      }).toList(),
+        ),
+      ),
     );
   }
 }
@@ -680,21 +623,32 @@ class _MonthDayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isToday = inRange && plan.isToday;
+    final dateKey = PlanScreen._dateKey(plan.date);
     return GestureDetector(
       key: ValueKey(
         inRange
-            ? 'month-grid-day-${PlanScreen._dateKey(plan.date)}'
-            : 'month-grid-out-of-range-cell-${PlanScreen._dateKey(plan.date)}',
+            ? 'month-grid-day-$dateKey'
+            : 'month-grid-out-of-range-cell-$dateKey',
       ),
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
+        key: ValueKey('month-grid-day-cell-$dateKey'),
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: inRange ? backgroundCream : const Color(0xFFF2EEE7),
+          // A subtle terracotta tint/border calls out today's cell without
+          // making the rest of the grid noisier - every other in/out-of-
+          // range cell keeps its existing look.
+          color: inRange
+              ? (isToday ? const Color(0x14C8603A) : backgroundCream)
+              : const Color(0xFFF2EEE7),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: inRange ? borderWarm : const Color(0x0A2C2A26),
+            color: inRange
+                ? (isToday ? primaryTerracotta : borderWarm)
+                : const Color(0x0A2C2A26),
+            width: isToday ? 1.4 : 1,
           ),
         ),
         child: inRange
@@ -702,8 +656,8 @@ class _MonthDayCell extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Scales down (never up) rather than overflowing - the
-                  // month label next to the day number is the widest thing
-                  // in a cell and is the first to run out of room on
+                  // month/today label next to the day number is the widest
+                  // thing in a cell and is the first to run out of room on
                   // narrow phone widths.
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -712,12 +666,26 @@ class _MonthDayCell extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
-                        if (showMonthLabel) ...[
+                        // "Today" takes priority over the month label in
+                        // the rare case both would apply to the same cell -
+                        // it's the more useful thing to flag at a glance.
+                        if (isToday) ...[
+                          Text(
+                            'TODAY',
+                            key: ValueKey('month-grid-today-label-$dateKey'),
+                            style: GoogleFonts.dmSans(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800,
+                              color: primaryTerracotta,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                        ] else if (showMonthLabel) ...[
                           Text(
                             PlanScreen._monthAbbrevs[plan.date.month - 1],
                             key: ValueKey(
-                              'month-grid-month-label-'
-                              '${PlanScreen._dateKey(plan.date)}',
+                              'month-grid-month-label-$dateKey',
                             ),
                             style: GoogleFonts.dmSans(
                               fontSize: 9,
@@ -731,14 +699,12 @@ class _MonthDayCell extends StatelessWidget {
                         Text(
                           '${plan.date.day}',
                           key: ValueKey(
-                            'month-grid-day-number-'
-                            '${PlanScreen._dateKey(plan.date)}',
+                            'month-grid-day-number-$dateKey',
                           ),
                           style: GoogleFonts.dmSans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color:
-                                plan.isToday ? primaryTerracotta : textPrimary,
+                            color: isToday ? primaryTerracotta : textPrimary,
                           ),
                         ),
                       ],
