@@ -17,6 +17,9 @@ class CategoryChip extends StatelessWidget {
       ),
       child: Text(
         category,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.dmSans(
           fontSize: 12,
           fontWeight: FontWeight.w500,

@@ -7341,9 +7341,8 @@ void main() {
     addTearDown(tester.view.reset);
     // No activities, so the day list renders the plain "No plan yet" card
     // rather than `_DayBlock`/`_PlanRow` - this test is scoped to the range
-    // selector only, and a long category chip in `_PlanRow` has its own,
-    // separate, pre-existing overflow at very narrow widths that's out of
-    // scope here.
+    // selector only. `_PlanRow`'s own narrow-width overflow with a long
+    // category name is covered separately below.
     final appState = AppState(activities: const []);
 
     for (final width in [320.0, 375.0, 414.0]) {
@@ -7371,6 +7370,41 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(appState.viewMode, RangeType.month);
+  });
+
+  testWidgets(
+      'Plan day-list activity row (_PlanRow) lays out without overflow at '
+      'narrow mobile widths with a long category name',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    addTearDown(tester.view.reset);
+    final activity = Activity(
+      id: 'long-category-row',
+      title: 'Tidy the hallway closet',
+      category: 'Chores / life admin',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [activity]);
+    final day = _todayWithActivities(appState);
+    final planned = day.activities.first;
+
+    for (final width in [320.0, 375.0, 414.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1.0;
+
+      await _pumpPlanScreen(tester, appState);
+      await tester.pumpAndSettle();
+
+      // The chip is `Flexible` and ellipsizes internally, so a long
+      // category name shrinks to fit instead of forcing the row (and the
+      // whole `Row` it lives in) wider than the screen.
+      expect(tester.takeException(), isNull);
+      expect(find.text(planned.timeSlot), findsWidgets);
+      expect(find.textContaining('Chores'), findsWidgets);
+    }
   });
 
   testWidgets('Tapping an in-range grid cell opens the day check-in sheet',

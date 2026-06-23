@@ -2276,6 +2276,8 @@ class _PlanRow extends StatelessWidget {
             children: [
               Text(
                 activity.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -2290,7 +2292,15 @@ class _PlanRow extends StatelessWidget {
                     style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                   ),
                   const SizedBox(width: 8),
-                  CategoryChip(category: activity.category),
+                  // The time stays at its natural width (it's short and
+                  // must stay fully visible) while the chip - the widest,
+                  // most variable-length thing in this row - takes
+                  // whatever's left and ellipsizes via `CategoryChip`'s own
+                  // overflow handling, rather than forcing the row wider
+                  // than the screen on narrow phones.
+                  Flexible(
+                    child: CategoryChip(category: activity.category),
+                  ),
                 ],
               ),
             ],
