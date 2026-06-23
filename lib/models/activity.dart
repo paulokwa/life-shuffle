@@ -13,6 +13,13 @@ class Activity {
   bool noConsecutiveDays;
   bool enabled;
 
+  /// When true, [PlannerService] schedules this activity (up to
+  /// [maxPerWeek] times across [allowedWeekdays]) before filling remaining
+  /// plan capacity with flexible suggestions. Defaults to false so existing
+  /// activities and old saved data keep today's flexible-suggestion
+  /// behaviour.
+  bool mustIncludeInPlans;
+
   static const categories = [
     'At home',
     'Outside',
@@ -61,6 +68,7 @@ class Activity {
     List<int>? allowedWeekdays,
     this.noConsecutiveDays = false,
     this.enabled = true,
+    this.mustIncludeInPlans = false,
   })  : difficulty = _normalizeDifficulty(difficulty),
         energy = _normalizeOption(
           energy,
@@ -97,6 +105,7 @@ class Activity {
       allowedWeekdays: List<int>.from(allowedWeekdays),
       noConsecutiveDays: noConsecutiveDays,
       enabled: enabled,
+      mustIncludeInPlans: mustIncludeInPlans,
     );
   }
 
@@ -114,6 +123,7 @@ class Activity {
       'allowedWeekdays': allowedWeekdays,
       'noConsecutiveDays': noConsecutiveDays,
       'enabled': enabled,
+      'mustIncludeInPlans': mustIncludeInPlans,
     };
   }
 
@@ -139,6 +149,9 @@ class Activity {
           ? map['noConsecutiveDays'] as bool
           : false,
       enabled: map['enabled'] is bool ? map['enabled'] as bool : true,
+      mustIncludeInPlans: map['mustIncludeInPlans'] is bool
+          ? map['mustIncludeInPlans'] as bool
+          : false,
     );
   }
 

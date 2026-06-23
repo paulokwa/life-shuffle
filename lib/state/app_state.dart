@@ -752,6 +752,7 @@ class AppState extends ChangeNotifier {
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
     required bool enabled,
+    bool mustIncludeInPlans = false,
   }) {
     final id = 'custom_${DateTime.now().microsecondsSinceEpoch}';
     activities.add(
@@ -768,6 +769,7 @@ class AppState extends ChangeNotifier {
         allowedWeekdays: allowedWeekdays,
         noConsecutiveDays: noConsecutiveDays,
         enabled: enabled,
+        mustIncludeInPlans: mustIncludeInPlans,
       ),
     );
     _persist();
@@ -798,6 +800,7 @@ class AppState extends ChangeNotifier {
         allowedWeekdays: starter.allowedWeekdays,
         noConsecutiveDays: starter.noConsecutiveDays,
         enabled: starter.enabled,
+        mustIncludeInPlans: starter.mustIncludeInPlans,
       ),
     );
     _persist();
@@ -818,6 +821,7 @@ class AppState extends ChangeNotifier {
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
     required bool enabled,
+    bool mustIncludeInPlans = false,
   }) {
     final idx = activities.indexWhere((a) => a.id == id);
     if (idx < 0) return;
@@ -841,7 +845,8 @@ class AppState extends ChangeNotifier {
       ..maxPerWeek = maxPerWeek
       ..allowedWeekdays = List<int>.from(allowedWeekdays)
       ..noConsecutiveDays = noConsecutiveDays
-      ..enabled = enabled;
+      ..enabled = enabled
+      ..mustIncludeInPlans = mustIncludeInPlans;
     _persist();
     notifyListeners();
   }
@@ -1795,13 +1800,26 @@ class AppState extends ChangeNotifier {
   String? _buildPlannerConflictMessage(
     RangePlannerGenerationResult generation,
   ) {
-    if (!generation.hasBlockedActivitySlots) return null;
-    final count = generation.unfilledActivityCount;
-    final slotLabel = count == 1 ? 'slot was' : 'slots were';
-    return 'This plan is lighter than expected because $count activity '
+    final messages = <String>[];
+    if (generation.hasBlockedActivitySlots) {
+      final count = generation.unfilledActivityCount;
+      final slotLabel = count == 1 ? 'slot was' : 'slots were';
+      messages.add(
+        'This plan is lighter than expected because $count activity '
         '$slotLabel blocked by rules. Try relaxing weekdays, increasing max '
         'per week, turning off no-consecutive-days, or choosing a lighter '
-        'plan style.';
+        'plan style.',
+      );
+    }
+    if (generation.mustIncludeShortfallCount > 0) {
+      messages.add(
+        'A "Must include in plans" activity couldn\'t reach its max per '
+        'week because it has fewer allowed days than that. Add more '
+        'allowed days or lower its max per week.',
+      );
+    }
+    if (messages.isEmpty) return null;
+    return messages.join('\n\n');
   }
 
   /// Applies saved check-in/lock state to [_generatedDays] (the whole

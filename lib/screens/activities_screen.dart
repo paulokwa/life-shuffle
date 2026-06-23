@@ -229,6 +229,7 @@ Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
           required List<int> allowedWeekdays,
           required bool noConsecutiveDays,
           required bool enabled,
+          required bool mustIncludeInPlans,
         }) {
           if (activity == null) {
             appState.addActivity(
@@ -243,6 +244,7 @@ Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
               allowedWeekdays: allowedWeekdays,
               noConsecutiveDays: noConsecutiveDays,
               enabled: enabled,
+              mustIncludeInPlans: mustIncludeInPlans,
             );
           } else {
             appState.updateActivity(
@@ -258,6 +260,7 @@ Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
               allowedWeekdays: allowedWeekdays,
               noConsecutiveDays: noConsecutiveDays,
               enabled: enabled,
+              mustIncludeInPlans: mustIncludeInPlans,
             );
           }
           Navigator.of(sheetContext).pop();
@@ -793,6 +796,7 @@ class _ActivityFormSheet extends StatefulWidget {
     required List<int> allowedWeekdays,
     required bool noConsecutiveDays,
     required bool enabled,
+    required bool mustIncludeInPlans,
   }) onSave;
 
   @override
@@ -812,6 +816,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
   late Set<int> _allowedWeekdays;
   late bool _noConsecutiveDays;
   late bool _enabled;
+  late bool _mustIncludeInPlans;
 
   @override
   void initState() {
@@ -834,6 +839,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     );
     _noConsecutiveDays = activity?.noConsecutiveDays ?? false;
     _enabled = activity?.enabled ?? true;
+    _mustIncludeInPlans = activity?.mustIncludeInPlans ?? false;
   }
 
   @override
@@ -968,7 +974,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                 TextFormField(
                   controller: _maxPerWeekController,
                   keyboardType: TextInputType.number,
-                  decoration: _inputDecoration('Max per week'),
+                  decoration: _inputDecoration(
+                    'Max per week',
+                    helperText:
+                        'Clamped to ${_allowedWeekdays.length} based on allowed days',
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) return null;
                     final parsed = int.tryParse(value.trim());
@@ -991,8 +1001,44 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                       } else {
                         _allowedWeekdays.add(weekday);
                       }
+                      _clampMaxPerWeekToAllowedDays();
                     });
                   },
+                ),
+                const SizedBox(height: 12),
+                Material(
+                  color: surfaceWhite,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: const BorderSide(color: borderWarm),
+                  ),
+                  child: SwitchListTile.adaptive(
+                    value: _mustIncludeInPlans,
+                    activeThumbColor: accentSage,
+                    activeTrackColor: accentSage.withValues(alpha: 0.28),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 2,
+                    ),
+                    title: Text(
+                      'Must include in plans',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'The planner schedules this first, up to its max per week.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: textMuted,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _mustIncludeInPlans = value);
+                    },
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Material(
@@ -1093,10 +1139,12 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     );
   }
 
-  InputDecoration _inputDecoration(String label) {
+  InputDecoration _inputDecoration(String label, {String? helperText}) {
     return InputDecoration(
       labelText: label,
       labelStyle: GoogleFonts.dmSans(color: textMuted),
+      helperText: helperText,
+      helperStyle: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
       filled: true,
       fillColor: surfaceWhite,
       border: OutlineInputBorder(
@@ -1118,10 +1166,25 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     );
   }
 
+  /// Prevents an impossible rule (more occurrences per week than there are
+  /// allowed days to place them on) by lowering the max-per-week field
+  /// whenever it no longer fits the current allowed-days selection.
+  void _clampMaxPerWeekToAllowedDays() {
+    final parsed = int.tryParse(_maxPerWeekController.text.trim());
+    if (parsed == null) return;
+    final maxAllowed = _allowedWeekdays.length;
+    if (parsed > maxAllowed) {
+      _maxPerWeekController.text = '$maxAllowed';
+    }
+  }
+
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final duration = int.tryParse(_durationController.text.trim()) ?? 45;
+    final allowedWeekdays = _allowedWeekdays.toList()..sort();
     final maxPerWeek = int.tryParse(_maxPerWeekController.text.trim()) ?? 1;
+    final clampedMaxPerWeek =
+        maxPerWeek.clamp(1, 7).toInt().clamp(1, allowedWeekdays.length).toInt();
     widget.onSave(
       title: _titleController.text.trim(),
       category: _category,
@@ -1130,10 +1193,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
       difficulty: _difficulty,
       energy: _energy,
       social: _social,
-      maxPerWeek: maxPerWeek.clamp(1, 7).toInt(),
-      allowedWeekdays: _allowedWeekdays.toList()..sort(),
+      maxPerWeek: clampedMaxPerWeek,
+      allowedWeekdays: allowedWeekdays,
       noConsecutiveDays: _noConsecutiveDays,
       enabled: _enabled,
+      mustIncludeInPlans: _mustIncludeInPlans,
     );
   }
 

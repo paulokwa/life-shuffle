@@ -82,6 +82,7 @@ class RangePlannerService {
     var targetActivityCount = 0;
     var scheduledActivityCount = 0;
     var enabledActivityCount = 0;
+    var mustIncludeShortfallCount = 0;
     var previousChunkLastDay = const <PlannedActivity>[];
     var chunkStart = start;
     var chunkIndex = 0;
@@ -111,6 +112,7 @@ class RangePlannerService {
       targetActivityCount += chunk.targetActivityCount;
       scheduledActivityCount += chunk.scheduledActivityCount;
       enabledActivityCount = chunk.enabledActivityCount;
+      mustIncludeShortfallCount += chunk.mustIncludeShortfallCount;
       allDays.addAll(chunk.plan);
       previousChunkLastDay = chunk.plan.last.activities;
 
@@ -131,6 +133,7 @@ class RangePlannerService {
       targetActivityCount: targetActivityCount,
       scheduledActivityCount: scheduledActivityCount,
       enabledActivityCount: enabledActivityCount,
+      mustIncludeShortfallCount: mustIncludeShortfallCount,
     );
   }
 }
@@ -141,12 +144,17 @@ class RangePlannerGenerationResult {
     required this.targetActivityCount,
     required this.scheduledActivityCount,
     required this.enabledActivityCount,
+    this.mustIncludeShortfallCount = 0,
   });
 
   final GeneratedPlanRange range;
   final int targetActivityCount;
   final int scheduledActivityCount;
   final int enabledActivityCount;
+
+  /// Sum of [PlannerGenerationResult.mustIncludeShortfallCount] across every
+  /// weekly chunk in this horizon.
+  final int mustIncludeShortfallCount;
 
   int get unfilledActivityCount => targetActivityCount - scheduledActivityCount;
 

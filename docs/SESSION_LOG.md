@@ -1949,3 +1949,35 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Users can manually add pinned plan items to any generated day from multiple entry points; one-offs can optionally be saved to the activity library, and manual items survive regeneration, range switches, plan-style changes, and reload/sync.
 - **Next recommended step**: None queued for this slice. Revisit `docs/PARKING_LOT.md` for what's next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-22 (continued 8) - MVP 2 slice 8: "Must include in plans" activity priority
+
+- **Goal**: Let users mark an activity as a required part of the generated plan, so a high max-per-week/many-allowed-days activity (e.g. "Eat Together" at 6/week across 6 allowed days) is actually guaranteed to appear that often instead of just being one more flexible candidate the least-used/difficulty-aware picker might skip in favor of something else.
+- **Summary**: Added `Activity.mustIncludeInPlans` (defaults `false`, preserved by `copy()`/`toMap()`/`fromMap()`, safe-defaulted for legacy saved data) and a matching "Must include in plans" toggle in the activity editor next to max-per-week/allowed days, with helper text "The planner schedules this first, up to its max per week." The editor now also clamps max-per-week down to the selected allowed-days count on save and live-updates a small helper note as allowed days change, so an impossible rule (e.g. 6/week with only 3 allowed days) can no longer be saved. `PlannerService.generateWithDiagnostics` schedules every enabled must-include activity before any flexible pick: it places the activity on all of its allowed weekdays when there are no more of them than `maxPerWeek`, or a deterministic seeded-shuffle subset of size `maxPerWeek` otherwise, crediting every placement to scheduled-count/scheduled-day bookkeeping up front (before the per-day loop runs) so flexible fill never double-books a must-include activity or bumps it off a guaranteed day regardless of which day the loop visits first. noConsecutiveDays/difficulty-aware spacing stay soft preferences that only shape flexible fill - must-include scheduling never consults them, so they can't block a must-include activity from reaching its count. `RangePlannerService`'s existing weekly-chunk stitching applies this per chunk for free. A new `mustIncludeShortfallCount` diagnostic (surfaced through the existing planner-conflict message) flags the one case the editor's clamp doesn't prevent: legacy/imported data where `maxPerWeek` exceeds `allowedWeekdays.length`. Manual plan items are unaffected since they're merged in after generation by the existing `_applyManualItems()` pass.
+- **Files changed**:
+  - `lib/models/activity.dart`
+  - `lib/services/planner_service.dart`
+  - `lib/services/range_planner_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/activities_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Must-include placements are credited to `scheduledCounts`/`scheduledDays`/`hardDayCounts` in a single pass over all 7 days before the per-day generation loop starts, not incrementally as each day is visited - an early bug in this slice incrementally updated those maps only when a day's own must-include items were appended, which let flexible fill sneak in an extra occurrence on a day visited before all of an activity's must-include days had been processed (caught by the "maxPerWeek 5" test expecting 5 but getting 6).
+  - noConsecutiveDays and difficulty-aware spacing are intentionally never consulted during must-include placement (only during flexible fill), per product decision that they're soft preferences that must not block a must-include activity from reaching its requested count.
+  - Max-per-week clamping to allowed-days count lives in the activity editor's save path (and live-updates on allowed-day changes), not in the `Activity` model constructor, so legacy/imported data with a pre-existing mismatch is still readable and only gets a soft diagnostic (`mustIncludeShortfallCount`) rather than being silently mutated.
+  - The "Must include in plans" toggle was placed in the source activity editor only, not the manual Add to plan one-off form or the focused plan-item occurrence editor, since it's a generation rule and manual items don't go through generation.
+- **Tests run**:
+  - `dart format` on touched Dart files - formatted, 2 files changed (`activities_screen.dart`, `widget_test.dart`).
+  - `flutter test` - passed, 266/266 tests across all three test files (20 net new in `widget_test.dart`: Activity defaults/round-trip for `mustIncludeInPlans`, editor shows-and-saves the toggle, editor clamps max-per-week to allowed days, 6-of-6 placement, 5-of-6 deterministic placement, scheduled-before-flexible priority, respects `enabled=false`, respects allowed weekdays, never double-books a day, noConsecutiveDays doesn't block the count, shortfall diagnostic, twoWeek per-chunk must-include behavior, manual items survive must-include generation).
+  - `flutter analyze --no-fatal-infos` - passed, 20 pre-existing info-level lints in unrelated files (deprecated `withOpacity`/`value`, missing `const`, web-only library usage), no errors.
+  - `flutter build web` - passed.
+  - `git diff --check` - no whitespace errors.
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `tool/serviceAccountKey.json` remains gitignored/untracked, `docs/MASTER_PLAN.md` untouched, and no exact recurring-event scheduling, drag/drop, date-moving, editable month cells, custom-horizon UI, native PDF, history/archive persistence, Firestore rules changes, or ICS feed/Netlify behavior changes were added.
+- **Current state**: Activities can be marked "Must include in plans" in the editor; the planner guarantees their requested weekly count (subject to allowed days) before filling the rest of the week with flexible suggestions, and the editor prevents saving an impossible max-per-week/allowed-days combination.
+- **Next recommended step**: None queued for this slice. Revisit `docs/PARKING_LOT.md` for what's next.
+- **Open questions**: None.

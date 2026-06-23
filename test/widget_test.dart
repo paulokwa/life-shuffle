@@ -4024,6 +4024,38 @@ void main() {
     expect(restored.toMap()['social'], 'together');
   });
 
+  test('Activity mustIncludeInPlans defaults to false for new and legacy data',
+      () {
+    final activity = Activity(
+      id: 'must-defaults',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+    );
+    expect(activity.mustIncludeInPlans, isFalse);
+
+    final legacyMap = activity.toMap()..remove('mustIncludeInPlans');
+    final legacyRestored = Activity.fromMap(legacyMap);
+    expect(legacyRestored.mustIncludeInPlans, isFalse);
+  });
+
+  test('Activity mustIncludeInPlans survives copy(), toMap(), and fromMap()',
+      () {
+    final activity = Activity(
+      id: 'must-roundtrip',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      mustIncludeInPlans: true,
+    );
+
+    expect(activity.copy().mustIncludeInPlans, isTrue);
+    expect(activity.toMap()['mustIncludeInPlans'], isTrue);
+
+    final restored = Activity.fromMap(activity.toMap());
+    expect(restored.mustIncludeInPlans, isTrue);
+  });
+
   test('AppState uses dimension defaults and persists edited dimensions',
       () async {
     SharedPreferences.setMockInitialValues({});
@@ -4136,6 +4168,83 @@ void main() {
     expect(appState.activities.single.difficulty, 4);
     expect(appState.activities.single.energy, 'high');
     expect(appState.activities.single.social, 'group');
+  });
+
+  testWidgets('Activity form shows Must include in plans toggle and saves it',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Must include in plans'), findsOneWidget);
+    expect(
+      find.text('The planner schedules this first, up to its max per week.'),
+      findsOneWidget,
+    );
+
+    await tester.enterText(find.byType(TextFormField).first, 'Eat Together');
+    await tester.tap(
+      find.widgetWithText(SwitchListTile, 'Must include in plans'),
+    );
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(appState.activities.single.title, 'Eat Together');
+    expect(appState.activities.single.mustIncludeInPlans, isTrue);
+  });
+
+  testWidgets(
+      'Activity form clamps max per week to the selected allowed days on '
+      'save', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).first, 'Eat Together');
+
+    // Weekday cells render in weekday order (M T W T F S S); deselect
+    // Tuesday, Thursday, Saturday, Sunday so only Mon/Wed/Fri (3 days)
+    // remain allowed.
+    await tester.tap(find.text('T').at(0));
+    await tester.tap(find.text('T').at(1));
+    await tester.tap(find.text('S').at(0));
+    await tester.tap(find.text('S').at(1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Clamped to 3 based on allowed days'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(2), '6');
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(appState.activities.single.maxPerWeek, 3);
+    expect(appState.activities.single.allowedWeekdays, [1, 3, 5]);
   });
 
   testWidgets('Activity cards show enabled dimension chips',
@@ -4398,6 +4507,254 @@ void main() {
   });
 
   test(
+      'Must-include activity with 6 allowed days and maxPerWeek 6 appears 6 '
+      'times when capacity allows', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-6',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6], // Monday-Saturday
+      mustIncludeInPlans: true,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 1,
+      planStyle: PlanStyle.gentle,
+    );
+
+    final occurrences = plan
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+    expect(occurrences, 6);
+
+    for (final day in plan) {
+      final countToday =
+          day.activities.where((a) => a.activity.id == activity.id).length;
+      expect(countToday, lessThanOrEqualTo(1));
+      if (countToday == 1) {
+        expect(day.date.weekday, isNot(DateTime.sunday));
+      }
+    }
+  });
+
+  test(
+      'Must-include activity with 6 allowed days and maxPerWeek 5 appears 5 '
+      'times, deterministically selected from the allowed days', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+
+    List<int> occurrenceWeekdays(int seed) {
+      final activity = Activity(
+        id: 'must-5',
+        title: 'Eat Together',
+        category: 'Couple time',
+        durationMinutes: 30,
+        maxPerWeek: 5,
+        allowedWeekdays: [1, 2, 3, 4, 5, 6],
+        mustIncludeInPlans: true,
+      );
+      final plan = PlannerService.generate(
+        weekStart: weekStart,
+        pool: [activity],
+        seed: seed,
+      );
+      return plan
+          .where(
+            (day) => day.activities.any((a) => a.activity.id == 'must-5'),
+          )
+          .map((day) => day.date.weekday)
+          .toList()
+        ..sort();
+    }
+
+    final run1 = occurrenceWeekdays(9);
+    final run2 = occurrenceWeekdays(9);
+
+    expect(run1.length, 5);
+    expect(run1, run2); // same seed -> identical, deterministic placement
+    expect(
+      run1.every((weekday) => [1, 2, 3, 4, 5, 6].contains(weekday)),
+      isTrue,
+    );
+    expect(run1.contains(DateTime.sunday), isFalse);
+  });
+
+  test(
+      'Must-include activity is scheduled before flexible activities, '
+      'claiming slots they would otherwise fill', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final mustActivity = Activity(
+      id: 'must-priority',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
+    );
+    final flexibleActivities = List.generate(
+      5,
+      (i) => Activity(
+        id: 'flex-$i',
+        title: 'Flexible $i',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      ),
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [mustActivity, ...flexibleActivities],
+      seed: 2,
+      planStyle: PlanStyle.gentle,
+    );
+
+    final allPlanned = plan.expand((day) => day.activities).toList();
+    expect(allPlanned.length, 7); // must-include claims every day
+    expect(
+      allPlanned.every((a) => a.activity.id == mustActivity.id),
+      isTrue,
+    );
+    expect(allPlanned.any((a) => a.activity.id.startsWith('flex-')), isFalse);
+  });
+
+  test('Must-include activity is skipped entirely when disabled', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-disabled',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+      enabled: false,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 1,
+    );
+
+    expect(plan.expand((day) => day.activities), isEmpty);
+  });
+
+  test('Must-include activity only appears on its allowed weekdays', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-tue-thu',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 2,
+      allowedWeekdays: [2, 4], // Tuesday, Thursday
+      mustIncludeInPlans: true,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 1,
+    );
+
+    final scheduledWeekdays = plan
+        .where((day) => day.activities.isNotEmpty)
+        .map((day) => day.date.weekday)
+        .toSet();
+
+    expect(scheduledWeekdays, {2, 4});
+  });
+
+  test('Must-include activity never appears twice on the same day', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-once',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
+    );
+
+    for (var seed = 0; seed < 5; seed++) {
+      final plan = PlannerService.generate(
+        weekStart: weekStart,
+        pool: [activity],
+        seed: seed,
+      );
+      for (final day in plan) {
+        final countToday =
+            day.activities.where((a) => a.activity.id == activity.id).length;
+        expect(countToday, lessThanOrEqualTo(1));
+      }
+    }
+  });
+
+  test(
+      'noConsecutiveDays does not prevent a must-include activity from '
+      'reaching its count when enough allowed days exist', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-no-consecutive',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6], // all adjacent days
+      noConsecutiveDays: true,
+      mustIncludeInPlans: true,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 1,
+    );
+
+    final occurrences = plan
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+    // Reaching 6 across 6 adjacent allowed days is only possible because
+    // noConsecutiveDays is a soft preference for flexible fill, not a hard
+    // constraint applied to must-include scheduling.
+    expect(occurrences, 6);
+  });
+
+  test(
+      'Planner diagnostics flag a must-include activity that cannot reach '
+      'its max per week', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-shortfall',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 3, 5], // only 3 allowed days
+      mustIncludeInPlans: true,
+    );
+
+    final result = PlannerService.generateWithDiagnostics(
+      weekStart: weekStart,
+      pool: [activity],
+      seed: 1,
+    );
+
+    expect(result.scheduledActivityCount, 3);
+    expect(result.mustIncludeShortfallCount, 3);
+  });
+
+  test(
       'RangePlannerService week output matches PlannerService for the same '
       'inputs', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
@@ -4605,6 +4962,44 @@ void main() {
     // because week 1 already used up the only allowed placement.
     expect(week1Count, 1);
     expect(week2Count, 1);
+  });
+
+  test(
+      'RangePlannerService applies must-include scheduling within each '
+      'weekly chunk of a twoWeek range', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final activity = Activity(
+      id: 'must-range',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+    );
+
+    final range = RangePlannerService.generate(
+      type: RangeType.twoWeek,
+      start: weekStart,
+      pool: [activity],
+      seed: 1,
+    );
+
+    final week1MustCount = range.days
+        .sublist(0, 7)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+    final week2MustCount = range.days
+        .sublist(7, 14)
+        .expand((day) => day.activities)
+        .where((a) => a.activity.id == activity.id)
+        .length;
+
+    // maxPerWeek resets per chunk, so a fully must-include activity reaches
+    // its 6-per-week count in both weeks, not just once across the horizon.
+    expect(week1MustCount, 6);
+    expect(week2MustCount, 6);
   });
 
   test(
@@ -7139,6 +7534,55 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
+  });
+
+  test(
+      'Manual plan items survive regeneration alongside a must-include '
+      'activity', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: const []);
+
+    appState.addActivity(
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+      noConsecutiveDays: false,
+      enabled: true,
+      mustIncludeInPlans: true,
+    );
+    appState.regenerate();
+
+    final today = appState.weekPlan.firstWhere((d) => d.isToday);
+    appState.addManualPlanItem(
+      ManualPlanItem(
+        id: 'manual_must_1',
+        dateKey: DayPlan.dateKey(today.date),
+        title: 'Pinned errand',
+        timeSlot: '9:00 AM',
+        category: 'Chores / life admin',
+        durationMinutes: 30,
+      ),
+    );
+
+    appState.regenerate();
+
+    expect(
+      appState.weekPlan
+          .expand((day) => day.activities)
+          .where((a) => a.manualItemId == 'manual_must_1'),
+      isNotEmpty,
+    );
+    expect(
+      appState.weekPlan
+          .expand((day) => day.activities)
+          .where((a) => a.activity.title == 'Eat Together')
+          .length,
+      7,
+    );
   });
 
   group('Manual add-to-plan', () {

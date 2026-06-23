@@ -121,6 +121,18 @@ class PlannerService {
     };
     template.shuffle(rng);
 
+    // Must-include activities are scheduled before flexible suggestions, so
+    // they claim their days first; the flexible loop below then only fills
+    // whatever of each day's template slots remain. Computed before the
+    // flexible loop runs but doesn't consume rng draws unless at least one
+    // pool activity has mustIncludeInPlans set, so existing flexible-only
+    // pools see unchanged scheduling.
+    final mustIncludeByDay = _scheduleMustIncludeActivities(
+      pool: activitiesPool,
+      weekStart: weekStart,
+      rng: rng,
+    );
+
     final plans = <DayPlan>[];
     final scheduledCounts = <String, int>{};
     final scheduledDays = _scheduledDaysFromContext(scheduledContext);
@@ -128,13 +140,42 @@ class PlannerService {
     var targetActivityCount = 0;
     var scheduledActivityCount = 0;
 
+    // Credits every must-include placement to scheduledCounts/scheduledDays/
+    // hardDayCounts up front, before any flexible picks happen. Without
+    // this, a day with no must-include item that's iterated before a later
+    // day that does have one would still see that activity as under its
+    // maxPerWeek cap (since the cap had only been "spent" on days visited
+    // so far) and could double-book it via flexible fill.
+    for (final entry in mustIncludeByDay.entries) {
+      for (final act in entry.value) {
+        scheduledCounts[act.id] = (scheduledCounts[act.id] ?? 0) + 1;
+        scheduledDays.putIfAbsent(act.id, () => <int>[]).add(entry.key);
+        if (_isHard(act)) {
+          hardDayCounts[entry.key] = (hardDayCounts[entry.key] ?? 0) + 1;
+        }
+      }
+    }
+
     for (var i = 0; i < 7; i++) {
       final date = weekStart.add(Duration(days: i));
       final targetCount = template[i];
       targetActivityCount += targetCount;
       final activities = <PlannedActivity>[];
 
-      for (var j = 0; j < targetCount; j++) {
+      final mustItemsForDay = mustIncludeByDay[i] ?? const <Activity>[];
+      for (final act in mustItemsForDay) {
+        scheduledActivityCount++;
+        activities.add(
+          PlannedActivity(
+            activity: act,
+            timeSlot: _timeSlotFor(act),
+            status: CheckStatus.none,
+          ),
+        );
+      }
+
+      final remainingSlots = max(0, targetCount - mustItemsForDay.length);
+      for (var j = 0; j < remainingSlots; j++) {
         final act = _pickActivity(
           pool: activitiesPool,
           weekday: date.weekday,
@@ -167,12 +208,76 @@ class PlannerService {
       plans.add(DayPlan(date: date, activities: activities));
     }
 
+    final mustIncludeShortfallCount = _mustIncludeShortfall(
+      pool: activitiesPool,
+      scheduledCounts: scheduledCounts,
+    );
+
     return PlannerGenerationResult(
       plan: plans,
       targetActivityCount: targetActivityCount,
       scheduledActivityCount: scheduledActivityCount,
       enabledActivityCount: activitiesPool.length,
+      mustIncludeShortfallCount: mustIncludeShortfallCount,
     );
+  }
+
+  /// For each [pool] activity with `mustIncludeInPlans` set, deterministically
+  /// (via [rng], derived from the generation seed) picks which day indices
+  /// (0-6, relative to [weekStart]) it will be scheduled on: all of its
+  /// `allowedWeekdays` if there are no more of them than `maxPerWeek`,
+  /// otherwise a shuffled subset of size `maxPerWeek`. Every weekday occurs
+  /// exactly once in any 7-day window, so this never competes with other
+  /// must-include activities for a day and never needs to consult
+  /// noConsecutiveDays/difficulty-spacing - those stay soft preferences that
+  /// only shape the flexible fill afterward.
+  static Map<int, List<Activity>> _scheduleMustIncludeActivities({
+    required List<Activity> pool,
+    required DateTime weekStart,
+    required Random rng,
+  }) {
+    final weekdayToIndex = <int, int>{
+      for (var i = 0; i < 7; i++) weekStart.add(Duration(days: i)).weekday: i,
+    };
+
+    final byDay = <int, List<Activity>>{};
+    for (final activity in pool.where((a) => a.mustIncludeInPlans)) {
+      final allowedDayIndices = activity.allowedWeekdays
+          .map((weekday) => weekdayToIndex[weekday])
+          .whereType<int>()
+          .toList();
+      if (allowedDayIndices.isEmpty) continue;
+
+      final chosenDayIndices = allowedDayIndices.length <= activity.maxPerWeek
+          ? allowedDayIndices
+          : (List<int>.from(allowedDayIndices)..shuffle(rng))
+              .take(activity.maxPerWeek)
+              .toList();
+
+      for (final dayIndex in chosenDayIndices) {
+        byDay.putIfAbsent(dayIndex, () => <Activity>[]).add(activity);
+      }
+    }
+    return byDay;
+  }
+
+  /// Sum of how far each must-include activity's actual scheduled count
+  /// fell short of its `maxPerWeek`. Only nonzero when `maxPerWeek` exceeds
+  /// `allowedWeekdays.length` (normally prevented by the activity editor's
+  /// clamp, but possible for legacy/imported data), since otherwise
+  /// [_scheduleMustIncludeActivities] always reaches `maxPerWeek` exactly.
+  static int _mustIncludeShortfall({
+    required List<Activity> pool,
+    required Map<String, int> scheduledCounts,
+  }) {
+    var shortfall = 0;
+    for (final activity in pool.where((a) => a.mustIncludeInPlans)) {
+      final achieved = scheduledCounts[activity.id] ?? 0;
+      if (achieved < activity.maxPerWeek) {
+        shortfall += activity.maxPerWeek - achieved;
+      }
+    }
+    return shortfall;
   }
 
   static Activity? _pickActivity({
@@ -366,12 +471,16 @@ class PlannerGenerationResult {
     required this.targetActivityCount,
     required this.scheduledActivityCount,
     required this.enabledActivityCount,
+    this.mustIncludeShortfallCount = 0,
   });
 
   final List<DayPlan> plan;
   final int targetActivityCount;
   final int scheduledActivityCount;
   final int enabledActivityCount;
+
+  /// See [PlannerService._mustIncludeShortfall].
+  final int mustIncludeShortfallCount;
 
   int get unfilledActivityCount => targetActivityCount - scheduledActivityCount;
 
