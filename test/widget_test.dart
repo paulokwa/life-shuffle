@@ -4484,6 +4484,66 @@ void main() {
     }
   });
 
+  test(
+      'Planner respects preferredTime for Outside/Rest activities instead '
+      'of always defaulting them to a morning slot', () {
+    final weekStart = DateTime(2026, 6, 15); // Monday
+    final outsideEvening = Activity(
+      id: 'outside-evening',
+      title: 'Evening bike ride',
+      category: 'Outside',
+      durationMinutes: 30,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final outsideAfternoon = Activity(
+      id: 'outside-afternoon',
+      title: 'Afternoon walk',
+      category: 'Outside',
+      durationMinutes: 30,
+      preferredTime: 'afternoon',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final restEvening = Activity(
+      id: 'rest-evening',
+      title: 'Evening wind-down',
+      category: 'Rest',
+      durationMinutes: 20,
+      preferredTime: 'evening',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final outsideMorning = Activity(
+      id: 'outside-morning',
+      title: 'Morning jog',
+      category: 'Outside',
+      durationMinutes: 30,
+      preferredTime: 'morning',
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+
+    final plan = PlannerService.generate(
+      weekStart: weekStart,
+      pool: [outsideEvening, outsideAfternoon, restEvening, outsideMorning],
+      seed: 1,
+      planStyle: PlanStyle.push,
+    );
+    final planned = plan.expand((day) => day.activities).toList();
+
+    String timeSlotFor(String activityId) => planned
+        .firstWhere((p) => p.activity.id == activityId)
+        .timeSlot;
+
+    expect(timeSlotFor('outside-evening'), '7:00 PM');
+    expect(timeSlotFor('outside-afternoon'), '3:00 PM');
+    expect(timeSlotFor('rest-evening'), '7:00 PM');
+    // Morning-preferred Outside activity keeps its existing default time.
+    expect(timeSlotFor('outside-morning'), '10:00 AM');
+  });
+
   test('Planner diagnostics reports blocked activity slots', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -6083,6 +6143,72 @@ void main() {
   });
 
   test(
+      'regenerate() advances a stale rangeStart to today instead of '
+      'reusing a past generation start date (midnight rollover)',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final today = _today();
+    final staleStart = today.subtract(const Duration(days: 1));
+    final savedState = SavedState(
+      activities: PlannerService.defaultActivities,
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.week,
+      rangeStart: staleStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: savedState,
+    );
+    // Reloading itself intentionally keeps the stale start (see the test
+    // below) - the bug is specifically about regenerate() reusing it too.
+    expect(appState.generatedRange.days.first.date, staleStart);
+
+    appState.regenerate();
+
+    expect(appState.generatedRange.days.first.date, today);
+    expect(
+      appState.generatedRange.days.every((d) => !d.date.isBefore(today)),
+      isTrue,
+    );
+  });
+
+  test(
+      'setPlanStyle() advances a stale rangeStart to today instead of '
+      'reusing a past generation start date', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final today = _today();
+    final staleStart = today.subtract(const Duration(days: 2));
+    final savedState = SavedState(
+      activities: PlannerService.defaultActivities,
+      seed: 0,
+      updatedAtMillis: 1,
+      rangeType: RangeType.week,
+      rangeStart: staleStart,
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      savedState: savedState,
+    );
+
+    appState.setPlanStyle(PlanStyle.push);
+
+    expect(appState.generatedRange.days.first.date, today);
+    expect(
+      appState.generatedRange.days.every((d) => !d.date.isBefore(today)),
+      isTrue,
+    );
+  });
+
+  test(
       'Reloading saved state reconstructs the same range instead of '
       're-anchoring to a new today', () async {
     SharedPreferences.setMockInitialValues({});
@@ -7564,6 +7690,46 @@ void main() {
           )
           .data,
       '21',
+    );
+  });
+
+  testWidgets(
+      'Month grid cell shows a compact item-count summary instead of '
+      'full activity chips, and renders without overflow at a narrow '
+      'mobile width', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    addTearDown(tester.view.reset);
+    // 414 logical px (e.g. iPhone 11/XR width) - narrow enough to exercise
+    // month-grid cell sizing, but wide enough to sidestep a separate,
+    // pre-existing overflow in _RangeTypeControl's fixed-width row below
+    // ~400px that predates and is unrelated to this month-grid fix.
+    tester.view.physicalSize = const Size(414, 800);
+    tester.view.devicePixelRatio = 1.0;
+
+    final busyDay = Activity(
+      id: 'busy-day-activity',
+      title: 'A fairly long activity title that would not fit in a chip',
+      category: 'Outside',
+      durationMinutes: 30,
+      maxPerWeek: 7,
+      allowedWeekdays: Activity.allWeekdays,
+    );
+    final appState = AppState(activities: [busyDay]);
+    appState.generateRange(RangeType.month);
+    final day = appState.generatedRange.days.firstWhere(
+      (candidate) => candidate.activities.isNotEmpty,
+    );
+
+    await _pumpPlanScreen(tester, appState);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(busyDay.title), findsNothing);
+    final count = day.activities.length;
+    expect(
+      find.text(count == 1 ? '1 item' : '$count items'),
+      findsWidgets,
     );
   });
 

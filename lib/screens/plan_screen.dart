@@ -609,7 +609,10 @@ class _MonthGrid extends StatelessWidget {
               crossAxisCount: 7,
               mainAxisSpacing: 6,
               crossAxisSpacing: 6,
-              childAspectRatio: 0.72,
+              // Slightly taller than before (was 0.72) so the day number
+              // and item-count summary have comfortable room on narrow
+              // phone widths without clipping.
+              childAspectRatio: 0.62,
             ),
             itemBuilder: (context, index) {
               final date = gridStart.add(Duration(days: index));
@@ -677,8 +680,6 @@ class _MonthDayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleActivities = plan.activities.take(2).toList();
-    final hiddenCount = plan.activities.length - visibleActivities.length;
     return GestureDetector(
       key: ValueKey(
         inRange
@@ -700,42 +701,51 @@ class _MonthDayCell extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      if (showMonthLabel) ...[
+                  // Scales down (never up) rather than overflowing - the
+                  // month label next to the day number is the widest thing
+                  // in a cell and is the first to run out of room on
+                  // narrow phone widths.
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        if (showMonthLabel) ...[
+                          Text(
+                            PlanScreen._monthAbbrevs[plan.date.month - 1],
+                            key: ValueKey(
+                              'month-grid-month-label-'
+                              '${PlanScreen._dateKey(plan.date)}',
+                            ),
+                            style: GoogleFonts.dmSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: textMuted,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                        ],
                         Text(
-                          PlanScreen._monthAbbrevs[plan.date.month - 1],
+                          '${plan.date.day}',
                           key: ValueKey(
-                            'month-grid-month-label-'
+                            'month-grid-day-number-'
                             '${PlanScreen._dateKey(plan.date)}',
                           ),
                           style: GoogleFonts.dmSans(
-                            fontSize: 9,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: textMuted,
-                            letterSpacing: 0.3,
+                            color:
+                                plan.isToday ? primaryTerracotta : textPrimary,
                           ),
                         ),
-                        const SizedBox(width: 3),
                       ],
-                      Text(
-                        '${plan.date.day}',
-                        key: ValueKey(
-                          'month-grid-day-number-'
-                          '${PlanScreen._dateKey(plan.date)}',
-                        ),
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: plan.isToday ? primaryTerracotta : textPrimary,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  if (inRange && visibleActivities.isEmpty)
+                  if (inRange && plan.activities.isEmpty)
                     Expanded(
                       child: GestureDetector(
                         key: ValueKey(
@@ -756,46 +766,80 @@ class _MonthDayCell extends StatelessWidget {
                       ),
                     )
                   else
-                    ...visibleActivities.map(
-                      (activity) => Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: surfaceWhite,
-                            borderRadius: BorderRadius.circular(7),
-                            border: Border.all(color: borderWarm),
-                          ),
-                          child: Text(
-                            activity.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: categoryIconColor(activity.category),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (hiddenCount > 0)
-                    Text(
-                      '+$hiddenCount more',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: textMuted,
-                      ),
-                    ),
+                    _MonthDaySummary(activities: plan.activities),
                 ],
               )
             : const SizedBox.expand(),
       ),
+    );
+  }
+}
+
+/// Compact day-cell summary shown instead of full activity chips: small
+/// category-colored dots (one per activity, capped with a "+N" overflow)
+/// plus a plain-language item count, so a cell stays readable at
+/// month-grid size on narrow/mobile widths rather than cramming in
+/// unreadable mini activity-title chips.
+class _MonthDaySummary extends StatelessWidget {
+  const _MonthDaySummary({required this.activities});
+
+  final List<PlannedActivity> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    const maxDots = 4;
+    final dotCount = activities.length < maxDots ? activities.length : maxDots;
+    final overflow = activities.length - dotCount;
+    final hasLocked = activities.any((a) => a.locked);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Wrap (not Row) so this never hard-overflows on the narrowest
+        // phone widths - it reflows to a second line instead of erroring.
+        Wrap(
+          spacing: 3,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (var i = 0; i < dotCount; i++)
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: categoryIconColor(activities[i].category),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            if (overflow > 0)
+              Text(
+                '+$overflow',
+                style: GoogleFonts.dmSans(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  color: textMuted,
+                ),
+              ),
+            if (hasLocked)
+              const Icon(
+                Icons.lock_rounded,
+                size: 9,
+                color: primaryTerracotta,
+              ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          activities.length == 1 ? '1 item' : '${activities.length} items',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

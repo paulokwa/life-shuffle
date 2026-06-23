@@ -887,10 +887,13 @@ class AppState extends ChangeNotifier {
   /// Reshuffles unlocked activities within the currently generated range
   /// (same [rangeType], same start date) — locked items stay exactly where
   /// they are. Does not change the planning horizon; see [generateRange]
-  /// for that.
+  /// for that. If [_rangeStart] has fallen into the past (e.g. the plan was
+  /// generated late last night and the user regenerates after midnight),
+  /// it's advanced to today first so the stale day is never re-generated.
   void regenerate() {
     _lastRegenerationSnapshot = _currentSavedState();
     _seed++;
+    _advanceRangeStartToTodayIfStale();
     _removedOccurrences = {};
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
@@ -940,6 +943,7 @@ class AppState extends ChangeNotifier {
   void setPlanStyle(PlanStyle style) {
     if (_planStyle == style) return;
     _planStyle = style;
+    _advanceRangeStartToTodayIfStale();
     _removedOccurrences = {};
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
@@ -1235,6 +1239,20 @@ class AppState extends ChangeNotifier {
 
   static bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Advances [_rangeStart] to today if it has fallen into the past, so a
+  /// deliberate (re)generation never reuses a stale start date from before
+  /// today (e.g. generating late at night, then regenerating after
+  /// midnight). Only called from explicit (re)generation actions -
+  /// reloading previously persisted/generated state intentionally keeps its
+  /// original [_rangeStart] so past days remain visible for catch-up
+  /// check-ins (see [_applySavedState]).
+  void _advanceRangeStartToTodayIfStale() {
+    final today = _dateOnly(DateTime.now());
+    if (_rangeStart.isBefore(today)) {
+      _rangeStart = today;
+    }
+  }
 
   // ─── Private ─────────────────────────────────────────────────────────────
 

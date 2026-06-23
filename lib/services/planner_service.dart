@@ -469,14 +469,21 @@ class PlannerService {
     return hour * 60 + minute;
   }
 
+  /// [Activity.preferredTime] decides the time *window* (evening/afternoon
+  /// vs. morning/anytime) first; [Activity.category] only ever picks a
+  /// specific clock time within whichever window preferredTime already
+  /// chose. Category must never override an evening/afternoon preference -
+  /// doing so previously forced every Outside/Rest activity to a morning
+  /// slot regardless of its preferredTime.
   static String _timeSlotFor(Activity a) {
+    if (a.preferredTime == 'evening') {
+      return a.category == 'Couple time' ? '8:00 PM' : '7:00 PM';
+    }
+    if (a.preferredTime == 'afternoon') return '3:00 PM';
+    // 'morning' or 'anytime': category may refine the default time since
+    // there's no later-window preference here to override.
     if (a.category == 'Rest') return '7:00 AM';
     if (a.category == 'Outside') return '10:00 AM';
-    if (a.preferredTime == 'evening' && a.category == 'Couple time') {
-      return '8:00 PM';
-    }
-    if (a.preferredTime == 'evening') return '7:00 PM';
-    if (a.preferredTime == 'afternoon') return '3:00 PM';
     return '11:00 AM';
   }
 }
