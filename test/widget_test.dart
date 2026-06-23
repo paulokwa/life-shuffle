@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
+import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/models/range_type.dart';
@@ -7129,7 +7130,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(cardFinder);
+    await tester.tap(cardFinder, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
 
@@ -7138,6 +7139,436 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
+  });
+
+  group('Manual add-to-plan', () {
+    test('AppState addManualPlanItem pins a manual item and persists it',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+      final dateKey = _dateKey(day.date);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_1',
+          dateKey: dateKey,
+          title: 'Extra walk',
+          timeSlot: '6:30 PM',
+          category: 'Outside',
+          durationMinutes: 30,
+        ),
+      );
+
+      final plannedDay = appState.weekPlan.firstWhere(
+        (d) => _dateKey(d.date) == dateKey,
+      );
+      expect(plannedDay.activities, hasLength(1));
+      expect(plannedDay.activities.first.title, 'Extra walk');
+      expect(plannedDay.activities.first.isManual, isTrue);
+
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.manualPlanItems, contains('manual_test_1'));
+      expect(saved.manualPlanItems['manual_test_1']!.title, 'Extra walk');
+    });
+
+    test('Manual plan item survives regenerate()', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+      final dateKey = _dateKey(day.date);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_2',
+          dateKey: dateKey,
+          title: 'Yoga',
+          timeSlot: '7:00 AM',
+          category: 'Rest',
+          durationMinutes: 20,
+        ),
+      );
+
+      final before = appState.manualPlanItems.length;
+      appState.regenerate();
+      final plannedDay = appState.weekPlan.firstWhere(
+        (d) => _dateKey(d.date) == dateKey,
+      );
+      expect(appState.manualPlanItems, hasLength(before));
+      expect(
+        plannedDay.activities.map((a) => a.title),
+        contains('Yoga'),
+      );
+    });
+
+    test('Manual plan item survives generateRange(twoWeek)', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+      final dateKey = _dateKey(day.date);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_3',
+          dateKey: dateKey,
+          title: 'Call mom',
+          timeSlot: '5:00 PM',
+          category: 'Social',
+          durationMinutes: 45,
+        ),
+      );
+
+      appState.generateRange(RangeType.twoWeek);
+      final plannedDay = appState.generatedRange.days.firstWhere(
+        (d) => _dateKey(d.date) == dateKey,
+      );
+      expect(
+        plannedDay.activities.map((a) => a.title),
+        contains('Call mom'),
+      );
+    });
+
+    test('Manual plan item survives setPlanStyle', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+      final dateKey = _dateKey(day.date);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_4',
+          dateKey: dateKey,
+          title: 'Journal',
+          timeSlot: '9:00 PM',
+          category: 'Creative',
+          durationMinutes: 15,
+        ),
+      );
+
+      final newStyle = appState.planStyle == PlanStyle.balanced
+          ? PlanStyle.gentle
+          : PlanStyle.balanced;
+      appState.setPlanStyle(newStyle);
+      final plannedDay = appState.weekPlan.firstWhere(
+        (d) => _dateKey(d.date) == dateKey,
+      );
+      expect(
+        plannedDay.activities.map((a) => a.title),
+        contains('Journal'),
+      );
+    });
+
+    test(
+        'Manual plan item from existing activity copies source '
+        'without mutating it', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final source = appState.activities.first;
+      final originalTitle = source.title;
+      final originalDuration = source.durationMinutes;
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_5',
+          dateKey: _dateKey(day.date),
+          title: source.title,
+          timeSlot: '2:00 PM',
+          category: source.category,
+          durationMinutes: source.durationMinutes,
+          difficulty: source.difficulty,
+          energy: source.energy,
+          social: source.social,
+          sourceActivityId: source.id,
+        ),
+      );
+
+      final planned = appState.weekPlan
+          .firstWhere((d) => _dateKey(d.date) == _dateKey(day.date))
+          .activities
+          .first;
+      expect(planned.title, originalTitle);
+      planned.activity.title = 'Mutated';
+      expect(source.title, originalTitle);
+      expect(source.durationMinutes, originalDuration);
+    });
+
+    test('One-off manual item can be saved to the activity library', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final beforeCount = appState.activities.length;
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+
+      final libraryId = appState.addActivity(
+        title: 'Custom hobby',
+        category: 'Creative',
+        durationMinutes: 60,
+        preferredTime: 'anytime',
+        maxPerWeek: 1,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+      );
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_6',
+          dateKey: _dateKey(day.date),
+          title: 'Custom hobby',
+          timeSlot: '4:00 PM',
+          category: 'Creative',
+          durationMinutes: 60,
+          sourceActivityId: libraryId,
+        ),
+      );
+
+      expect(appState.activities, hasLength(beforeCount + 1));
+      expect(
+        appState.activities
+            .any((a) => a.id == libraryId && a.title == 'Custom hobby'),
+        isTrue,
+      );
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.activities.any((a) => a.id == libraryId), isTrue);
+    });
+
+    test('Manual plan item supports check-in and persists status', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_test_7',
+          dateKey: _dateKey(day.date),
+          title: 'Meditate',
+          timeSlot: '8:00 AM',
+          category: 'Rest',
+          durationMinutes: 10,
+        ),
+      );
+      final planned = appState.weekPlan
+          .firstWhere((d) => _dateKey(d.date) == _dateKey(day.date))
+          .activities
+          .first;
+      planned.status = CheckStatus.done;
+      appState.notifyCheckIn(planned);
+
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.checkinMap.values, contains(CheckStatus.done.index));
+    });
+
+    Future<void> scrollAddButtonIntoView(
+      WidgetTester tester,
+      DateTime date,
+    ) async {
+      await tester.dragUntilVisible(
+        find.byKey(ValueKey('plan-day-card-add-${_dateKey(date)}')),
+        find.byType(SingleChildScrollView),
+        const Offset(0, -200),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'Plan day card add item button opens the add sheet and saves '
+        'a one-off item', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final emptyDay = appState.weekPlan.firstWhere(
+        (d) => d.activities.isEmpty,
+      );
+
+      await _pumpPlanScreen(tester, appState);
+      await scrollAddButtonIntoView(tester, emptyDay.date);
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('add-plan-item-sheet')),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('add-plan-item-title-field')),
+        'Read book',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('add-plan-item-duration-field')),
+        '30',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('add-plan-item-save-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('add-plan-item-sheet')),
+        findsNothing,
+      );
+      final plannedDay = appState.weekPlan.firstWhere(
+        (d) => _dateKey(d.date) == _dateKey(emptyDay.date),
+      );
+      expect(
+        plannedDay.activities.map((a) => a.title),
+        contains('Read book'),
+      );
+      expect(
+        appState.activities.any((a) => a.title == 'Read book'),
+        isFalse,
+      );
+    });
+
+    testWidgets('Add plan item sheet can add from existing activity library',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final sourceId = appState.addActivity(
+        title: 'Zyx Library Source',
+        category: 'Outside',
+        durationMinutes: 90,
+        preferredTime: 'anytime',
+        maxPerWeek: 1,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+      );
+      final source = appState.activities.firstWhere((a) => a.id == sourceId);
+      final emptyDay = appState.weekPlan.firstWhere(
+        (d) => d.activities.isEmpty,
+      );
+
+      await _pumpPlanScreen(tester, appState);
+      await scrollAddButtonIntoView(tester, emptyDay.date);
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('add-plan-item-source-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(source.title).last);
+      await tester.pumpAndSettle();
+
+      final titleField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('add-plan-item-title-field')),
+      );
+      expect(titleField.enabled, isFalse);
+
+      await tester.tap(
+        find.byKey(const ValueKey('add-plan-item-save-button')),
+      );
+      await tester.pumpAndSettle();
+
+      final plannedDay = appState.weekPlan.firstWhere(
+        (d) => _dateKey(d.date) == _dateKey(emptyDay.date),
+      );
+      expect(
+        plannedDay.activities.map((a) => a.title),
+        contains(source.title),
+      );
+    });
+
+    testWidgets(
+        'Add plan item sheet save-to-library checkbox adds one-off to '
+        'activity library', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final emptyDay = appState.weekPlan.firstWhere(
+        (d) => d.activities.isEmpty,
+      );
+
+      await _pumpPlanScreen(tester, appState);
+      await scrollAddButtonIntoView(tester, emptyDay.date);
+
+      await tester.tap(
+        find.byKey(
+          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('add-plan-item-title-field')),
+        'New hobby',
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('add-plan-item-save-to-library-field'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('add-plan-item-save-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        appState.activities.any((a) => a.title == 'New hobby'),
+        isTrue,
+      );
+    });
+
+    testWidgets(
+        'Month grid add item icon opens add sheet and cell body tap '
+        'stays inactive', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+
+      await _pumpPlanScreen(tester, appState);
+
+      final emptyDay = appState.generatedRange.days.firstWhere(
+        (d) => d.activities.isEmpty,
+      );
+
+      await tester.dragUntilVisible(
+        find.byKey(ValueKey('month-grid-add-${_dateKey(emptyDay.date)}')),
+        find.byType(SingleChildScrollView),
+        const Offset(0, -200),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(ValueKey('month-grid-day-${_dateKey(emptyDay.date)}')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('day-checkin-sheet')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(ValueKey('month-grid-add-${_dateKey(emptyDay.date)}')),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('add-plan-item-sheet')),
+        findsOneWidget,
+      );
+    });
   });
 
   test('Progress summary counts past 7 days and excludes future items', () {

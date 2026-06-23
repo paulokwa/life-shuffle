@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/generated_plan_range.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
@@ -734,33 +735,54 @@ class _MonthDayCell extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  ...visibleActivities.map(
-                    (activity) => Padding(
-                      padding: const EdgeInsets.only(bottom: 3),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
+                  if (inRange && visibleActivities.isEmpty)
+                    Expanded(
+                      child: GestureDetector(
+                        key: ValueKey(
+                          'month-grid-add-${PlanScreen._dateKey(plan.date)}',
                         ),
-                        decoration: BoxDecoration(
-                          color: surfaceWhite,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: borderWarm),
+                        onTap: () => showAddPlanItemSheet(
+                          context,
+                          date: plan.date,
                         ),
-                        child: Text(
-                          activity.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: categoryIconColor(activity.category),
+                        behavior: HitTestBehavior.opaque,
+                        child: const Center(
+                          child: Icon(
+                            Icons.add_rounded,
+                            size: 20,
+                            color: primaryTerracotta,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ...visibleActivities.map(
+                      (activity) => Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: surfaceWhite,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(color: borderWarm),
+                          ),
+                          child: Text(
+                            activity.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: categoryIconColor(activity.category),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
                   if (hiddenCount > 0)
                     Text(
                       '+$hiddenCount more',
@@ -1017,16 +1039,28 @@ class _DayStrip extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Container(
-                  width: 4,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: hasActivities && !isToday
-                        ? accentSage
-                        : Colors.transparent,
+                if (hasActivities)
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accentSage,
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    key: ValueKey(
+                      'plan-day-strip-add-${PlanScreen._dateKey(d.date)}',
+                    ),
+                    onTap: () => showAddPlanItemSheet(context, date: d.date),
+                    behavior: HitTestBehavior.opaque,
+                    child: const Icon(
+                      Icons.add_rounded,
+                      size: 14,
+                      color: primaryTerracotta,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1090,6 +1124,24 @@ class _DayBlock extends StatelessWidget {
                       color: textMuted,
                     ),
                   ),
+                IconButton(
+                  key: ValueKey(
+                    'plan-day-card-add-${PlanScreen._dateKey(plan.date)}',
+                  ),
+                  onPressed: () => showAddPlanItemSheet(
+                    context,
+                    date: plan.date,
+                  ),
+                  icon: const Icon(
+                    Icons.add_rounded,
+                    size: 18,
+                    color: primaryTerracotta,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  tooltip: 'Add item',
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1236,6 +1288,14 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                   ),
                 ),
                 IconButton(
+                  key: const ValueKey('day-sheet-add-item'),
+                  onPressed: () => showAddPlanItemSheet(
+                    context,
+                    date: widget.plan.date,
+                  ),
+                  icon: const Icon(Icons.add_rounded, color: primaryTerracotta),
+                ),
+                IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close_rounded, color: textPrimary),
                 ),
@@ -1245,7 +1305,7 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
           const SizedBox(height: 12),
           Flexible(
             child: widget.plan.activities.isEmpty
-                ? const _EmptyDaySheetBody()
+                ? _EmptyDaySheetBody(date: widget.plan.date)
                 : ListView.separated(
                     shrinkWrap: true,
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -1272,7 +1332,9 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
 }
 
 class _EmptyDaySheetBody extends StatelessWidget {
-  const _EmptyDaySheetBody();
+  const _EmptyDaySheetBody({required this.date});
+
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
@@ -1310,12 +1372,17 @@ class _EmptyDaySheetBody extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'There is nothing to mark right now.',
+                    'Tap Add item to schedule something manually.',
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       color: textMuted,
                       height: 1.35,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  _OutlineButton(
+                    label: 'Add item',
+                    onTap: () => showAddPlanItemSheet(context, date: date),
                   ),
                 ],
               ),
@@ -1494,22 +1561,24 @@ class _DaySheetActivityCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          GestureDetector(
-            key: ValueKey('day-sheet-edit-template-${activity.id}'),
-            onTap: onEditTemplate,
-            behavior: HitTestBehavior.opaque,
-            child: Text(
-              'Edit activity template',
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: textMuted,
-                decoration: TextDecoration.underline,
-                decorationColor: textMuted,
+          if (!activity.isManual) ...[
+            const SizedBox(height: 6),
+            GestureDetector(
+              key: ValueKey('day-sheet-edit-template-${activity.id}'),
+              onTap: onEditTemplate,
+              behavior: HitTestBehavior.opaque,
+              child: Text(
+                'Edit activity template',
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: textMuted,
+                  decoration: TextDecoration.underline,
+                  decorationColor: textMuted,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1566,6 +1635,31 @@ String _formatPlanItemTimeSlot(TimeOfDay time) {
   final minute = time.minute.toString().padLeft(2, '0');
   final period = time.period == DayPeriod.am ? 'AM' : 'PM';
   return '$hour12:$minute $period';
+}
+
+InputDecoration _sheetInputDecoration(String label) {
+  return InputDecoration(
+    labelText: label,
+    labelStyle: GoogleFonts.dmSans(color: textMuted),
+    filled: true,
+    fillColor: surfaceWhite,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: borderWarm),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: borderWarm),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: primaryTerracotta),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: primaryTerracotta),
+    ),
+  );
 }
 
 class _PlanItemEditorSheet extends StatefulWidget {
@@ -1796,27 +1890,361 @@ class _PlanItemEditorSheetState extends State<_PlanItemEditorSheet> {
     Navigator.of(context).pop();
   }
 
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: GoogleFonts.dmSans(color: textMuted),
-      filled: true,
-      fillColor: surfaceWhite,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: borderWarm),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: borderWarm),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: primaryTerracotta),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: primaryTerracotta),
+  InputDecoration _inputDecoration(String label) =>
+      _sheetInputDecoration(label);
+}
+
+/// Opens the sheet for adding a manual plan item to [date]. If
+/// [sourceActivity] is given, the sheet starts in "existing activity" mode
+/// with that activity's details pre-filled.
+Future<void> showAddPlanItemSheet(
+  BuildContext context, {
+  required DateTime date,
+  Activity? sourceActivity,
+}) {
+  final appState = AppStateScope.of(context);
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => AppStateScope(
+      state: appState,
+      child: _AddPlanItemSheet(date: date, sourceActivity: sourceActivity),
+    ),
+  );
+}
+
+class _AddPlanItemSheet extends StatefulWidget {
+  const _AddPlanItemSheet({required this.date, this.sourceActivity});
+
+  final DateTime date;
+  final Activity? sourceActivity;
+
+  @override
+  State<_AddPlanItemSheet> createState() => _AddPlanItemSheetState();
+}
+
+class _AddPlanItemSheetState extends State<_AddPlanItemSheet> {
+  final _formKey = GlobalKey<FormState>();
+  Activity? _selectedSource;
+  late final TextEditingController _titleController;
+  late final TextEditingController _durationController;
+  late String _category;
+  late String _timeSlot;
+  late int _difficulty;
+  late String _energy;
+  late String _social;
+  bool _saveToLibrary = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final source = widget.sourceActivity;
+    _selectedSource = source;
+    _titleController = TextEditingController(text: source?.title ?? '');
+    _durationController = TextEditingController(
+      text: '${source?.durationMinutes ?? 45}',
+    );
+    _category = source?.category ?? 'Outside';
+    _timeSlot = _formatPlanItemTimeSlot(TimeOfDay.now());
+    _difficulty = source?.difficulty ?? 3;
+    _energy = source?.energy ?? 'medium';
+    _social = source?.social ?? 'either';
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _durationController.dispose();
+    super.dispose();
+  }
+
+  bool get _isNewOneOff => _selectedSource == null;
+
+  void _applySource(Activity? source) {
+    setState(() {
+      _selectedSource = source;
+      if (source != null) {
+        _titleController.text = source.title;
+        _durationController.text = '${source.durationMinutes}';
+        _category = source.category;
+        _difficulty = source.difficulty;
+        _energy = source.energy;
+        _social = source.social;
+        _saveToLibrary = false;
+      }
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final initialTime = _parsePlanItemTimeSlot(_timeSlot) ?? TimeOfDay.now();
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Scheduled time',
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _timeSlot = _formatPlanItemTimeSlot(picked));
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final state = AppStateScope.of(context);
+    final title = _titleController.text.trim();
+    final duration = int.tryParse(_durationController.text.trim()) ?? 45;
+
+    String? sourceActivityId = _selectedSource?.id;
+    if (_isNewOneOff && _saveToLibrary) {
+      sourceActivityId = state.addActivity(
+        title: title,
+        category: _category,
+        durationMinutes: duration.clamp(5, 720),
+        preferredTime: 'anytime',
+        difficulty: state.difficultyEnabled ? _difficulty : null,
+        energy: state.energyEnabled ? _energy : null,
+        social: state.socialEnabled ? _social : null,
+        maxPerWeek: 1,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+      );
+    }
+
+    final item = ManualPlanItem(
+      id: 'manual_${DateTime.now().microsecondsSinceEpoch}',
+      dateKey: DayPlan.dateKey(widget.date),
+      title: title,
+      timeSlot: _timeSlot,
+      category: _category,
+      durationMinutes: duration.clamp(5, 720),
+      difficulty: state.difficultyEnabled ? _difficulty : 3,
+      energy: state.energyEnabled ? _energy : 'medium',
+      social: state.socialEnabled ? _social : 'either',
+      sourceActivityId: sourceActivityId,
+    );
+    state.addManualPlanItem(item);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final hasEnabledDimensions =
+        state.difficultyEnabled || state.energyEnabled || state.socialEnabled;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        key: const ValueKey('add-plan-item-sheet'),
+        decoration: const BoxDecoration(
+          color: backgroundCream,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: borderWarmStrong,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Add item',
+                  style: GoogleFonts.lora(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w500,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DayPlan(date: widget.date, activities: const []).fullLabel,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: primaryTerracotta,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Activity?>(
+                  key: const ValueKey('add-plan-item-source-field'),
+                  value: _selectedSource,
+                  decoration: _sheetInputDecoration('Add from library'),
+                  items: [
+                    const DropdownMenuItem<Activity?>(
+                      value: null,
+                      child: Text('Create a one-off item'),
+                    ),
+                    ...state.activities.map(
+                      (activity) => DropdownMenuItem<Activity?>(
+                        value: activity,
+                        child: Text(activity.title),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => _applySource(value),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('add-plan-item-title-field'),
+                  controller: _titleController,
+                  enabled: _isNewOneOff,
+                  textInputAction: TextInputAction.next,
+                  decoration: _sheetInputDecoration('Title'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Add a title';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  key: const ValueKey('add-plan-item-time-field'),
+                  onTap: _pickTime,
+                  behavior: HitTestBehavior.opaque,
+                  child: InputDecorator(
+                    decoration:
+                        _sheetInputDecoration('Scheduled time').copyWith(
+                      suffixIcon: const Icon(
+                        Icons.access_time_rounded,
+                        color: textMuted,
+                      ),
+                    ),
+                    child: Text(
+                      _timeSlot,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 15,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('add-plan-item-category-field'),
+                  value: _category,
+                  decoration: _sheetInputDecoration('Category'),
+                  items: Activity.categories
+                      .map(
+                        (category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _category = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('add-plan-item-duration-field'),
+                  controller: _durationController,
+                  enabled: _isNewOneOff,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  decoration: _sheetInputDecoration('Duration minutes'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) return null;
+                    final parsed = int.tryParse(value.trim());
+                    if (parsed == null || parsed <= 0) {
+                      return 'Use a number of minutes';
+                    }
+                    if (parsed > 720) return 'Keep it under 12 hours';
+                    return null;
+                  },
+                ),
+                if (hasEnabledDimensions) ...[
+                  const SizedBox(height: 12),
+                  DimensionFields(
+                    difficultyEnabled: state.difficultyEnabled,
+                    energyEnabled: state.energyEnabled,
+                    socialEnabled: state.socialEnabled,
+                    difficulty: _difficulty,
+                    energy: _energy,
+                    social: _social,
+                    onDifficultyChanged: (value) {
+                      setState(() => _difficulty = value);
+                    },
+                    onEnergyChanged: (value) {
+                      setState(() => _energy = value);
+                    },
+                    onSocialChanged: (value) {
+                      setState(() => _social = value);
+                    },
+                    inputDecoration: _sheetInputDecoration,
+                  ),
+                ],
+                if (_isNewOneOff) ...[
+                  const SizedBox(height: 12),
+                  Material(
+                    color: surfaceWhite,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: const BorderSide(color: borderWarm),
+                    ),
+                    child: CheckboxListTile(
+                      key: const ValueKey(
+                        'add-plan-item-save-to-library-field',
+                      ),
+                      value: _saveToLibrary,
+                      onChanged: (value) {
+                        setState(() => _saveToLibrary = value ?? false);
+                      },
+                      title: Text(
+                        'Save to activity library for future use',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SheetButton(
+                        label: 'Cancel',
+                        foreground: textMuted,
+                        background: Colors.transparent,
+                        hasBorder: true,
+                        onTap: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SheetButton(
+                        key: const ValueKey('add-plan-item-save-button'),
+                        label: 'Save',
+                        foreground: Colors.white,
+                        background: primaryTerracotta,
+                        onTap: _save,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

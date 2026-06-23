@@ -22,6 +22,11 @@ class PlannedActivity {
   String? energyOverride;
   String? socialOverride;
 
+  /// If this occurrence represents a user-added manual plan item, this is
+  /// the [ManualPlanItem.id] it was created from. `null` for generated
+  /// occurrences.
+  final String? manualItemId;
+
   PlannedActivity({
     required this.activity,
     required this.timeSlot,
@@ -31,6 +36,7 @@ class PlannedActivity {
     this.difficultyOverride,
     this.energyOverride,
     this.socialOverride,
+    this.manualItemId,
   });
 
   String get id => activity.id;
@@ -40,6 +46,7 @@ class PlannedActivity {
   int get difficulty => difficultyOverride ?? activity.difficulty;
   String get energy => energyOverride ?? activity.energy;
   String get social => socialOverride ?? activity.social;
+  bool get isManual => manualItemId != null;
 }
 
 /// A per-occurrence edit made through the focused "Edit this plan item"

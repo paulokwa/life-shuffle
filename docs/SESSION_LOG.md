@@ -1915,3 +1915,37 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: The occurrence editor's scheduled time is set through a real tap-to-pick `showTimePicker` control rather than typed free text, with typing still available only as the picker's own optional fallback. The Plan screen's day card, day strip, and month grid never show or allow an active "Check in" affordance on a day with nothing planned, and show a calm "Upcoming" label instead of "Check in" on future planned days while keeping edit/remove reachable.
 - **Next recommended step**: None queued for this correction. Revisit `docs/PARKING_LOT.md` for what's next.
 - **Open questions**: None.
+
+---
+
+## 2026-06-22 (continued 7) - MVP 2 UX slice 7: manual "Add to plan"
+
+- **Goal**: Let users pin extra activities to a specific date/time without regenerating the plan, via both a one-off item and an existing-activity path, with an optional "save to library" for one-offs.
+- **Summary**: Added a `ManualPlanItem` model and wired it through persistence, state, and UI. Manual items are stored in `SavedState.manualPlanItems`, re-applied after every build/regenerate/view switch, and excluded from locked-generated-occurrence carry so they survive `regenerate()`, `generateRange(...)`, `setPlanStyle(...)`, and reload/sync. They render as `PlannedActivity` instances backed by synthetic `Activity` objects (`manual_<itemId>`, `enabled: false`) so they appear in week/2-week/month views, day check-in sheets, text export, print preview, and the ICS feed without colliding with generated occurrences or being picked by the generator. The Plan screen now shows add affordances on every day card header, empty day strip cells, empty in-range month grid cells, empty day check-in sheets, and check-in sheet headers. A new `_AddPlanItemSheet` supports creating a one-off item (with optional save-to-library checkbox) or selecting an existing activity; existing-activity copies values at creation time and does not link to future template edits. Removing a manual occurrence deletes the pinned item; editing a manual occurrence updates the underlying `ManualPlanItem`.
+- **Files changed**:
+  - `lib/models/manual_plan_item.dart` (new)
+  - `lib/models/day_plan.dart`
+  - `lib/services/persistence_service.dart`
+  - `lib/state/app_state.dart`
+  - `lib/screens/plan_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Synthetic backing activities for manual items use id `manual_<itemId>` and `enabled: false` so the generator never picks them and they never collide with generated occurrences of the same source activity.
+  - Manual items are re-applied by `_applyManualItems()` after `_buildPlan()`/`regenerate()`/`generateRange()`/`setPlanStyle()` and after loading saved state, rather than being carried through `_collectLocked()`.
+  - `_collectLocked()` now filters out `manualItemId != null` occurrences to avoid duplicate pinned items after regeneration.
+  - `editPlannedOccurrence` updates the underlying `ManualPlanItem` for manual occurrences and skips occurrence overrides for them.
+  - `removeFromPlan` deletes manual items from `_manualPlanItems` entirely, since there is no library source to keep.
+  - `SavedState`/`PersistenceService` round-trip `manualPlanItems`; check-in/lock overlays naturally cover manual items because their synthetic activity ids are saved in `checkinMap`/`lockedMap`.
+- **Tests run**:
+  - `dart format .` - formatted touched files.
+  - `flutter test` - passed, 252/252 tests (12 net new: AppState add/persist/survive-regenerate/survive-generateRange/survive-setPlanStyle, copy-source-without-mutating, save-to-library, check-in-persists, UI day-card-add one-off, UI existing-activity path, UI save-to-library checkbox, UI month-grid add icon/body-tap inactive).
+  - `flutter analyze --no-fatal-infos` - passed, 20 pre-existing info-level lints (deprecated `value` on the two new `DropdownButtonFormField`s and other unrelated infos), no errors.
+  - `flutter build web` - passed.
+  - `git diff --check` - no whitespace errors (pre-existing CRLF normalization warning only).
+  - `npm test` - not run; no JavaScript files changed.
+  - Confirmed `docs/MASTER_PLAN.md`, `firestore.rules`, and `netlify/` are untouched; no date-moving, drag/drop, recurring events, custom-horizon UI, year/day view, native PDF, history/archive persistence, Firestore rules changes, or ICS feed behavior changes were added.
+- **Current state**: Users can manually add pinned plan items to any generated day from multiple entry points; one-offs can optionally be saved to the activity library, and manual items survive regeneration, range switches, plan-style changes, and reload/sync.
+- **Next recommended step**: None queued for this slice. Revisit `docs/PARKING_LOT.md` for what's next.
+- **Open questions**: None.

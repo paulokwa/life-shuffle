@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
 import '../models/day_plan.dart' show OccurrenceOverride;
+import '../models/manual_plan_item.dart';
 import '../models/range_type.dart';
 
 /// Lightweight local storage for in-session state.
@@ -56,6 +57,7 @@ class PersistenceService {
   static const _keyLockedMap = 'ls_locked_map';
   static const _keyRemovedMap = 'ls_removed_map';
   static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
+  static const _keyManualPlanItems = 'ls_manual_plan_items';
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -124,6 +126,8 @@ class PersistenceService {
     final removedMap = _loadRemovedMapBlob() ?? const <String, bool>{};
     final occurrenceOverrides = _loadOccurrenceOverridesMapBlob() ??
         const <String, OccurrenceOverride>{};
+    final manualPlanItems =
+        _loadManualPlanItemsBlob() ?? const <String, ManualPlanItem>{};
 
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
     final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
@@ -171,6 +175,7 @@ class PersistenceService {
       lockedMap: lockedMap,
       removedMap: removedMap,
       occurrenceOverrides: occurrenceOverrides,
+      manualPlanItems: manualPlanItems,
     );
   }
 
@@ -316,6 +321,12 @@ class PersistenceService {
         jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
       );
 
+  static void saveManualPlanItems(Map<String, ManualPlanItem> value) =>
+      _prefs.setString(
+        _keyManualPlanItems,
+        jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
+      );
+
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);
     if (raw == null || raw.isEmpty) return null;
@@ -389,6 +400,28 @@ class PersistenceService {
     return null;
   }
 
+  static Map<String, ManualPlanItem>? _loadManualPlanItemsBlob() {
+    final raw = _prefs.getString(_keyManualPlanItems);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            ManualPlanItem.fromMap(
+              value is Map ? Map<String, dynamic>.from(value) : const {},
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // A malformed blob is no worse than no manual items having ever been
+      // saved.
+    }
+    return null;
+  }
+
   static List<Activity> _loadActivities(List<Activity> defaultActivities) {
     final raw = _prefs.getString(_keyActivities);
     if (raw == null || raw.isEmpty) {
@@ -430,6 +463,7 @@ class SavedState {
     required this.lockedMap,
     this.removedMap = const {},
     this.occurrenceOverrides = const {},
+    this.manualPlanItems = const {},
     this.planStyle = 'balanced',
     this.rangeType = RangeType.week,
     RangeType? viewMode,
@@ -516,6 +550,9 @@ class SavedState {
   /// source [Activity] template. See [AppState.editPlannedOccurrence].
   final Map<String, OccurrenceOverride> occurrenceOverrides;
 
+  /// Stable-id-keyed manual plan items. See [ManualPlanItem].
+  final Map<String, ManualPlanItem> manualPlanItems;
+
   Map<String, dynamic> toMap() {
     return {
       'activities': activities.map((activity) => activity.toMap()).toList(),
@@ -556,6 +593,8 @@ class SavedState {
       'removedMap': removedMap,
       'occurrenceOverrides':
           occurrenceOverrides.map((key, value) => MapEntry(key, value.toMap())),
+      'manualPlanItems':
+          manualPlanItems.map((key, value) => MapEntry(key, value.toMap())),
     };
   }
 
@@ -620,6 +659,7 @@ class SavedState {
       occurrenceOverrides: _readOccurrenceOverrides(
         map['occurrenceOverrides'],
       ),
+      manualPlanItems: _readManualPlanItems(map['manualPlanItems']),
     );
   }
 
@@ -631,6 +671,20 @@ class SavedState {
         (key, entry) => MapEntry(
           key.toString(),
           OccurrenceOverride.fromMap(
+            entry is Map ? Map<String, dynamic>.from(entry) : const {},
+          ),
+        ),
+      );
+    }
+    return const {};
+  }
+
+  static Map<String, ManualPlanItem> _readManualPlanItems(Object? value) {
+    if (value is Map) {
+      return value.map(
+        (key, entry) => MapEntry(
+          key.toString(),
+          ManualPlanItem.fromMap(
             entry is Map ? Map<String, dynamic>.from(entry) : const {},
           ),
         ),

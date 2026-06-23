@@ -7,6 +7,7 @@ import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/generated_plan_range.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
@@ -107,6 +108,12 @@ class AppState extends ChangeNotifier {
   /// customization, and keeping a stale override around would silently
   /// reapply an edit that belonged to a previous generated plan.
   Map<String, OccurrenceOverride> _occurrenceOverrides = {};
+
+  /// Stable-id-keyed user-added manual plan items. These survive
+  /// [regenerate], [generateRange], and [setPlanStyle] because they are
+  /// pinned user content, not generated-occurrence customizations. See
+  /// [addManualPlanItem] and [removeManualPlanItem].
+  Map<String, ManualPlanItem> _manualPlanItems = {};
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -343,6 +350,11 @@ class AppState extends ChangeNotifier {
   String? get lastSyncErrorMessage => _lastSyncErrorMessage;
   int? get lastSyncAttemptAtMillis => _lastSyncAttemptAtMillis;
   bool get remoteUpdatedElsewhere => _remoteUpdatedElsewhere;
+
+  /// User-added manual plan items pinned to specific dates. Exposed mainly
+  /// for tests; screens should read the merged [DayPlan.activities].
+  List<ManualPlanItem> get manualPlanItems =>
+      List.unmodifiable(_manualPlanItems.values);
 
   /// Calm, plain-language description of the current sync problem or
   /// notice, or `null` when sync is healthy. Never exposes raw Firebase
@@ -728,7 +740,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addActivity({
+  String addActivity({
     required String title,
     required String category,
     required int durationMinutes,
@@ -741,9 +753,10 @@ class AppState extends ChangeNotifier {
     required bool noConsecutiveDays,
     required bool enabled,
   }) {
+    final id = 'custom_${DateTime.now().microsecondsSinceEpoch}';
     activities.add(
       Activity(
-        id: 'custom_${DateTime.now().microsecondsSinceEpoch}',
+        id: id,
         title: title,
         category: category,
         durationMinutes: durationMinutes,
@@ -759,6 +772,7 @@ class AppState extends ChangeNotifier {
     );
     _persist();
     notifyListeners();
+    return id;
   }
 
   bool hasActivityTitle(String title) {
@@ -875,6 +889,7 @@ class AppState extends ChangeNotifier {
     _removedOccurrences = {};
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    _applyManualItems();
     _persist();
     notifyListeners();
   }
@@ -897,6 +912,7 @@ class AppState extends ChangeNotifier {
     _removedOccurrences = {};
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan();
+    _applyManualItems();
     _persist();
     notifyListeners();
   }
@@ -922,6 +938,7 @@ class AppState extends ChangeNotifier {
     _removedOccurrences = {};
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    _applyManualItems();
     _persist();
     notifyListeners();
   }
@@ -1062,7 +1079,18 @@ class AppState extends ChangeNotifier {
   /// occurrence key (see [_applyRemovals]) so the removal survives reload
   /// and view switching until the next deliberate [regenerate],
   /// [generateRange], or [setPlanStyle].
+  ///
+  /// For manual plan items ([PlannedActivity.manualItemId] is set), this
+  /// deletes the manual item entirely (there is no library source to keep).
   void removeFromPlan(DayPlan day, PlannedActivity activity) {
+    final manualId = activity.manualItemId;
+    if (manualId != null) {
+      _manualPlanItems.remove(manualId);
+      day.activities.remove(activity);
+      _persist();
+      notifyListeners();
+      return;
+    }
     if (!day.activities.remove(activity)) return;
     _removedOccurrences[_occurrenceKey(day.date, activity.activity.id)] = true;
     _persist();
@@ -1080,6 +1108,10 @@ class AppState extends ChangeNotifier {
   /// switching until the next deliberate [regenerate], [generateRange], or
   /// [setPlanStyle] - those discard the generated plan this override
   /// belonged to, the same as [removeFromPlan].
+  ///
+  /// For manual plan items ([PlannedActivity.manualItemId] is set), the edit
+  /// updates the underlying [ManualPlanItem] directly so the change survives
+  /// regeneration and remains a pinned user addition.
   void editPlannedOccurrence(
     DayPlan day,
     PlannedActivity activity, {
@@ -1089,23 +1121,73 @@ class AppState extends ChangeNotifier {
     String? energy,
     String? social,
   }) {
-    activity.timeSlot = timeSlot;
-    activity.categoryOverride = category;
-    activity.difficultyOverride = difficulty;
-    activity.energyOverride = energy;
-    activity.socialOverride = social;
+    final manualId = activity.manualItemId;
+    if (manualId != null) {
+      final item = _manualPlanItems[manualId];
+      if (item != null) {
+        item.timeSlot = timeSlot;
+        item.category = category;
+        if (difficulty != null) item.difficulty = difficulty;
+        if (energy != null) item.energy = energy;
+        if (social != null) item.social = social;
+
+        // Keep the synthetic backing activity in sync so the current
+        // PlannedActivity reflects the edit immediately.
+        activity.activity
+          ..title = item.title
+          ..category = item.category
+          ..durationMinutes = item.durationMinutes
+          ..difficulty = item.difficulty
+          ..energy = item.energy
+          ..social = item.social;
+      }
+      activity.timeSlot = timeSlot;
+      activity.categoryOverride = null;
+      activity.difficultyOverride = difficulty;
+      activity.energyOverride = energy;
+      activity.socialOverride = social;
+    } else {
+      activity.timeSlot = timeSlot;
+      activity.categoryOverride = category;
+      activity.difficultyOverride = difficulty;
+      activity.energyOverride = energy;
+      activity.socialOverride = social;
+      _occurrenceOverrides[_occurrenceKey(day.date, activity.activity.id)] =
+          OccurrenceOverride(
+        timeSlot: timeSlot,
+        category: category,
+        difficulty: difficulty,
+        energy: energy,
+        social: social,
+      );
+    }
     day.activities.sort(
       (a, b) => PlannerService.timeRank(a.timeSlot)
           .compareTo(PlannerService.timeRank(b.timeSlot)),
     );
-    _occurrenceOverrides[_occurrenceKey(day.date, activity.activity.id)] =
-        OccurrenceOverride(
-      timeSlot: timeSlot,
-      category: category,
-      difficulty: difficulty,
-      energy: energy,
-      social: social,
-    );
+    _persist();
+    notifyListeners();
+  }
+
+  /// Adds a user-created manual plan item to the current generated range.
+  /// It is pinned to [item.dateKey] and survives regeneration, view
+  /// switches, and reload/sync by default.
+  void addManualPlanItem(ManualPlanItem item) {
+    _manualPlanItems[item.id] = item;
+    _applyManualItems();
+    _persist();
+    notifyListeners();
+  }
+
+  /// Removes a manual plan item by id. Used by tests; the UI path goes
+  /// through [removeFromPlan] on the live occurrence.
+  void removeManualPlanItem(String id) {
+    if (!_manualPlanItems.containsKey(id)) return;
+    _manualPlanItems.remove(id);
+    _generatedDays = _buildPlan(lockedItems: _collectLocked());
+    _applyRemovals();
+    _applyOccurrenceOverrides();
+    _applyManualItems();
     _persist();
     notifyListeners();
   }
@@ -1362,8 +1444,12 @@ class AppState extends ChangeNotifier {
     _removedOccurrences = Map<String, bool>.from(saved.removedMap);
     _occurrenceOverrides =
         Map<String, OccurrenceOverride>.from(saved.occurrenceOverrides);
+    _manualPlanItems = Map<String, ManualPlanItem>.from(
+      saved.manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
+    );
     _generatedDays = _buildPlan();
     _applyRemovals();
+    _applyManualItems();
     _applyOverlays(saved);
     _applyOccurrenceOverrides();
     _refreshCachedIcs();
@@ -1523,6 +1609,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveLockedMap(state.lockedMap);
     PersistenceService.saveRemovedMap(state.removedMap);
     PersistenceService.saveOccurrenceOverridesMap(state.occurrenceOverrides);
+    PersistenceService.saveManualPlanItems(state.manualPlanItems);
   }
 
   bool _applyCalendarMetadata(
@@ -1634,6 +1721,9 @@ class AppState extends ChangeNotifier {
       removedMap: Map<String, bool>.from(_removedOccurrences),
       occurrenceOverrides:
           Map<String, OccurrenceOverride>.from(_occurrenceOverrides),
+      manualPlanItems: Map<String, ManualPlanItem>.from(
+        _manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
+      ),
     );
   }
 
@@ -1644,7 +1734,11 @@ class AppState extends ChangeNotifier {
   Map<DateTime, List<PlannedActivity>> _collectLocked() {
     final result = <DateTime, List<PlannedActivity>>{};
     for (final day in _generatedDays) {
-      final locked = day.activities.where((a) => a.locked).toList();
+      // Manual items are pinned user additions, not generated occurrences;
+      // they are re-applied separately by [_applyManualItems].
+      final locked = day.activities
+          .where((a) => a.locked && a.manualItemId == null)
+          .toList();
       if (locked.isNotEmpty) result[_dateOnly(day.date)] = locked;
     }
     return result;
@@ -1775,6 +1869,42 @@ class AppState extends ChangeNotifier {
         pa.socialOverride = override.social;
       }
       if (changedTimes) {
+        day.activities.sort(
+          (a, b) => PlannerService.timeRank(a.timeSlot)
+              .compareTo(PlannerService.timeRank(b.timeSlot)),
+        );
+      }
+    }
+  }
+
+  /// Adds user-created manual plan items into [_generatedDays] so they
+  /// appear in every plan view, export, print preview, and the ICS feed.
+  /// Manual items are always sorted into the day's activity list by time.
+  void _applyManualItems() {
+    if (_manualPlanItems.isEmpty) return;
+    final dayByKey = {
+      for (final d in _generatedDays) DayPlan.dateKey(d.date): d,
+    };
+    var changedTimes = false;
+    for (final item in _manualPlanItems.values) {
+      final day = dayByKey[item.dateKey];
+      if (day == null) continue;
+      final existingIndex =
+          day.activities.indexWhere((pa) => pa.manualItemId == item.id);
+      if (existingIndex >= 0) {
+        // Refresh the backing synthetic activity in case the manual item
+        // was edited while another view held the old PlannedActivity.
+        day.activities[existingIndex] = item.toPlannedActivity(
+          status: day.activities[existingIndex].status,
+          locked: day.activities[existingIndex].locked,
+        );
+      } else {
+        day.activities.add(item.toPlannedActivity());
+        changedTimes = true;
+      }
+    }
+    if (changedTimes) {
+      for (final day in _generatedDays) {
         day.activities.sort(
           (a, b) => PlannerService.timeRank(a.timeSlot)
               .compareTo(PlannerService.timeRank(b.timeSlot)),
