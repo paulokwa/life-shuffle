@@ -23,6 +23,14 @@ class ManualPlanItem {
     this.energy = 'medium',
     this.social = 'either',
     this.sourceActivityId,
+    this.outsideEventId,
+    this.outsideEventSourceName,
+    this.outsideEventSourceUrl,
+    this.outsideEventTicketUrl,
+    this.outsideEventPriceLabel,
+    this.outsideEventVenueName,
+    this.outsideEventAddress,
+    this.outsideEventSummary,
   });
 
   /// Stable identifier for this manual item.
@@ -43,6 +51,20 @@ class ManualPlanItem {
   /// (existing-activity path) or saved into (one-off + "Save to library").
   String? sourceActivityId;
 
+  /// Optional sourced-event metadata. These fields keep outside events
+  /// separate from reusable [Activity] templates while still letting them
+  /// reuse the fixed, regeneration-safe manual-plan-item path.
+  String? outsideEventId;
+  String? outsideEventSourceName;
+  String? outsideEventSourceUrl;
+  String? outsideEventTicketUrl;
+  String? outsideEventPriceLabel;
+  String? outsideEventVenueName;
+  String? outsideEventAddress;
+  String? outsideEventSummary;
+
+  bool get isOutsideEvent => outsideEventId != null;
+
   ManualPlanItem copy() {
     return ManualPlanItem(
       id: id,
@@ -55,6 +77,14 @@ class ManualPlanItem {
       energy: energy,
       social: social,
       sourceActivityId: sourceActivityId,
+      outsideEventId: outsideEventId,
+      outsideEventSourceName: outsideEventSourceName,
+      outsideEventSourceUrl: outsideEventSourceUrl,
+      outsideEventTicketUrl: outsideEventTicketUrl,
+      outsideEventPriceLabel: outsideEventPriceLabel,
+      outsideEventVenueName: outsideEventVenueName,
+      outsideEventAddress: outsideEventAddress,
+      outsideEventSummary: outsideEventSummary,
     );
   }
 
@@ -101,6 +131,21 @@ class ManualPlanItem {
       'energy': energy,
       'social': social,
       if (sourceActivityId != null) 'sourceActivityId': sourceActivityId,
+      if (outsideEventId != null) 'outsideEventId': outsideEventId,
+      if (outsideEventSourceName != null)
+        'outsideEventSourceName': outsideEventSourceName,
+      if (outsideEventSourceUrl != null)
+        'outsideEventSourceUrl': outsideEventSourceUrl,
+      if (outsideEventTicketUrl != null)
+        'outsideEventTicketUrl': outsideEventTicketUrl,
+      if (outsideEventPriceLabel != null)
+        'outsideEventPriceLabel': outsideEventPriceLabel,
+      if (outsideEventVenueName != null)
+        'outsideEventVenueName': outsideEventVenueName,
+      if (outsideEventAddress != null)
+        'outsideEventAddress': outsideEventAddress,
+      if (outsideEventSummary != null)
+        'outsideEventSummary': outsideEventSummary,
     };
   }
 
@@ -121,7 +166,23 @@ class ManualPlanItem {
       sourceActivityId: map['sourceActivityId'] is String
           ? map['sourceActivityId'] as String
           : null,
+      outsideEventId: _readNullableString(map['outsideEventId']),
+      outsideEventSourceName:
+          _readNullableString(map['outsideEventSourceName']),
+      outsideEventSourceUrl: _readNullableString(map['outsideEventSourceUrl']),
+      outsideEventTicketUrl: _readNullableString(map['outsideEventTicketUrl']),
+      outsideEventPriceLabel:
+          _readNullableString(map['outsideEventPriceLabel']),
+      outsideEventVenueName: _readNullableString(map['outsideEventVenueName']),
+      outsideEventAddress: _readNullableString(map['outsideEventAddress']),
+      outsideEventSummary: _readNullableString(map['outsideEventSummary']),
     );
+  }
+
+  static String? _readNullableString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   static int _readDifficulty(Object? value) {

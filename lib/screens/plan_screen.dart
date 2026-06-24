@@ -1433,6 +1433,18 @@ class _DaySheetActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    ManualPlanItem? manualItem;
+    final manualId = activity.manualItemId;
+    if (manualId != null) {
+      for (final item in state.manualPlanItems) {
+        if (item.id == manualId && item.isOutsideEvent) {
+          manualItem = item;
+          break;
+        }
+      }
+    }
+
     return Container(
       key: ValueKey('day-sheet-activity-${activity.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1493,6 +1505,10 @@ class _DaySheetActivityCard extends StatelessWidget {
               ),
             ],
           ),
+          if (manualItem != null) ...[
+            const SizedBox(height: 10),
+            _OutsideEventPlanDetails(item: manualItem),
+          ],
           const SizedBox(height: 12),
           if (canCheckIn)
             Wrap(
@@ -1586,6 +1602,68 @@ class _DaySheetActivityCard extends StatelessWidget {
                   decoration: TextDecoration.underline,
                   decorationColor: textMuted,
                 ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OutsideEventPlanDetails extends StatelessWidget {
+  const _OutsideEventPlanDetails({required this.item});
+
+  final ManualPlanItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = [
+      if (item.outsideEventVenueName?.trim().isNotEmpty == true)
+        item.outsideEventVenueName!.trim(),
+      if (item.outsideEventAddress?.trim().isNotEmpty == true)
+        item.outsideEventAddress!.trim(),
+      if (item.outsideEventPriceLabel?.trim().isNotEmpty == true)
+        item.outsideEventPriceLabel!.trim(),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF6F2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderWarm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            item.outsideEventSourceName ?? 'Outside event',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: accentSage,
+            ),
+          ),
+          if (item.outsideEventSummary?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Text(
+              item.outsideEventSummary!.trim(),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: textMuted,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (details.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              details.join(' / '),
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
               ),
             ),
           ],
