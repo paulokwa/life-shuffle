@@ -119,14 +119,43 @@ function buildFeedResponse(calendarData) {
   return icsResponse(icsText);
 }
 
-/** Looks up a calendar by feedToken. No index needed - see plan doc section 3. */
+/**
+ * Picks whichever matching calendar doc's cached feed was actually
+ * refreshed most recently. Two different calendar docs can end up sharing
+ * the same feedToken - e.g. a feed token generated while using the app in
+ * one browser/device's local storage, then synced up to Firestore under
+ * two different signed-in accounts that shared that device before either
+ * had signed in. `where('feedToken', '==', token)` alone makes no ordering
+ * guarantee across such matches, so without this, the public feed could
+ * flip between a fresh and a stale doc from request to request. Treats a
+ * missing `cachedIcsUpdatedAtMillis` as "oldest" so a doc that was never
+ * actually cached never wins over one that was.
+ */
+function pickFreshestCalendar(candidates) {
+  return candidates.reduce((freshest, candidate) => {
+    const freshestAt = freshest.cachedIcsUpdatedAtMillis ?? -Infinity;
+    const candidateAt = candidate.cachedIcsUpdatedAtMillis ?? -Infinity;
+    return candidateAt > freshestAt ? candidate : freshest;
+  });
+}
+
+/**
+ * Looks up every calendar doc matching feedToken (normally exactly one;
+ * see `pickFreshestCalendar` for why there can be more) and returns the
+ * freshest. Deliberately does not add a Firestore `orderBy` here: ordering
+ * by a field other than the equality filter (`feedToken`) would require a
+ * composite Firestore index that isn't deployed, and shipping that without
+ * coordinating an index deploy would fail every request with
+ * FAILED_PRECONDITION instead of just the rare duplicate-token case. Doing
+ * the freshest-pick in application code needs no new index.
+ */
 async function findCalendarByFeedToken(db, token) {
   const snapshot = await db
     .collection(CALENDARS_COLLECTION)
     .where('feedToken', '==', token)
-    .limit(1)
     .get();
-  return snapshot.empty ? null : snapshot.docs[0].data();
+  if (snapshot.empty) return null;
+  return pickFreshestCalendar(snapshot.docs.map((doc) => doc.data()));
 }
 
 async function handler(event) {
@@ -156,6 +185,7 @@ module.exports = {
   isFeedEnabled,
   buildFeedResponse,
   findCalendarByFeedToken,
+  pickFreshestCalendar,
   methodNotAllowedResponse,
   notFoundResponse,
   internalErrorResponse,

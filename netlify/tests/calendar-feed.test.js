@@ -13,7 +13,40 @@ const {
   extractToken,
   isFeedEnabled,
   buildFeedResponse,
+  findCalendarByFeedToken,
+  pickFreshestCalendar,
 } = require('../functions/calendar-feed');
+
+/**
+ * Minimal fake of the chained Firestore query builder
+ * (`collection().where().get()`) used by `findCalendarByFeedToken`.
+ * Records every `where`/`orderBy`/`limit` call so tests can assert exactly
+ * which query shape was built, without touching real Firestore.
+ */
+function fakeDb(matchingDocs) {
+  const calls = { where: [], orderBy: [], limit: [] };
+  const query = {
+    where(...args) {
+      calls.where.push(args);
+      return query;
+    },
+    orderBy(...args) {
+      calls.orderBy.push(args);
+      return query;
+    },
+    limit(...args) {
+      calls.limit.push(args);
+      return query;
+    },
+    async get() {
+      return {
+        empty: matchingDocs.length === 0,
+        docs: matchingDocs.map((data) => ({ data: () => data })),
+      };
+    },
+  };
+  return { collection: () => query, calls };
+}
 
 test('extractToken reads and trims the token query param', () => {
   assert.equal(extractToken({ token: ' abc123 ' }), 'abc123');
@@ -116,4 +149,64 @@ test('handler returns 500 when Firestore admin credentials are not configured', 
     queryStringParameters: { token: 'some-token' },
   });
   assert.equal(response.statusCode, 500);
+});
+
+test('pickFreshestCalendar returns the only candidate when there is just one', () => {
+  const only = { calendarId: 'a', cachedIcsUpdatedAtMillis: 100 };
+  assert.equal(pickFreshestCalendar([only]), only);
+});
+
+test('pickFreshestCalendar prefers the candidate with the highest cachedIcsUpdatedAtMillis, regardless of input order', () => {
+  const stale = { calendarId: 'old', cachedIcsUpdatedAtMillis: 100 };
+  const fresh = { calendarId: 'new', cachedIcsUpdatedAtMillis: 200 };
+  assert.equal(pickFreshestCalendar([stale, fresh]), fresh);
+  assert.equal(pickFreshestCalendar([fresh, stale]), fresh);
+});
+
+test('pickFreshestCalendar treats a missing cachedIcsUpdatedAtMillis as oldest', () => {
+  const neverCached = { calendarId: 'never' };
+  const cached = { calendarId: 'cached', cachedIcsUpdatedAtMillis: 1 };
+  assert.equal(pickFreshestCalendar([neverCached, cached]), cached);
+  assert.equal(pickFreshestCalendar([cached, neverCached]), cached);
+});
+
+test('findCalendarByFeedToken returns null when no doc matches the token', async () => {
+  const db = fakeDb([]);
+  assert.equal(await findCalendarByFeedToken(db, 'tok'), null);
+});
+
+test('findCalendarByFeedToken returns the single matching doc', async () => {
+  const data = { calendarId: 'solo', feedToken: 'tok', cachedIcsUpdatedAtMillis: 5 };
+  const db = fakeDb([data]);
+  assert.equal(await findCalendarByFeedToken(db, 'tok'), data);
+});
+
+test('findCalendarByFeedToken queries by feedToken equality only - no orderBy/limit, so no composite Firestore index is required', async () => {
+  const db = fakeDb([{ calendarId: 'solo', cachedIcsUpdatedAtMillis: 1 }]);
+  await findCalendarByFeedToken(db, 'tok');
+  assert.deepEqual(db.calls.where, [['feedToken', '==', 'tok']]);
+  assert.deepEqual(db.calls.orderBy, []);
+  assert.deepEqual(db.calls.limit, []);
+});
+
+test('findCalendarByFeedToken resolves duplicate feedToken docs (e.g. two different accounts that shared a device) by returning the one with the freshest cached feed', async () => {
+  const stale = {
+    calendarId: 'owner_a_default',
+    feedToken: 'shared-tok',
+    cachedIcsUpdatedAtMillis: 1000,
+    cachedIcsText: 'stale ics',
+  };
+  const fresh = {
+    calendarId: 'owner_b_default',
+    feedToken: 'shared-tok',
+    cachedIcsUpdatedAtMillis: 2000,
+    cachedIcsText: 'fresh ics',
+  };
+  const db = fakeDb([stale, fresh]);
+  assert.equal(await findCalendarByFeedToken(db, 'shared-tok'), fresh);
+
+  // Order returned by Firestore is not guaranteed - must still pick fresh
+  // when it happens to come first too.
+  const dbReversed = fakeDb([fresh, stale]);
+  assert.equal(await findCalendarByFeedToken(dbReversed, 'shared-tok'), fresh);
 });

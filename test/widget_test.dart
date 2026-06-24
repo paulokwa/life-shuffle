@@ -4351,6 +4351,96 @@ void main() {
     );
   });
 
+  test(
+      'refreshPublishedFeedNow saves to the currently selected calendarId '
+      "(and that calendar's own feedToken), not a stale or default one, "
+      'after switching calendars', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    const uid = 'multi_calendar_user';
+    final defaultCalendarId = FirestoreSyncService.defaultCalendarId(uid);
+    const otherCalendarId = 'other_calendar_id';
+
+    final defaultCalendar = FirestoreCalendar(
+      state: const SavedState(
+        activities: [],
+        seed: 0,
+        updatedAtMillis: 500,
+        calendarTitle: 'Default calendar',
+        calendarNameConfirmed: true,
+        feedEnabled: true,
+        feedToken: 'default-calendar-token',
+        enabledMap: {},
+        checkinMap: {},
+        lockedMap: {},
+      ),
+      metadata: CalendarMetadata(
+        calendarId: defaultCalendarId,
+        title: 'Default calendar',
+        ownerUserId: uid,
+        memberUserIds: const [uid],
+        createdAtMillis: 500,
+        updatedAtMillis: 500,
+      ),
+    );
+    const otherCalendar = FirestoreCalendar(
+      state: SavedState(
+        activities: [],
+        seed: 0,
+        updatedAtMillis: 600,
+        calendarTitle: 'Other calendar',
+        calendarNameConfirmed: true,
+        feedEnabled: true,
+        feedToken: 'other-calendar-token',
+        enabledMap: {},
+        checkinMap: {},
+        lockedMap: {},
+      ),
+      metadata: CalendarMetadata(
+        calendarId: otherCalendarId,
+        title: 'Other calendar',
+        ownerUserId: uid,
+        memberUserIds: [uid],
+        createdAtMillis: 600,
+        updatedAtMillis: 600,
+      ),
+    );
+
+    final initialSyncSaveDone = Completer<void>();
+    final saveCalls = <({String userId, String calendarId, SavedState state})>[];
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [defaultCalendar, otherCalendar],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        saveCalls.add((userId: userId, calendarId: calendarId, state: state));
+        if (saveCalls.length == 1 && !initialSyncSaveDone.isCompleted) {
+          initialSyncSaveDone.complete();
+        }
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setUserId(uid);
+    await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
+    expect(appState.calendarId, defaultCalendarId);
+
+    final switched = appState.selectCalendar(otherCalendarId);
+    expect(switched, isTrue);
+    expect(appState.calendarId, otherCalendarId);
+    expect(appState.feedToken, 'other-calendar-token');
+
+    saveCalls.clear();
+    final result = await appState.refreshPublishedFeedNow();
+
+    expect(result, FeedRefreshResult.success);
+    expect(saveCalls, hasLength(1));
+    expect(saveCalls.single.calendarId, otherCalendarId);
+    expect(saveCalls.single.calendarId, isNot(defaultCalendarId));
+    expect(saveCalls.single.state.feedToken, 'other-calendar-token');
+  });
+
   test('SavedState maps cached ICS fields for Firestore sync', () {
     const state = SavedState(
       activities: [],
