@@ -1362,12 +1362,14 @@ class _PublishingCard extends StatelessWidget {
             ),
           ),
           if (state.feedToken != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                if (state.feedEnabled) ...[
+            if (state.feedEnabled) ...[
+              const SizedBox(height: 14),
+              const _PublishingGroupLabel(label: 'FEED ACTIONS'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
                   _PublishingActionButton(
                     key: const ValueKey('settings-copy-feed-link'),
                     icon: Icons.copy_rounded,
@@ -1375,24 +1377,55 @@ class _PublishingCard extends StatelessWidget {
                     onTap: () => _copyFeedLink(context, state.feedToken!),
                   ),
                   _PublishingActionButton(
-                    key: const ValueKey('settings-open-feed-link'),
-                    icon: Icons.open_in_new_rounded,
-                    label: 'Open feed',
-                    onTap: () => _openFeedLink(context, state.feedToken!),
-                  ),
-                  _PublishingActionButton(
                     key: const ValueKey('settings-refresh-feed-now'),
                     icon: Icons.sync_rounded,
-                    label: 'Refresh published feed',
-                    onTap: () => _refreshFeedNow(context, state),
+                    label: 'Refresh feed',
+                    onTap: () => unawaited(_refreshFeedNow(context, state)),
                   ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const _PublishingGroupLabel(label: 'ADVANCED DIAGNOSTICS'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-download-raw-ics'),
+                    icon: Icons.download_rounded,
+                    label: 'Download raw ICS',
+                    onTap: () => _downloadRawIcs(context, state.feedToken!),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Download raw ICS is only for checking whether Life '
+                "Shuffle's feed has updated before Google Calendar "
+                'refreshes.',
+                key: const ValueKey('settings-download-raw-ics-note'),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: textMuted,
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            const _PublishingGroupLabel(label: 'TOKEN'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (state.feedEnabled)
                   _PublishingActionButton(
                     key: const ValueKey('settings-regenerate-feed-token'),
                     icon: Icons.refresh_rounded,
                     label: 'Regenerate token',
                     onTap: state.regenerateFeedToken,
                   ),
-                ],
                 _PublishingActionButton(
                   key: const ValueKey('settings-revoke-feed-token'),
                   icon: Icons.link_off_rounded,
@@ -1428,31 +1461,39 @@ void _copyFeedLink(BuildContext context, String token) {
   );
 }
 
-/// Opens the raw feed URL in a new tab on web so the user can check
-/// directly whether Life Shuffle's side already has the current plan
-/// (vs. Google Calendar simply taking a while to re-fetch it). Falls back
-/// to copying the link on platforms with no browser tab to open (mobile,
-/// `flutter test`'s VM target).
-void _openFeedLink(BuildContext context, String token) {
+/// Opens the raw feed URL (a downloadable .ics file, not a readable
+/// calendar preview) in a new tab on web so the user can check directly
+/// whether Life Shuffle's side already has the current plan (vs. Google
+/// Calendar simply taking a while to re-fetch it). Falls back to copying
+/// the link on platforms with no browser tab to open (mobile, `flutter
+/// test`'s VM target) - the fallback message deliberately avoids saying
+/// anything "opened" since nothing did.
+void _downloadRawIcs(BuildContext context, String token) {
   final url = _buildCalendarFeedUrl(token);
   if (triggerBrowserOpenUrl(url)) return;
   Clipboard.setData(ClipboardData(text: url));
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(
-      content:
-          Text("Couldn't open the feed automatically. Link copied instead."),
+      content: Text("Couldn't open the raw feed. Link copied instead."),
     ),
   );
 }
 
-void _refreshFeedNow(BuildContext context, AppState state) {
-  final refreshed = state.refreshPublishedFeedNow();
+/// Awaits the real outcome before reporting anything, so "Feed refreshed"
+/// is never shown while the Firestore save backing the public feed is
+/// still in flight or has failed - see [AppState.refreshPublishedFeedNow].
+Future<void> _refreshFeedNow(BuildContext context, AppState state) async {
+  final result = await state.refreshPublishedFeedNow();
+  if (!context.mounted) return;
+  final message = switch (result) {
+    FeedRefreshResult.unavailable => 'Turn on the feed to refresh it',
+    FeedRefreshResult.success => 'Feed refreshed',
+    FeedRefreshResult.syncFailed =>
+      "Feed updated on this device, but couldn't sync to the published "
+          'feed. Try again.',
+  };
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        refreshed ? 'Feed refreshed' : 'Turn on the feed to refresh it',
-      ),
-    ),
+    SnackBar(content: Text(message)),
   );
 }
 
@@ -1512,6 +1553,30 @@ class _TokenPreview extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: accentSage,
         ),
+      ),
+    );
+  }
+}
+
+/// Small sub-heading inside the publishing card that separates feed
+/// actions, diagnostics, and token/security actions into distinct groups
+/// instead of one long row of equal-looking buttons. Deliberately quieter
+/// than [_SectionLabel] (smaller, no letter-spacing) since it labels a
+/// group within a card, not a top-level Settings section.
+class _PublishingGroupLabel extends StatelessWidget {
+  const _PublishingGroupLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: GoogleFonts.dmSans(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: textMuted,
       ),
     );
   }

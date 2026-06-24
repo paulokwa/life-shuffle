@@ -22,6 +22,14 @@ import '../services/range_planner_service.dart'
 /// pick the right plain-language wording in [AppState._buildSyncMessage].
 enum _SyncOperation { load, save, profile }
 
+/// Outcome of [AppState.refreshPublishedFeedNow], used by the Settings
+/// "Refresh published feed" action to show an accurate message.
+/// [syncFailed] is distinct from [unavailable] on purpose: the local
+/// device's plan *did* refresh, but the public feed (served from
+/// Firestore, not this device) did not, so callers must not report that
+/// case as success.
+enum FeedRefreshResult { unavailable, success, syncFailed }
+
 typedef LoadDefaultCalendar = Future<FirestoreCalendar?> Function(
     String userId);
 typedef LoadAccessibleCalendars = Future<List<FirestoreCalendar>> Function(
@@ -1070,21 +1078,36 @@ class AppState extends ChangeNotifier {
   }
 
   /// Manually forces the cached ICS feed to be rebuilt from the current
-  /// generated plan and persisted (and synced to Firestore, if signed in
-  /// with a calendar), even when nothing else changed. `_persist()` already
-  /// rebuilds the cache via `_currentSavedState()` on every mutation, so
-  /// this just re-runs that same path on demand for the Settings "Refresh
-  /// published feed" action - giving the user an explicit way to confirm
-  /// their latest plan reached the feed without waiting on an incidental
-  /// save. Returns `false` and does nothing if there's no published feed to
-  /// refresh (feed disabled or no token yet).
-  bool refreshPublishedFeedNow() {
+  /// generated plan and persisted, for the Settings "Refresh published
+  /// feed" action - giving the user an explicit way to confirm their
+  /// latest plan reached the *public* feed, not just this device.
+  ///
+  /// Deliberately does not call `_persist()`: that method fires the
+  /// Firestore save via `unawaited(...)`, so a caller could report success
+  /// before the save lands (or even if it fails) - exactly the bug this
+  /// method exists to avoid, since the Netlify feed endpoint only ever
+  /// reads `cachedIcsText` from Firestore, never from this device. Instead
+  /// this awaits the same Firestore save path directly so the returned
+  /// result reflects what's actually visible to the public feed.
+  Future<FeedRefreshResult> refreshPublishedFeedNow() async {
     if (!_feedEnabled || _feedToken == null || _feedToken!.isEmpty) {
-      return false;
+      return FeedRefreshResult.unavailable;
     }
-    _persist();
+    _updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+    final state = _currentSavedState(updatedAtMillis: _updatedAtMillis);
+    _persistLocal(state);
     notifyListeners();
-    return true;
+
+    final uid = _userId;
+    final calendarId = _calendarId;
+    if (uid == null || calendarId == null) {
+      return FeedRefreshResult.success;
+    }
+
+    final result = await _saveStateToFirestore(uid, calendarId, state);
+    return result.succeeded
+        ? FeedRefreshResult.success
+        : FeedRefreshResult.syncFailed;
   }
 
   void toggleLock(PlannedActivity activity) {
@@ -1511,7 +1534,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> _saveStateToFirestore(
+  Future<FirestoreSyncResult> _saveStateToFirestore(
     String uid,
     String calendarId,
     SavedState state,
@@ -1519,6 +1542,7 @@ class AppState extends ChangeNotifier {
     _markSyncPending();
     final result = await _saveSelectedFirestoreState(uid, calendarId, state);
     _applySyncResult(result, operation: _SyncOperation.save);
+    return result;
   }
 
   void _markSyncPending() {

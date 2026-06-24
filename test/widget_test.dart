@@ -2906,6 +2906,9 @@ void main() {
     await tester.pump();
     expect(find.text('Feed link copied'), findsOneWidget);
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-regenerate-feed-token')),
+    );
     await tester
         .tap(find.byKey(const ValueKey('settings-regenerate-feed-token')));
     await tester.pump();
@@ -2915,6 +2918,9 @@ void main() {
     expect(appState.feedEnabled, isTrue);
     expect(appState.feedRevokedAtMillis, isNotNull);
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-revoke-feed-token')),
+    );
     await tester.tap(find.byKey(const ValueKey('settings-revoke-feed-token')));
     await tester.pump();
 
@@ -2952,8 +2958,8 @@ void main() {
   });
 
   testWidgets(
-      'Settings shows last updated text, delay note, refresh, and open feed '
-      'controls once the feed is live', (WidgetTester tester) async {
+      'Settings shows last updated text, delay note, refresh, and download '
+      'raw ICS controls once the feed is live', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2981,17 +2987,26 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('settings-open-feed-link')),
+    expect(find.byKey(const ValueKey('settings-download-raw-ics')),
         findsOneWidget);
+    expect(find.text('Download raw ICS'), findsOneWidget);
+    expect(
+      find.text(
+        'Download raw ICS is only for checking whether Life '
+        "Shuffle's feed has updated before Google Calendar "
+        'refreshes.',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('settings-refresh-feed-now')),
         findsOneWidget);
 
     // No browser tab to open in the `flutter test` VM target, so opening
     // falls back to copying the link instead of crashing.
-    await tester.tap(find.byKey(const ValueKey('settings-open-feed-link')));
+    await tester.tap(find.byKey(const ValueKey('settings-download-raw-ics')));
     await tester.pump();
     expect(
-      find.text("Couldn't open the feed automatically. Link copied instead."),
+      find.text("Couldn't open the raw feed. Link copied instead."),
       findsOneWidget,
     );
     // Dismiss the first SnackBar immediately so the next one shows right
@@ -3009,6 +3024,90 @@ void main() {
       appState.cachedIcsUpdatedAtMillis,
       greaterThanOrEqualTo(beforeRefresh!),
     );
+  });
+
+  testWidgets(
+      'Settings shows a sync-failure message, not "Feed refreshed", when '
+      'the Firestore save fails', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final initialSyncSaveDone = Completer<void>();
+    var callCount = 0;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        callCount++;
+        if (callCount == 1) {
+          if (!initialSyncSaveDone.isCompleted) {
+            initialSyncSaveDone.complete();
+          }
+          return FirestoreSyncResult.success();
+        }
+        return FirestoreSyncResult.failure('Network error');
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setFeedEnabled(true);
+    appState.setUserId('settings_refresh_failure_user');
+    await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('settings-refresh-feed-now')));
+    await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
+    await tester.pump();
+
+    expect(
+      find.text(
+        "Feed updated on this device, but couldn't sync to the published "
+        'feed. Try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Feed refreshed'), findsNothing);
+  });
+
+  testWidgets(
+      'Settings publishing card groups feed/diagnostics/token actions '
+      'without overflow at a narrow mobile width', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    addTearDown(tester.view.reset);
+    // 320 logical px (e.g. iPhone SE width) - the narrowest common mobile
+    // width, to exercise the publishing card's button grouping.
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('FEED ACTIONS'), findsOneWidget);
+    expect(find.text('ADVANCED DIAGNOSTICS'), findsOneWidget);
+    expect(find.text('TOKEN'), findsOneWidget);
   });
 
   testWidgets('Settings exposes week text export copy action',
@@ -4084,8 +4183,9 @@ void main() {
     expect(saved.cachedIcsUpdatedAtMillis, isNull);
   });
 
-  test('refreshPublishedFeedNow rebuilds and persists the cached ICS feed',
-      () async {
+  test(
+      'refreshPublishedFeedNow rebuilds and persists the cached ICS feed '
+      'locally when not signed in', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -4094,9 +4194,9 @@ void main() {
     final beforeRefresh = appState.cachedIcsUpdatedAtMillis;
     expect(beforeRefresh, isNotNull);
 
-    final refreshed = appState.refreshPublishedFeedNow();
+    final result = await appState.refreshPublishedFeedNow();
 
-    expect(refreshed, isTrue);
+    expect(result, FeedRefreshResult.success);
     expect(appState.cachedIcsText, isNotNull);
     expect(
       appState.cachedIcsUpdatedAtMillis,
@@ -4115,7 +4215,10 @@ void main() {
     final appState = AppState(activities: PlannerService.defaultActivities);
 
     // Never enabled: no token exists either.
-    expect(appState.refreshPublishedFeedNow(), isFalse);
+    expect(
+      await appState.refreshPublishedFeedNow(),
+      FeedRefreshResult.unavailable,
+    );
     expect(appState.cachedIcsText, isNull);
 
     // Enabled then disabled: token still exists, but the feed is off.
@@ -4123,7 +4226,10 @@ void main() {
     appState.setFeedEnabled(false);
     expect(appState.feedToken, isNotNull);
 
-    expect(appState.refreshPublishedFeedNow(), isFalse);
+    expect(
+      await appState.refreshPublishedFeedNow(),
+      FeedRefreshResult.unavailable,
+    );
     expect(appState.cachedIcsText, isNull);
   });
 
@@ -4137,7 +4243,112 @@ void main() {
     appState.revokeFeedToken();
     expect(appState.feedToken, isNull);
 
-    expect(appState.refreshPublishedFeedNow(), isFalse);
+    expect(
+      await appState.refreshPublishedFeedNow(),
+      FeedRefreshResult.unavailable,
+    );
+  });
+
+  test(
+      'refreshPublishedFeedNow awaits the Firestore save before resolving, '
+      'and only reports success once it actually completes', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final initialSyncSaveDone = Completer<void>();
+    final saveCompleter = Completer<FirestoreSyncResult>();
+    final capturedRefreshStates = <SavedState>[];
+    var callCount = 0;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        callCount++;
+        if (callCount == 1) {
+          // The initial sign-in sync's own default-calendar-creation save -
+          // let it resolve immediately so `calendarId` becomes available.
+          if (!initialSyncSaveDone.isCompleted) {
+            initialSyncSaveDone.complete();
+          }
+          return FirestoreSyncResult.success();
+        }
+        capturedRefreshStates.add(state);
+        return saveCompleter.future;
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    // Enable the feed before signing in, so the only Firestore save left
+    // uncontrolled by this test is the refresh call itself.
+    appState.setFeedEnabled(true);
+    appState.setUserId('feed_refresh_user');
+    await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
+    expect(appState.calendarId, isNotNull);
+
+    var refreshResolved = false;
+    final refreshFuture = appState.refreshPublishedFeedNow().then((result) {
+      refreshResolved = true;
+      return result;
+    });
+
+    // Let pending microtasks run; the refresh must still be waiting on the
+    // Firestore save, not already reporting an outcome.
+    await Future<void>.delayed(Duration.zero);
+    expect(refreshResolved, isFalse);
+    expect(capturedRefreshStates, hasLength(1));
+
+    saveCompleter.complete(FirestoreSyncResult.success());
+    final result = await refreshFuture.timeout(const Duration(seconds: 1));
+
+    expect(refreshResolved, isTrue);
+    expect(result, FeedRefreshResult.success);
+    // The SavedState actually sent to Firestore must be the live, freshly
+    // rebuilt ICS - not a stale snapshot from before the refresh ran.
+    expect(capturedRefreshStates.single.cachedIcsText,
+        appState.cachedIcsText);
+    expect(capturedRefreshStates.single.cachedIcsUpdatedAtMillis,
+        appState.cachedIcsUpdatedAtMillis);
+  });
+
+  test(
+      'refreshPublishedFeedNow reports syncFailed (not success) when the '
+      'Firestore save fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final initialSyncSaveDone = Completer<void>();
+    var callCount = 0;
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => const [],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        callCount++;
+        if (callCount == 1) {
+          if (!initialSyncSaveDone.isCompleted) {
+            initialSyncSaveDone.complete();
+          }
+          return FirestoreSyncResult.success();
+        }
+        return FirestoreSyncResult.failure('Network error');
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+    );
+
+    appState.setFeedEnabled(true);
+    appState.setUserId('feed_refresh_failure_user');
+    await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
+
+    final updatedAtBeforeRefresh = appState.cachedIcsUpdatedAtMillis;
+    final result = await appState.refreshPublishedFeedNow();
+
+    expect(result, FeedRefreshResult.syncFailed);
+    // The local device still refreshed - only the publish to Firestore
+    // failed - so the local cache must not be rolled back or left null.
+    expect(appState.cachedIcsText, isNotNull);
+    expect(
+      appState.cachedIcsUpdatedAtMillis,
+      greaterThanOrEqualTo(updatedAtBeforeRefresh!),
+    );
   });
 
   test('SavedState maps cached ICS fields for Firestore sync', () {
@@ -7926,6 +8137,15 @@ void main() {
       'moved past the generated start', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
+    // mustIncludeInPlans guarantees this activity lands on every allowed
+    // day (see Must-include activity tests below) rather than depending on
+    // the seed-based flexible-fill heuristic to happen to place it on day
+    // 0. Without it, this test was date-dependent: on days where the
+    // heuristic skipped day 0, `_dayWithActivities` would retry via
+    // `appState.regenerate()`, which calls
+    // `_advanceRangeStartToTodayIfStale()` and discards the past day from
+    // the range entirely, then fail with "Bad state: No element" since the
+    // past day it was looking for could never come back.
     final activity = Activity(
       id: 'past-day-checkin',
       title: 'Daily thing',
@@ -7933,6 +8153,7 @@ void main() {
       durationMinutes: 30,
       maxPerWeek: 7,
       allowedWeekdays: Activity.allWeekdays,
+      mustIncludeInPlans: true,
     );
     final past = DateTime.now().subtract(const Duration(days: 2));
     final pastDateOnly = DateTime(past.year, past.month, past.day);
