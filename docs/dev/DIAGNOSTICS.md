@@ -69,6 +69,16 @@ powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_firestore_calend
 Lists safe fields from documents in the `calendars` collection. It never prints private keys, full feed tokens, or cached ICS bodies.
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_feed_token_freshness.ps1
+```
+
+Flags `calendars` docs that share the same `feedToken` (calendar-feed.js
+tolerates this by serving whichever matching doc is freshest, but a
+duplicate is still worth resolving by hand - revoke the token on whichever
+account shouldn't have it) and owners with more than one calendar doc. It
+never prints a full feed token, only a first6...last6 preview.
+
+```powershell
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/check_ics_feed.ps1 "https://life-shuffle.netlify.app/.netlify/functions/calendar-feed?token=..."
 ```
 

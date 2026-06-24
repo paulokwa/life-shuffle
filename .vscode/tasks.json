@@ -38,6 +38,18 @@
       "problemMatcher": []
     },
     {
+      "label": "Diagnostics: Feed token freshness",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tool/diagnostics/check_feed_token_freshness.ps1"
+      ],
+      "problemMatcher": []
+    },
+    {
       "label": "Diagnostics: ICS feed test",
       "type": "shell",
       "command": "powershell",
