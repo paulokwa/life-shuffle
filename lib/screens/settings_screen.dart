@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../services/auth_service.dart';
+import '../services/browser_open_url.dart';
+import '../services/feed_status_text_service.dart';
 import '../services/planner_service.dart' show PlanStyle;
 import '../services/text_week_export_service.dart';
 import '../state/app_state.dart';
@@ -1320,6 +1322,32 @@ class _PublishingCard extends StatelessWidget {
             feedEnabled: state.feedEnabled,
             feedToken: state.feedToken,
           ),
+          const SizedBox(height: 8),
+          Text(
+            FeedStatusTextService.lastUpdatedLabel(
+              state.cachedIcsUpdatedAtMillis,
+            ),
+            key: const ValueKey('settings-feed-last-updated'),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textMuted,
+            ),
+          ),
+          if (state.feedEnabled) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Google Calendar may take a while to show changes from a '
+              "subscribed feed. Refreshing here updates Life Shuffle's "
+              'feed, but Google decides when to fetch it.',
+              key: const ValueKey('settings-feed-google-delay-note'),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                height: 1.35,
+                color: textMuted,
+              ),
+            ),
+          ],
           if (state.feedToken != null) ...[
             const SizedBox(height: 10),
             _TokenPreview(tokenPreview: state.feedTokenPreview),
@@ -1345,6 +1373,18 @@ class _PublishingCard extends StatelessWidget {
                     icon: Icons.copy_rounded,
                     label: 'Copy link',
                     onTap: () => _copyFeedLink(context, state.feedToken!),
+                  ),
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-open-feed-link'),
+                    icon: Icons.open_in_new_rounded,
+                    label: 'Open feed',
+                    onTap: () => _openFeedLink(context, state.feedToken!),
+                  ),
+                  _PublishingActionButton(
+                    key: const ValueKey('settings-refresh-feed-now'),
+                    icon: Icons.sync_rounded,
+                    label: 'Refresh published feed',
+                    onTap: () => _refreshFeedNow(context, state),
                   ),
                   _PublishingActionButton(
                     key: const ValueKey('settings-regenerate-feed-token'),
@@ -1385,6 +1425,34 @@ void _copyFeedLink(BuildContext context, String token) {
   Clipboard.setData(ClipboardData(text: _buildCalendarFeedUrl(token)));
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(content: Text('Feed link copied')),
+  );
+}
+
+/// Opens the raw feed URL in a new tab on web so the user can check
+/// directly whether Life Shuffle's side already has the current plan
+/// (vs. Google Calendar simply taking a while to re-fetch it). Falls back
+/// to copying the link on platforms with no browser tab to open (mobile,
+/// `flutter test`'s VM target).
+void _openFeedLink(BuildContext context, String token) {
+  final url = _buildCalendarFeedUrl(token);
+  if (triggerBrowserOpenUrl(url)) return;
+  Clipboard.setData(ClipboardData(text: url));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content:
+          Text("Couldn't open the feed automatically. Link copied instead."),
+    ),
+  );
+}
+
+void _refreshFeedNow(BuildContext context, AppState state) {
+  final refreshed = state.refreshPublishedFeedNow();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        refreshed ? 'Feed refreshed' : 'Turn on the feed to refresh it',
+      ),
+    ),
   );
 }
 

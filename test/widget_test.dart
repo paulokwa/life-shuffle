@@ -2925,6 +2925,92 @@ void main() {
         findsNothing);
   });
 
+  testWidgets('Settings shows feed not generated yet before the feed is on',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings-feed-last-updated')),
+      findsOneWidget,
+    );
+    expect(find.text('Feed not generated yet'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-feed-google-delay-note')),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Settings shows last updated text, delay note, refresh, and open feed '
+      'controls once the feed is live', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.pump();
+
+    expect(find.text('Feed updated just now'), findsOneWidget);
+    expect(
+      find.text(
+        'Google Calendar may take a while to show changes from a '
+        "subscribed feed. Refreshing here updates Life Shuffle's "
+        'feed, but Google decides when to fetch it.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('settings-open-feed-link')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-refresh-feed-now')),
+        findsOneWidget);
+
+    // No browser tab to open in the `flutter test` VM target, so opening
+    // falls back to copying the link instead of crashing.
+    await tester.tap(find.byKey(const ValueKey('settings-open-feed-link')));
+    await tester.pump();
+    expect(
+      find.text("Couldn't open the feed automatically. Link copied instead."),
+      findsOneWidget,
+    );
+    // Dismiss the first SnackBar immediately so the next one shows right
+    // away instead of just queuing behind it.
+    ScaffoldMessenger.of(tester.element(find.byType(SettingsScreen)))
+        .removeCurrentSnackBar();
+    await tester.pump();
+
+    final beforeRefresh = appState.cachedIcsUpdatedAtMillis;
+    await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
+    await tester.pump();
+
+    expect(find.text('Feed refreshed'), findsOneWidget);
+    expect(
+      appState.cachedIcsUpdatedAtMillis,
+      greaterThanOrEqualTo(beforeRefresh!),
+    );
+  });
+
   testWidgets('Settings exposes week text export copy action',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -3996,6 +4082,62 @@ void main() {
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.cachedIcsText, isNull);
     expect(saved.cachedIcsUpdatedAtMillis, isNull);
+  });
+
+  test('refreshPublishedFeedNow rebuilds and persists the cached ICS feed',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setFeedEnabled(true);
+    final beforeRefresh = appState.cachedIcsUpdatedAtMillis;
+    expect(beforeRefresh, isNotNull);
+
+    final refreshed = appState.refreshPublishedFeedNow();
+
+    expect(refreshed, isTrue);
+    expect(appState.cachedIcsText, isNotNull);
+    expect(
+      appState.cachedIcsUpdatedAtMillis,
+      greaterThanOrEqualTo(beforeRefresh!),
+    );
+
+    final saved = PersistenceService.load(PlannerService.defaultActivities);
+    expect(saved.cachedIcsText, appState.cachedIcsText);
+    expect(saved.cachedIcsUpdatedAtMillis, appState.cachedIcsUpdatedAtMillis);
+  });
+
+  test('refreshPublishedFeedNow is a no-op when the feed is disabled',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    // Never enabled: no token exists either.
+    expect(appState.refreshPublishedFeedNow(), isFalse);
+    expect(appState.cachedIcsText, isNull);
+
+    // Enabled then disabled: token still exists, but the feed is off.
+    appState.setFeedEnabled(true);
+    appState.setFeedEnabled(false);
+    expect(appState.feedToken, isNotNull);
+
+    expect(appState.refreshPublishedFeedNow(), isFalse);
+    expect(appState.cachedIcsText, isNull);
+  });
+
+  test('refreshPublishedFeedNow is a no-op once the token is revoked',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    appState.setFeedEnabled(true);
+    appState.revokeFeedToken();
+    expect(appState.feedToken, isNull);
+
+    expect(appState.refreshPublishedFeedNow(), isFalse);
   });
 
   test('SavedState maps cached ICS fields for Firestore sync', () {

@@ -1069,6 +1069,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Manually forces the cached ICS feed to be rebuilt from the current
+  /// generated plan and persisted (and synced to Firestore, if signed in
+  /// with a calendar), even when nothing else changed. `_persist()` already
+  /// rebuilds the cache via `_currentSavedState()` on every mutation, so
+  /// this just re-runs that same path on demand for the Settings "Refresh
+  /// published feed" action - giving the user an explicit way to confirm
+  /// their latest plan reached the feed without waiting on an incidental
+  /// save. Returns `false` and does nothing if there's no published feed to
+  /// refresh (feed disabled or no token yet).
+  bool refreshPublishedFeedNow() {
+    if (!_feedEnabled || _feedToken == null || _feedToken!.isEmpty) {
+      return false;
+    }
+    _persist();
+    notifyListeners();
+    return true;
+  }
+
   void toggleLock(PlannedActivity activity) {
     activity.locked = !activity.locked;
     _persist();
