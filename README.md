@@ -1,5 +1,5 @@
 # life-shuffle
-Mobile-first Flutter app for planning personal activities, generating rule-based calendars, and helping users get unstuck.
+Mobile-first Flutter application for planning personal activities, generating rule-based calendars, and helping users get unstuck.
 
 ## Local dev setup
 
@@ -61,4 +61,4 @@ Production Firestore rules deployment is intentionally separate:
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/deploy_firebase_rules.ps1
 ```
 
-Only run the deploy script after the rules change has been reviewed and approved for production.
+Only run the deploy script after the rules change has been reviewed and approved for production.  

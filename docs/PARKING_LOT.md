@@ -112,4 +112,4 @@ If it is exciting but too early, put it here.
 
 Review this file when finishing each milestone, not every time a cool idea appears.
 
-The parking lot is a shelf, not a graveyard.
+The parking lot is a shelf, not a graveyard. 
