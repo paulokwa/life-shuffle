@@ -6,6 +6,11 @@ const net = require('node:net');
 
 const MAX_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 10000;
+const AI_TIMEOUT_MS = 20000;
+const AI_CHUNK_SIZE = 6000;
+const AI_MAX_CHUNKS = 4;
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
 
 function jsonResponse(statusCode, payload, extraHeaders) {
   return {
@@ -134,6 +139,11 @@ function cleanHtml(rawHtml) {
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
     .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+    .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, ' ')
+    .replace(/<form[\s\S]*?<\/form>/gi, ' ')
     .replace(/<\/(p|div|li|article|section|h[1-6]|tr)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
@@ -283,23 +293,403 @@ function extractDeterministicEvents({
   return events;
 }
 
-async function extractEventsWithAiOrFallback(input) {
-  const aiConfigured = Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
-  const events = extractDeterministicEvents(input);
+// ---- AI extraction -------------------------------------------------------
+
+function clamp01(value) {
+  const num = typeof value === 'number' ? value : Number.parseFloat(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.min(1, Math.max(0, num));
+}
+
+function combineDateTime(dateStr, timeStr) {
+  if (typeof dateStr !== 'string') return null;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!dateMatch) return null;
+  const [, y, m, d] = dateMatch;
+  let hour = 12;
+  let minute = 0;
+  if (typeof timeStr === 'string') {
+    const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
+    if (timeMatch) {
+      hour = Number.parseInt(timeMatch[1], 10);
+      minute = Number.parseInt(timeMatch[2], 10);
+    }
+  }
+  return new Date(Number(y), Number(m) - 1, Number(d), hour, minute, 0);
+}
+
+function parseAiJson(content) {
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new Error('ai_empty_response');
+  }
+  const trimmed = content.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (_) {
+    const match = /\{[\s\S]*\}/.exec(trimmed);
+    if (!match) throw new Error('ai_invalid_json');
+    return JSON.parse(match[0]);
+  }
+}
+
+function chunkText(text, chunkSize, maxChunks) {
+  const chunks = [];
+  for (
+    let offset = 0;
+    offset < text.length && chunks.length < maxChunks;
+    offset += chunkSize
+  ) {
+    const chunk = text.slice(offset, offset + chunkSize).trim();
+    if (chunk.length > 0) chunks.push(chunk);
+  }
+  return chunks;
+}
+
+function buildAiSystemPrompt() {
+  return [
+    'You extract event listings from messy public webpage text for a personal planning app.',
+    'Return ONLY minified JSON matching exactly this shape, with no surrounding text or markdown:',
+    '{"events":[{"title":string,"summary":string|null,"startDate":"YYYY-MM-DD"|null,"endDate":"YYYY-MM-DD"|null,"startTime":"HH:MM"|null,"endTime":"HH:MM"|null,"venue":string|null,"address":string|null,"price":string|null,"ticketUrl":string|null,"tags":string[],"confidence":number,"uncertainFields":string[]}]}.',
+    'Rules: only list events you find clear evidence for in the supplied text. Never invent or guess a value that is not present - use null (or [] for tags) instead and add that field name to uncertainFields.',
+    'startDate/endDate are YYYY-MM-DD; startTime/endTime are 24-hour HH:MM. confidence is your own 0-1 estimate that this is a real, correctly dated event.',
+    'If the text has no events, return {"events":[]}.',
+  ].join(' ');
+}
+
+function buildAiUserPrompt({
+  sourceName,
+  sourceUrl,
+  city,
+  rangeStart,
+  rangeEnd,
+  textChunk,
+  chunkIndex,
+  chunkCount,
+}) {
+  return [
+    `Source: ${sourceName} (${sourceUrl})`,
+    city ? `Default city if the page does not state one: ${city}.` : '',
+    `Only include events between ${rangeStart.toISOString().slice(0, 10)} and ${rangeEnd.toISOString().slice(0, 10)} inclusive.`,
+    chunkCount > 1
+      ? `This is text section ${chunkIndex + 1} of ${chunkCount} from the page; some events may be cut off at the edges, only extract ones you can read in full.`
+      : '',
+    'Page text follows:',
+    textChunk,
+  ]
+    .filter((part) => part && part.length > 0)
+    .join('\n');
+}
+
+async function callOpenAi({
+  apiKey,
+  model,
+  systemPrompt,
+  userPrompt,
+  fetchImpl,
+  timeoutMs,
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) throw new Error(`openai_http_${response.status}`);
+    const data = await response.json();
+    const content =
+      data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content
+        : null;
+    return parseAiJson(content);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callGemini({
+  apiKey,
+  model,
+  systemPrompt,
+  userPrompt,
+  fetchImpl,
+  timeoutMs,
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const response = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] },
+        ],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`gemini_http_${response.status}`);
+    const data = await response.json();
+    const content =
+      data && data.candidates && data.candidates[0] && data.candidates[0].content
+        ? data.candidates[0].content.parts
+            .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+            .join('')
+        : null;
+    return parseAiJson(content);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function mapAiEventItem({
+  item,
+  sourceId,
+  sourceName,
+  sourceUrl,
+  city,
+  rangeStart,
+  rangeEnd,
+  provider,
+}) {
+  if (!item || typeof item !== 'object') return null;
+  const title = typeof item.title === 'string' ? item.title.trim() : '';
+  if (!title) return null;
+  const start = combineDateTime(item.startDate, item.startTime);
+  if (!start || start < rangeStart || start > rangeEnd) return null;
+  const end = combineDateTime(item.endDate || item.startDate, item.endTime);
+
+  const uncertain = new Set(
+    Array.isArray(item.uncertainFields)
+      ? item.uncertainFields
+          .filter((field) => typeof field === 'string' && field.trim().length > 0)
+          .map((field) => field.trim())
+      : [],
+  );
+  if (!item.startTime) uncertain.add('time');
+  const venue =
+    typeof item.venue === 'string' && item.venue.trim() ? item.venue.trim() : null;
+  if (!venue) uncertain.add('venue');
+  const address =
+    typeof item.address === 'string' && item.address.trim()
+      ? item.address.trim()
+      : null;
+  if (!address) uncertain.add('address');
+  const price =
+    typeof item.price === 'string' && item.price.trim() ? item.price.trim() : null;
+  if (!price) uncertain.add('price');
+
+  const confidence = clamp01(item.confidence) ?? 0.6;
+  const tags = Array.isArray(item.tags)
+    ? item.tags
+        .filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+        .map((tag) => tag.trim().toLowerCase())
+    : [];
+  const summary =
+    typeof item.summary === 'string' && item.summary.trim()
+      ? item.summary.trim().slice(0, 280)
+      : undefined;
+  const ticketUrl =
+    typeof item.ticketUrl === 'string' && item.ticketUrl.trim()
+      ? item.ticketUrl.trim()
+      : undefined;
+
+  return {
+    id: `${sourceId}-${stableId(`${title}|${start.toISOString()}|${sourceUrl}`)}`,
+    title,
+    cleanedTitle: title,
+    summary,
+    startDateTimeMillis: start.getTime(),
+    endDateTimeMillis:
+      end && end.getTime() > start.getTime() ? end.getTime() : undefined,
+    venueName: venue || undefined,
+    address: address || undefined,
+    city: city || undefined,
+    sourceName,
+    sourceType: 'webPage',
+    sourceUrl,
+    ticketUrl,
+    priceLabel: price || undefined,
+    isFree: price ? /free/i.test(price) : undefined,
+    tags: tags.length > 0 ? tags : inferTags(`${title} ${summary || ''}`),
+    confidence,
+    missingFields: [...uncertain].sort(),
+    raw: { userSourceId: sourceId, extractionMode: `ai-${provider}-webpage` },
+    dedupeKey: eventDedupeKey(title, start, venue),
+  };
+}
+
+async function extractEventsWithAi({
+  text,
+  provider,
+  apiKey,
+  model,
+  sourceId,
+  sourceName,
+  sourceUrl,
+  city,
+  rangeStart,
+  rangeEnd,
+  fetchImpl,
+}) {
+  const chunks = chunkText(text, AI_CHUNK_SIZE, AI_MAX_CHUNKS);
+  if (chunks.length === 0) {
+    return {
+      events: [],
+      warnings: ['Page contained no extractable text for AI to review.'],
+      failed: false,
+    };
+  }
+
+  const systemPrompt = buildAiSystemPrompt();
+  const events = [];
+  const seen = new Set();
+  let succeededChunks = 0;
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const userPrompt = buildAiUserPrompt({
+      sourceName,
+      sourceUrl,
+      city,
+      rangeStart,
+      rangeEnd,
+      textChunk: chunks[index],
+      chunkIndex: index,
+      chunkCount: chunks.length,
+    });
+    try {
+      const parsed =
+        provider === 'openai'
+          ? await callOpenAi({
+              apiKey,
+              model,
+              systemPrompt,
+              userPrompt,
+              fetchImpl,
+              timeoutMs: AI_TIMEOUT_MS,
+            })
+          : await callGemini({
+              apiKey,
+              model,
+              systemPrompt,
+              userPrompt,
+              fetchImpl,
+              timeoutMs: AI_TIMEOUT_MS,
+            });
+      const rawEvents = Array.isArray(parsed && parsed.events) ? parsed.events : [];
+      for (const item of rawEvents) {
+        const mapped = mapAiEventItem({
+          item,
+          sourceId,
+          sourceName,
+          sourceUrl,
+          city,
+          rangeStart,
+          rangeEnd,
+          provider,
+        });
+        if (!mapped || seen.has(mapped.dedupeKey)) continue;
+        seen.add(mapped.dedupeKey);
+        events.push(mapped);
+      }
+      succeededChunks += 1;
+    } catch (error) {
+      console.error(
+        'outside-events-webpage AI chunk error:',
+        provider,
+        error && error.message,
+      );
+    }
+  }
+
+  if (succeededChunks === 0) {
+    return { events: [], warnings: [], failed: true };
+  }
   const warnings = [];
-  if (!aiConfigured) {
+  if (succeededChunks < chunks.length) {
     warnings.push(
+      `AI extraction partially failed; ${chunks.length - succeededChunks} of ` +
+        `${chunks.length} page section(s) were skipped.`,
+    );
+  }
+  return { events: events.slice(0, 30), warnings, failed: false };
+}
+
+async function extractEventsWithAiOrFallback(input) {
+  const env = input.env || process.env;
+  const fetchImpl = input.fetchImpl || fetch;
+  const provider = env.OPENAI_API_KEY
+    ? 'openai'
+    : env.GEMINI_API_KEY
+      ? 'gemini'
+      : null;
+
+  if (!provider) {
+    const events = extractDeterministicEvents(input);
+    const warnings = [
       'AI organizer not configured. Used deterministic webpage extraction; review dates and details before adding.',
-    );
-  } else {
-    warnings.push(
-      'AI organizer endpoint seam is present, but this spike still uses deterministic extraction until provider wiring is finished.',
-    );
+    ];
+    if (events.length === 0) {
+      warnings.push('No dated event-like snippets were found on this page.');
+    }
+    return { events, warnings, aiConfigured: false };
   }
-  if (events.length === 0) {
-    warnings.push('No dated event-like snippets were found on this page.');
+
+  const apiKey = provider === 'openai' ? env.OPENAI_API_KEY : env.GEMINI_API_KEY;
+  const model =
+    provider === 'openai'
+      ? env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL
+      : env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+
+  const result = await extractEventsWithAi({
+    text: input.text,
+    provider,
+    apiKey,
+    model,
+    sourceId: input.sourceId,
+    sourceName: input.sourceName,
+    sourceUrl: input.sourceUrl,
+    city: input.city,
+    rangeStart: input.rangeStart,
+    rangeEnd: input.rangeEnd,
+    fetchImpl,
+  });
+
+  if (result.failed) {
+    const events = extractDeterministicEvents(input);
+    const warnings = [
+      `AI organizer (${provider}) could not extract events from this page; used ` +
+        'deterministic fallback instead. Review dates and details before adding.',
+    ];
+    if (events.length === 0) {
+      warnings.push('No dated event-like snippets were found on this page.');
+    }
+    return { events, warnings, aiConfigured: true };
   }
-  return { events, warnings, aiConfigured };
+
+  const warnings = [...result.warnings];
+  if (result.events.length === 0) {
+    warnings.push('AI organizer found no events on this page.');
+  }
+  return { events: result.events, warnings, aiConfigured: true };
 }
 
 async function handler(event, context) {
@@ -340,6 +730,8 @@ async function handler(event, context) {
       city,
       rangeStart,
       rangeEnd,
+      fetchImpl,
+      env: (context && context.env) || process.env,
     });
     return jsonResponse(200, {
       sourceId,
@@ -370,6 +762,16 @@ module.exports = {
   parseDateTime,
   extractDeterministicEvents,
   extractEventsWithAiOrFallback,
+  extractEventsWithAi,
+  mapAiEventItem,
+  combineDateTime,
+  chunkText,
+  parseAiJson,
+  clamp01,
+  callOpenAi,
+  callGemini,
+  buildAiSystemPrompt,
+  buildAiUserPrompt,
   methodNotAllowedResponse,
   badRequestResponse,
   upstreamErrorResponse,

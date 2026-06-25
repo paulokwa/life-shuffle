@@ -146,6 +146,9 @@ class EventSuggestion {
     String? venueName,
     String? address,
     String? city,
+    String? sourceUrl,
+    String? ticketUrl,
+    Map<String, Object?>? raw,
   }) {
     return EventSuggestion(
       id: id,
@@ -161,18 +164,51 @@ class EventSuggestion {
       city: city ?? this.city,
       sourceName: sourceName,
       sourceType: sourceType,
-      sourceUrl: sourceUrl,
-      ticketUrl: ticketUrl,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
+      ticketUrl: ticketUrl ?? this.ticketUrl,
       priceLabel: priceLabel ?? this.priceLabel,
       isFree: isFree ?? this.isFree,
       tags: tags ?? this.tags,
       imageUrl: imageUrl,
       confidence: confidence ?? this.confidence,
       missingFields: missingFields ?? this.missingFields,
-      raw: raw,
+      raw: raw ?? this.raw,
       dedupeKey: dedupeKey,
     );
   }
+
+  /// Other sources that turned out to describe this same event, attached by
+  /// [EventDedupeService] when it merges near-duplicates. Each entry has at
+  /// least a `sourceName`, and a `sourceType`/`sourceUrl` when known.
+  List<Map<String, Object?>> get mergedSources {
+    final value = raw['mergedSources'];
+    if (value is! Iterable) return const [];
+    return value
+        .whereType<Map>()
+        .map((map) => Map<String, Object?>.from(map))
+        .toList();
+  }
+
+  /// `sourceName`, plus any [mergedSources] names, joined for display so a
+  /// merged event credits every source that reported it (e.g. "Venue page +
+  /// Ticketmaster") instead of only the first one found.
+  String get displaySourceSummary {
+    final names = <String>{
+      sourceName,
+      for (final source in mergedSources)
+        if (source['sourceName'] is String) source['sourceName'] as String,
+    };
+    return names.join(' + ');
+  }
+
+  /// How this event was produced, e.g. `ai-openai-webpage` or
+  /// `deterministic-webpage-fallback`. Null for sources that don't tag it
+  /// (RSS/Atom, mock, ticketing APIs).
+  String? get extractionMode => raw['extractionMode'] as String?;
+
+  /// Whether an AI provider (vs. deterministic regex extraction) organized
+  /// this event from its source webpage.
+  bool get isAiOrganized => extractionMode?.startsWith('ai-') == true;
 
   ManualPlanItem toManualPlanItem({String? id}) {
     return ManualPlanItem(
@@ -186,13 +222,18 @@ class EventSuggestion {
       energy: 'medium',
       social: 'either',
       outsideEventId: this.id,
-      outsideEventSourceName: sourceName,
+      outsideEventSourceName: displaySourceSummary,
       outsideEventSourceUrl: sourceUrl,
       outsideEventTicketUrl: ticketUrl,
       outsideEventPriceLabel: displayPrice,
       outsideEventVenueName: venueName,
       outsideEventAddress: address,
       outsideEventSummary: displaySummary,
+      outsideEventSourceType: sourceType.storageName,
+      outsideEventConfidence: confidence,
+      outsideEventTags: tags,
+      outsideEventUncertainFields: missingFields,
+      outsideEventExtractionMode: extractionMode,
     );
   }
 

@@ -60,11 +60,18 @@ class OutsideEventSourceResult {
     required this.source,
     this.suggestions = const [],
     this.warnings = const [],
+    this.attempted = true,
   });
 
   final OutsideEventSourceConfig source;
   final List<EventSuggestion> suggestions;
   final List<OutsideEventSourceWarning> warnings;
+
+  /// Whether [OutsideEventSourceAdapter.fetch] actually ran for this source.
+  /// False when the source was skipped (e.g. disabled), so callers tracking
+  /// per-source health (see `AppState.refreshOutsideEventSources`) can leave
+  /// stale health data alone instead of treating "skipped" as "failed".
+  final bool attempted;
 }
 
 abstract class OutsideEventSourceAdapter {

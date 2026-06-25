@@ -588,6 +588,11 @@ class _EventSuggestionCard extends StatelessWidget {
                 icon: Icons.place_outlined,
                 label: event.displayLocation,
               ),
+              if (event.address?.trim().isNotEmpty == true)
+                _MetaPill(
+                  icon: Icons.map_outlined,
+                  label: event.address!.trim(),
+                ),
               _MetaPill(
                 icon: Icons.local_offer_outlined,
                 label: event.displayPrice,
@@ -595,6 +600,22 @@ class _EventSuggestionCard extends StatelessWidget {
               CategoryChip(category: event.category),
             ],
           ),
+          if (event.extractionMode != null || event.confidence != null) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _ExtractionModeChip(event: event),
+                if (event.confidence != null)
+                  _MetaPill(
+                    icon: Icons.verified_outlined,
+                    label: '${(event.confidence! * 100).round()}% confidence',
+                  ),
+              ],
+            ),
+          ],
           if (event.tags.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -615,7 +636,8 @@ class _EventSuggestionCard extends StatelessWidget {
           if (event.missingFields.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              'Unconfirmed: ${event.missingFields.join(', ')}',
+              'Uncertain: ${event.missingFields.join(', ')}',
+              key: ValueKey('outside-event-uncertain-${event.id}'),
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 color: textMuted,
@@ -628,7 +650,7 @@ class _EventSuggestionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  event.sourceName,
+                  event.displaySourceSummary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
@@ -639,32 +661,20 @@ class _EventSuggestionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              if ((event.ticketUrl ?? event.sourceUrl)?.trim().isNotEmpty ==
-                  true) ...[
-                GestureDetector(
-                  key: ValueKey('outside-event-open-${event.id}'),
-                  onTap: () => triggerBrowserOpenUrl(
-                    (event.ticketUrl ?? event.sourceUrl)!.trim(),
-                  ),
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: surfaceWhite,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: borderWarmStrong),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Source',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: textMuted,
-                      ),
-                    ),
-                  ),
+              if (event.sourceUrl?.trim().isNotEmpty == true) ...[
+                _LinkButton(
+                  buttonKey: ValueKey('outside-event-source-${event.id}'),
+                  label: 'Details',
+                  url: event.sourceUrl!.trim(),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (event.ticketUrl?.trim().isNotEmpty == true &&
+                  event.ticketUrl!.trim() != event.sourceUrl?.trim()) ...[
+                _LinkButton(
+                  buttonKey: ValueKey('outside-event-tickets-${event.id}'),
+                  label: 'Tickets',
+                  url: event.ticketUrl!.trim(),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -766,6 +776,87 @@ class _MetaPill extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: textMuted,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkButton extends StatelessWidget {
+  const _LinkButton({
+    required this.buttonKey,
+    required this.label,
+    required this.url,
+  });
+
+  final Key buttonKey;
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      key: buttonKey,
+      onTap: () => triggerBrowserOpenUrl(url),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: surfaceWhite,
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(color: borderWarmStrong),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small chip noting whether AI or the deterministic regex fallback
+/// organized [event] from its source webpage. Hidden for sources that
+/// don't tag an extraction mode (RSS/Atom, mock, ticketing APIs).
+class _ExtractionModeChip extends StatelessWidget {
+  const _ExtractionModeChip({required this.event});
+
+  final EventSuggestion event;
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = event.extractionMode;
+    if (mode == null) return const SizedBox.shrink();
+    final isAi = event.isAiOrganized;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: isAi ? const Color(0xFFEEF6F2) : warmBeige,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAi ? Icons.auto_awesome_rounded : Icons.rule_rounded,
+            size: 13,
+            color: isAi ? accentSage : textMuted,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isAi ? 'AI organized' : 'Auto-detected',
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isAi ? accentSage : textMuted,
             ),
           ),
         ],

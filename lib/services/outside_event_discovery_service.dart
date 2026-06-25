@@ -1,4 +1,5 @@
 import '../models/event_suggestion.dart';
+import 'event_dedupe_service.dart';
 import 'outside_event_adapters.dart';
 import 'outside_event_organizer_service.dart';
 import 'outside_event_source_adapter.dart';
@@ -9,12 +10,22 @@ class OutsideEventDiscoveryResult {
     required this.sources,
     required this.warnings,
     required this.aiStatusMessage,
+    this.attemptedSourceIds = const {},
+    this.sourceEventCounts = const {},
   });
 
   final List<EventSuggestion> events;
   final List<OutsideEventSourceConfig> sources;
   final List<OutsideEventSourceWarning> warnings;
   final String aiStatusMessage;
+
+  /// Source ids whose adapter actually ran (vs. being skipped because it
+  /// was disabled). Used to drive per-source health in Settings.
+  final Set<String> attemptedSourceIds;
+
+  /// Raw (pre-dedupe) suggestion count per source id, i.e. "events found"
+  /// for source health, distinct from the final deduped [events] list.
+  final Map<String, int> sourceEventCounts;
 }
 
 class OutsideEventDiscoveryService {
@@ -43,7 +54,7 @@ class OutsideEventDiscoveryService {
     for (final adapter in _adapters) {
       final config = adapter.config;
       if (!config.enabled) {
-        results.add(OutsideEventSourceResult(source: config));
+        results.add(OutsideEventSourceResult(source: config, attempted: false));
         continue;
       }
       try {
@@ -73,7 +84,7 @@ class OutsideEventDiscoveryService {
       }
     }
 
-    final events = deduped.values.toList()
+    final events = EventDedupeService.mergeSimilar(deduped.values.toList())
       ..sort((a, b) {
         final byDate = a.startDateTime.compareTo(b.startDateTime);
         if (byDate != 0) return byDate;
@@ -85,6 +96,14 @@ class OutsideEventDiscoveryService {
       sources: results.map((result) => result.source).toList(),
       warnings: results.expand((result) => result.warnings).toList(),
       aiStatusMessage: _organizer.aiStatusMessage,
+      attemptedSourceIds: {
+        for (final result in results)
+          if (result.attempted) result.source.id,
+      },
+      sourceEventCounts: {
+        for (final result in results)
+          result.source.id: result.suggestions.length,
+      },
     );
   }
 }

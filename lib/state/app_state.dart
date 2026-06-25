@@ -1343,11 +1343,15 @@ class AppState extends ChangeNotifier {
     _cachedOutsideEvents = result.events;
     _cachedOutsideEventsFetchedAtMillis = now;
     _outsideEventSources = _outsideEventSources.map((source) {
+      if (!result.attemptedSourceIds.contains(source.id)) return source;
       final warning = _firstSourceWarning(result.warnings, source.id);
+      final eventCount = result.sourceEventCounts[source.id] ?? 0;
       return source.copyWith(
         lastFetchedAtMillis: now,
         lastError: warning,
         clearLastError: warning == null,
+        lastEventCount: eventCount,
+        lastSuccessAtMillis: warning == null ? now : source.lastSuccessAtMillis,
       );
     }).toList();
     _persistOutsideEventSources();
@@ -2222,6 +2226,7 @@ class AppState extends ChangeNotifier {
       calendarId: _calendarId ?? _feedToken ?? 'local-calendar',
       calendarTitle: _calendarTitle,
       plan: weekPlan,
+      manualPlanItemsById: _manualPlanItems,
     );
     _cachedIcsUpdatedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/event_suggestion.dart';
+import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/user_event_source.dart';
 import 'package:life_shuffle/services/curated_rss_feed_registry.dart';
 import 'package:life_shuffle/services/outside_event_adapters.dart';
@@ -50,6 +51,35 @@ void main() {
       expect(item.outsideEventSourceName, 'Sample source');
       expect(item.outsideEventTicketUrl, 'https://example.com/tickets');
       expect(item.outsideEventVenueName, 'Salt Yard');
+      expect(item.outsideEventSourceType, 'mock');
+      expect(item.outsideEventTags, ['market', 'food']);
+    });
+
+    test(
+        'preserves confidence, extraction mode, and uncertain fields on the manual item',
+        () {
+      final start = DateTime(2026, 7, 3, 19);
+      final event = EventSuggestion(
+        id: 'evt-ai',
+        title: 'AI-organized event',
+        startDateTime: start,
+        sourceName: 'Venue page',
+        sourceType: OutsideEventSourceType.webPage,
+        confidence: 0.74,
+        missingFields: const ['address', 'price'],
+        raw: const {'extractionMode': 'ai-openai-webpage'},
+        dedupeKey: eventDedupeKey(title: 'AI-organized event', start: start),
+      );
+
+      final item = event.toManualPlanItem(id: 'outside-ai');
+      final restored = ManualPlanItem.fromMap(item.toMap());
+
+      expect(item.outsideEventConfidence, 0.74);
+      expect(item.outsideEventUncertainFields, ['address', 'price']);
+      expect(item.outsideEventExtractionMode, 'ai-openai-webpage');
+      expect(restored.outsideEventConfidence, 0.74);
+      expect(restored.outsideEventUncertainFields, ['address', 'price']);
+      expect(restored.outsideEventExtractionMode, 'ai-openai-webpage');
     });
   });
 
@@ -122,6 +152,47 @@ void main() {
 
       expect(result.events.map((e) => e.id), ['one', 'later']);
       expect(result.warnings.single.message, 'B is partial');
+    });
+
+    test('tracks which sources were attempted and how many events each found',
+        () async {
+      final start = DateTime(2026, 7, 1);
+      final service = OutsideEventDiscoveryService(
+        adapters: [
+          _FixedAdapter(
+            id: 'enabled-source',
+            displayName: 'Enabled',
+            events: [
+              _event(
+                id: 'one',
+                title: 'Event one',
+                start: start.add(const Duration(days: 1, hours: 10)),
+              ),
+              _event(
+                id: 'two',
+                title: 'Event two',
+                start: start.add(const Duration(days: 2, hours: 10)),
+              ),
+            ],
+          ),
+          const _FixedAdapter(
+            id: 'disabled-source',
+            displayName: 'Disabled',
+            events: [],
+            enabled: false,
+          ),
+        ],
+      );
+
+      final result = await service.discover(
+        OutsideEventQuery(
+            start: start, end: start.add(const Duration(days: 7))),
+      );
+
+      expect(result.attemptedSourceIds, contains('enabled-source'));
+      expect(result.attemptedSourceIds, isNot(contains('disabled-source')));
+      expect(result.sourceEventCounts['enabled-source'], 2);
+      expect(result.sourceEventCounts['disabled-source'], 0);
     });
   });
 
@@ -368,6 +439,179 @@ void main() {
     });
   });
 
+  group('TicketmasterOutsideEventAdapter', () {
+    test(
+        'reports unconfigured state from the backend as a warning, not suggestions',
+        () async {
+      final adapter = TicketmasterOutsideEventAdapter(
+        client: MockClient((request) async {
+          expect(request.url.path,
+              '/.netlify/functions/outside-events-ticketmaster');
+          return http.Response(
+            '{"configured": false, "events": [], "warnings": ["Ticketmaster is not configured."]}',
+            200,
+          );
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7, 23, 59),
+        ),
+      );
+
+      expect(result.suggestions, isEmpty);
+      expect(result.warnings.single.message, contains('not configured'));
+    });
+
+    test('maps live Ticketmaster events into EventSuggestions', () async {
+      final adapter = TicketmasterOutsideEventAdapter(
+        client: MockClient((request) async {
+          expect(request.url.queryParameters['city'], 'Halifax');
+          return http.Response(
+            '''
+{
+  "configured": true,
+  "events": [
+    {
+      "id": "tm-1",
+      "title": "Garden concert",
+      "cleanedTitle": "Garden concert",
+      "startDateTimeMillis": 1783116000000,
+      "sourceName": "Ticketmaster",
+      "sourceType": "ticketmaster",
+      "sourceUrl": "https://ticketmaster.example/tm-1",
+      "ticketUrl": "https://ticketmaster.example/tm-1",
+      "venueName": "Scotiabank Centre",
+      "tags": ["music"],
+      "confidence": 0.95,
+      "missingFields": [],
+      "dedupeKey": "garden concert|2026-07-03|19|00|scotiabank centre"
+    }
+  ],
+  "warnings": []
+}
+''',
+            200,
+          );
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7, 23, 59),
+          city: 'Halifax',
+        ),
+      );
+
+      expect(result.suggestions.single.sourceType,
+          OutsideEventSourceType.ticketmaster);
+      expect(result.suggestions.single.venueName, 'Scotiabank Centre');
+      expect(result.suggestions.single.confidence, 0.95);
+    });
+  });
+
+  group('UserEventSource health', () {
+    test('reports unknown before any attempt', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+      );
+
+      expect(source.healthStatus, SourceHealthStatus.unknown);
+    });
+
+    test('reports healthy after a clean attempt', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+        lastFetchedAtMillis: 100,
+        lastEventCount: 3,
+      );
+
+      expect(source.healthStatus, SourceHealthStatus.healthy);
+    });
+
+    test('reports warning when a warning still found events', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+        lastFetchedAtMillis: 100,
+        lastEventCount: 2,
+        lastError: 'Some entries were skipped.',
+      );
+
+      expect(source.healthStatus, SourceHealthStatus.warning);
+    });
+
+    test('reports failed when a warning found no events', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+        lastFetchedAtMillis: 100,
+        lastEventCount: 0,
+        lastError: 'Feed could not load.',
+      );
+
+      expect(source.healthStatus, SourceHealthStatus.failed);
+    });
+
+    test('round-trips health fields through toMap/fromMap', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+        lastFetchedAtMillis: 100,
+        lastSuccessAtMillis: 90,
+        lastEventCount: 4,
+      );
+
+      final restored = UserEventSource.fromMap(source.toMap());
+
+      expect(restored.lastFetchedAtMillis, 100);
+      expect(restored.lastSuccessAtMillis, 90);
+      expect(restored.lastEventCount, 4);
+    });
+  });
+
+  group('EventSuggestion extraction metadata', () {
+    test('exposes extractionMode and isAiOrganized from raw', () {
+      final aiEvent = _event(
+        id: 'ai-1',
+        title: 'AI event',
+        start: DateTime(2026, 7, 5, 19),
+      ).copyWith(raw: const {'extractionMode': 'ai-openai-webpage'});
+      final deterministicEvent = _event(
+        id: 'det-1',
+        title: 'Deterministic event',
+        start: DateTime(2026, 7, 5, 19),
+      ).copyWith(
+        raw: const {'extractionMode': 'deterministic-webpage-fallback'},
+      );
+      final plainEvent = _event(
+        id: 'plain-1',
+        title: 'Plain event',
+        start: DateTime(2026, 7, 5, 19),
+      );
+
+      expect(aiEvent.isAiOrganized, isTrue);
+      expect(deterministicEvent.isAiOrganized, isFalse);
+      expect(plainEvent.extractionMode, isNull);
+      expect(plainEvent.isAiOrganized, isFalse);
+    });
+  });
+
   group('SavedState', () {
     test('round-trips outside event metadata on manual plan items', () {
       final event = _event(
@@ -426,19 +670,21 @@ class _FixedAdapter implements OutsideEventSourceAdapter {
     required this.displayName,
     required this.events,
     this.warning,
+    this.enabled = true,
   });
 
   final String id;
   final String displayName;
   final List<EventSuggestion> events;
   final String? warning;
+  final bool enabled;
 
   @override
   OutsideEventSourceConfig get config => OutsideEventSourceConfig(
         id: id,
         displayName: displayName,
         type: OutsideEventSourceType.mock,
-        enabled: true,
+        enabled: enabled,
         needsApiKey: false,
         configured: true,
         description: displayName,

@@ -498,6 +498,16 @@ class _ExportPrintCard extends StatelessWidget {
               state.exportPrintOptions.copyWith(showLockedStatus: value),
             ),
           ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-outside-event'),
+            label: 'Outside event details',
+            value: state.exportPrintOptions.showOutsideEventDetails,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(
+                showOutsideEventDetails: value,
+              ),
+            ),
+          ),
           if (state.difficultyEnabled ||
               state.energyEnabled ||
               state.socialEnabled)
@@ -604,6 +614,9 @@ void _copyWeekTextExport(BuildContext context, AppState state) {
     difficultyEnabled: state.difficultyEnabled,
     energyEnabled: state.energyEnabled,
     socialEnabled: state.socialEnabled,
+    manualPlanItemsById: {
+      for (final item in state.manualPlanItems) item.id: item,
+    },
   );
   Clipboard.setData(ClipboardData(text: text));
   ScaffoldMessenger.of(context).showSnackBar(
@@ -1810,6 +1823,8 @@ class _OutsideEventSourceRow extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 6),
+                      _SourceHealthPill(status: source.healthStatus),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -1818,6 +1833,11 @@ class _OutsideEventSourceRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _sourceHealthDetailLine(source),
+                    style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
                   ),
                   if (source.lastError?.trim().isNotEmpty == true) ...[
                     const SizedBox(height: 4),
@@ -1847,6 +1867,57 @@ class _OutsideEventSourceRow extends StatelessWidget {
             icon: const Icon(Icons.delete_outline_rounded, color: textMuted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Last-attempt/last-success/events-found summary line for a source's
+/// health (Settings > Outside event sources). See [UserEventSource.healthStatus]
+/// for the status pill shown alongside this.
+String _sourceHealthDetailLine(UserEventSource source) {
+  final attempted = source.lastFetchedAtMillis;
+  if (attempted == null) return 'Not checked yet.';
+  final parts = <String>[
+    'Last attempt: ${_formatLocalTimestamp(attempted)}',
+  ];
+  final success = source.lastSuccessAtMillis;
+  if (success != null) {
+    parts.add('Last success: ${_formatLocalTimestamp(success)}');
+  }
+  final count = source.lastEventCount;
+  if (count != null) {
+    parts.add('$count event${count == 1 ? '' : 's'} found');
+  }
+  return parts.join(' · ');
+}
+
+class _SourceHealthPill extends StatelessWidget {
+  const _SourceHealthPill({required this.status});
+
+  final SourceHealthStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (background, foreground) = switch (status) {
+      SourceHealthStatus.unknown => (warmBeige, textMuted),
+      SourceHealthStatus.healthy => (const Color(0xFFEEF6F2), accentSage),
+      SourceHealthStatus.warning => (const Color(0xFFFFF7E8), sand),
+      SourceHealthStatus.failed => (const Color(0xFFFAF0EC), primaryTerracotta),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        status.label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: foreground,
+        ),
       ),
     );
   }

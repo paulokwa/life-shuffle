@@ -31,6 +31,11 @@ class ManualPlanItem {
     this.outsideEventVenueName,
     this.outsideEventAddress,
     this.outsideEventSummary,
+    this.outsideEventSourceType,
+    this.outsideEventConfidence,
+    this.outsideEventTags = const [],
+    this.outsideEventUncertainFields = const [],
+    this.outsideEventExtractionMode,
   });
 
   /// Stable identifier for this manual item.
@@ -63,6 +68,21 @@ class ManualPlanItem {
   String? outsideEventAddress;
   String? outsideEventSummary;
 
+  /// [OutsideEventSourceType.storageName] of the source this event came
+  /// from, e.g. `webPage` or `rssAtom`.
+  String? outsideEventSourceType;
+
+  /// The source's own 0-1 confidence estimate for this event, when known.
+  double? outsideEventConfidence;
+  List<String> outsideEventTags;
+
+  /// Field names the source could not confirm (e.g. `venue`, `price`).
+  List<String> outsideEventUncertainFields;
+
+  /// How the source produced this event, e.g. `ai-openai-webpage` or
+  /// `deterministic-webpage-fallback`. Null for sources that don't tag it.
+  String? outsideEventExtractionMode;
+
   bool get isOutsideEvent => outsideEventId != null;
 
   ManualPlanItem copy() {
@@ -85,6 +105,11 @@ class ManualPlanItem {
       outsideEventVenueName: outsideEventVenueName,
       outsideEventAddress: outsideEventAddress,
       outsideEventSummary: outsideEventSummary,
+      outsideEventSourceType: outsideEventSourceType,
+      outsideEventConfidence: outsideEventConfidence,
+      outsideEventTags: outsideEventTags,
+      outsideEventUncertainFields: outsideEventUncertainFields,
+      outsideEventExtractionMode: outsideEventExtractionMode,
     );
   }
 
@@ -146,6 +171,15 @@ class ManualPlanItem {
         'outsideEventAddress': outsideEventAddress,
       if (outsideEventSummary != null)
         'outsideEventSummary': outsideEventSummary,
+      if (outsideEventSourceType != null)
+        'outsideEventSourceType': outsideEventSourceType,
+      if (outsideEventConfidence != null)
+        'outsideEventConfidence': outsideEventConfidence,
+      if (outsideEventTags.isNotEmpty) 'outsideEventTags': outsideEventTags,
+      if (outsideEventUncertainFields.isNotEmpty)
+        'outsideEventUncertainFields': outsideEventUncertainFields,
+      if (outsideEventExtractionMode != null)
+        'outsideEventExtractionMode': outsideEventExtractionMode,
     };
   }
 
@@ -176,6 +210,14 @@ class ManualPlanItem {
       outsideEventVenueName: _readNullableString(map['outsideEventVenueName']),
       outsideEventAddress: _readNullableString(map['outsideEventAddress']),
       outsideEventSummary: _readNullableString(map['outsideEventSummary']),
+      outsideEventSourceType:
+          _readNullableString(map['outsideEventSourceType']),
+      outsideEventConfidence: _readDouble(map['outsideEventConfidence']),
+      outsideEventTags: _readStringList(map['outsideEventTags']),
+      outsideEventUncertainFields:
+          _readStringList(map['outsideEventUncertainFields']),
+      outsideEventExtractionMode:
+          _readNullableString(map['outsideEventExtractionMode']),
     );
   }
 
@@ -183,6 +225,21 @@ class ManualPlanItem {
     if (value is! String) return null;
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static double? _readDouble(Object? value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return null;
+  }
+
+  static List<String> _readStringList(Object? value) {
+    if (value is! Iterable) return const [];
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   static int _readDifficulty(Object? value) {

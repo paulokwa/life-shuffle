@@ -87,3 +87,243 @@ test('handler fetches a public webpage and returns extracted events', async () =
   assert.equal(payload.events[0].sourceType, 'webPage');
   assert.match(payload.warnings.join('\n'), /AI organizer not configured/);
 });
+
+test('combineDateTime builds a local Date from date/time strings', () => {
+  const value = webpage.combineDateTime('2026-07-04', '18:30');
+  assert.equal(value.getFullYear(), 2026);
+  assert.equal(value.getMonth(), 6);
+  assert.equal(value.getDate(), 4);
+  assert.equal(value.getHours(), 18);
+  assert.equal(value.getMinutes(), 30);
+
+  const noTime = webpage.combineDateTime('2026-07-04', null);
+  assert.equal(noTime.getHours(), 12);
+
+  assert.equal(webpage.combineDateTime(null, '18:30'), null);
+  assert.equal(webpage.combineDateTime('not-a-date', '18:30'), null);
+});
+
+test('chunkText splits long text and caps the number of chunks', () => {
+  const text = 'a'.repeat(25000);
+  const chunks = webpage.chunkText(text, 6000, 4);
+  assert.equal(chunks.length, 4);
+  assert.equal(chunks[0].length, 6000);
+});
+
+test('mapAiEventItem marks unknown fields as uncertain instead of inventing them', () => {
+  const mapped = webpage.mapAiEventItem({
+    item: {
+      title: 'Garden concert',
+      startDate: '2026-07-03',
+      startTime: null,
+      venue: null,
+      address: null,
+      price: null,
+      confidence: 0.42,
+      uncertainFields: [],
+    },
+    sourceId: 'src-1',
+    sourceName: 'Venue page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    provider: 'openai',
+  });
+
+  assert.ok(mapped);
+  assert.equal(mapped.venueName, undefined);
+  assert.equal(mapped.priceLabel, undefined);
+  assert.deepEqual(mapped.missingFields, ['address', 'price', 'time', 'venue']);
+  assert.equal(mapped.confidence, 0.42);
+  assert.equal(mapped.raw.extractionMode, 'ai-openai-webpage');
+});
+
+test('mapAiEventItem rejects events outside the requested range', () => {
+  const mapped = webpage.mapAiEventItem({
+    item: { title: 'Out of range', startDate: '2026-08-01' },
+    sourceId: 'src-1',
+    sourceName: 'Venue page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    provider: 'openai',
+  });
+
+  assert.equal(mapped, null);
+});
+
+test('extractEventsWithAiOrFallback calls OpenAI when OPENAI_API_KEY is set', async () => {
+  let calledUrl = null;
+  const extraction = await webpage.extractEventsWithAiOrFallback({
+    text: 'Garden concert July 3, 2026 at 7pm. Free outdoor music at Victoria Park.',
+    sourceId: 'src-1',
+    sourceName: 'Venue page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    env: { OPENAI_API_KEY: 'test-key' },
+    fetchImpl: async (url, init) => {
+      calledUrl = url;
+      assert.match(url, /api\.openai\.com/);
+      assert.equal(init.method, 'POST');
+      assert.match(init.headers.Authorization, /Bearer test-key/);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  events: [
+                    {
+                      title: 'Garden concert',
+                      summary: 'Free outdoor music.',
+                      startDate: '2026-07-03',
+                      startTime: '19:00',
+                      venue: 'Victoria Park',
+                      address: null,
+                      price: 'Free',
+                      ticketUrl: null,
+                      tags: ['music', 'outdoors'],
+                      confidence: 0.9,
+                      uncertainFields: ['address'],
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    },
+  });
+
+  assert.ok(calledUrl);
+  assert.equal(extraction.aiConfigured, true);
+  assert.equal(extraction.events.length, 1);
+  assert.equal(extraction.events[0].raw.extractionMode, 'ai-openai-webpage');
+  assert.equal(extraction.events[0].venueName, 'Victoria Park');
+  assert.equal(extraction.events[0].priceLabel, 'Free');
+  assert.equal(extraction.events[0].isFree, true);
+  assert.deepEqual(extraction.events[0].missingFields, ['address']);
+});
+
+test('extractEventsWithAiOrFallback calls Gemini when only GEMINI_API_KEY is set', async () => {
+  const extraction = await webpage.extractEventsWithAiOrFallback({
+    text: 'Library night July 2, 2026 at 6pm. A community event.',
+    sourceId: 'src-2',
+    sourceName: 'Library page',
+    sourceUrl: 'https://example.com/library',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    env: { GEMINI_API_KEY: 'gem-key' },
+    fetchImpl: async (url) => {
+      assert.match(url, /generativelanguage\.googleapis\.com/);
+      assert.match(url, /key=gem-key/);
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      events: [
+                        {
+                          title: 'Library night',
+                          startDate: '2026-07-02',
+                          startTime: '18:00',
+                          venue: 'Central Library',
+                          confidence: 0.8,
+                          uncertainFields: [],
+                        },
+                      ],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      };
+    },
+  });
+
+  assert.equal(extraction.aiConfigured, true);
+  assert.equal(extraction.events.length, 1);
+  assert.equal(extraction.events[0].raw.extractionMode, 'ai-gemini-webpage');
+});
+
+test('extractEventsWithAiOrFallback falls back to deterministic extraction when AI fails', async () => {
+  const extraction = await webpage.extractEventsWithAiOrFallback({
+    text: 'Neighbourhood Market July 2, 2026 at 6:00pm Free local food and music.',
+    sourceId: 'src-3',
+    sourceName: 'Community page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    env: { OPENAI_API_KEY: 'test-key' },
+    fetchImpl: async () => ({ ok: false, status: 500 }),
+  });
+
+  assert.equal(extraction.aiConfigured, true);
+  assert.equal(extraction.events.length, 1);
+  assert.equal(
+    extraction.events[0].raw.extractionMode,
+    'deterministic-webpage-fallback',
+  );
+  assert.match(extraction.warnings.join('\n'), /could not extract events/);
+});
+
+test('extractEventsWithAi merges and dedupes events across multiple chunks', async () => {
+  const longText = `Garden concert July 3, 2026 at 7pm. Free music.${' filler'.repeat(2000)}`;
+  let calls = 0;
+  const result = await webpage.extractEventsWithAi({
+    text: longText,
+    provider: 'openai',
+    apiKey: 'test-key',
+    model: 'gpt-4o-mini',
+    sourceId: 'src-4',
+    sourceName: 'Venue page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+    fetchImpl: async () => {
+      calls += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  events: [
+                    {
+                      title: 'Garden concert',
+                      startDate: '2026-07-03',
+                      startTime: '19:00',
+                      venue: 'Victoria Park',
+                      confidence: 0.7,
+                      uncertainFields: [],
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    },
+  });
+
+  assert.ok(calls > 1);
+  assert.equal(result.failed, false);
+  assert.equal(result.events.length, 1);
+});

@@ -10,6 +10,7 @@ class ExportPrintOptions {
     this.showCheckInStatus = true,
     this.showLockedStatus = true,
     this.showEnabledDimensions = true,
+    this.showOutsideEventDetails = true,
   });
 
   final bool showTime;
@@ -19,6 +20,10 @@ class ExportPrintOptions {
   final bool showLockedStatus;
   final bool showEnabledDimensions;
 
+  /// Whether outside-event items also export their venue/price/source/
+  /// ticket metadata, not just the title and time every plan item gets.
+  final bool showOutsideEventDetails;
+
   ExportPrintOptions copyWith({
     bool? showTime,
     bool? showDuration,
@@ -26,6 +31,7 @@ class ExportPrintOptions {
     bool? showCheckInStatus,
     bool? showLockedStatus,
     bool? showEnabledDimensions,
+    bool? showOutsideEventDetails,
   }) {
     return ExportPrintOptions(
       showTime: showTime ?? this.showTime,
@@ -35,6 +41,8 @@ class ExportPrintOptions {
       showLockedStatus: showLockedStatus ?? this.showLockedStatus,
       showEnabledDimensions:
           showEnabledDimensions ?? this.showEnabledDimensions,
+      showOutsideEventDetails:
+          showOutsideEventDetails ?? this.showOutsideEventDetails,
     );
   }
 }

@@ -440,17 +440,118 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
   }
 }
 
-class TicketmasterOutsideEventAdapter extends _UnconfiguredApiAdapter {
-  TicketmasterOutsideEventAdapter()
-      : super(
-          sourceId: 'ticketmaster',
-          displayName: 'Ticketmaster',
-          type: OutsideEventSourceType.ticketmaster,
-          envName: 'TICKETMASTER_API_KEY',
-          description: 'Ticketmaster Discovery API adapter seam. Live calls '
-              'should run through a backend function so the API key is not '
-              'exposed in Flutter web.',
+/// Live Ticketmaster Discovery API results, fetched through
+/// `netlify/functions/outside-events-ticketmaster.js` so TICKETMASTER_API_KEY
+/// stays server-side. Reports an "unconfigured" warning (rather than failing)
+/// when the backend has no key set, matching the other user-facing sources.
+class TicketmasterOutsideEventAdapter implements OutsideEventSourceAdapter {
+  TicketmasterOutsideEventAdapter({http.Client? client})
+      : _client = client ?? http.Client();
+
+  final http.Client _client;
+
+  static const _sourceId = 'ticketmaster';
+  static const _displayName = 'Ticketmaster';
+
+  @override
+  OutsideEventSourceConfig get config => const OutsideEventSourceConfig(
+        id: _sourceId,
+        displayName: _displayName,
+        type: OutsideEventSourceType.ticketmaster,
+        enabled: true,
+        needsApiKey: false,
+        configured: true,
+        description: 'Live Ticketmaster Discovery API results for the '
+            'current city and date range, fetched through a Netlify '
+            'function.',
+        helpText: 'Set TICKETMASTER_API_KEY in Netlify (server-side only) to '
+            'enable live results; otherwise this source reports unconfigured.',
+      );
+
+  @override
+  Future<OutsideEventSourceResult> fetch(OutsideEventQuery query) async {
+    final uri = Uri(
+      path: '/.netlify/functions/outside-events-ticketmaster',
+      queryParameters: {
+        'city': query.city,
+        'start': query.start.toIso8601String(),
+        'end': query.end.toIso8601String(),
+      },
+    );
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const {'Accept': 'application/json'},
+      );
+      final decoded = _decodeJson(response.body);
+      if (response.statusCode != 200 && response.statusCode != 502) {
+        return OutsideEventSourceResult(
+          source: config,
+          warnings: [
+            OutsideEventSourceWarning(
+              sourceId: _sourceId,
+              sourceName: _displayName,
+              message:
+                  'Ticketmaster could not load (HTTP ${response.statusCode}).',
+            ),
+          ],
         );
+      }
+      final eventMaps = decoded['events'];
+      final suggestions = eventMaps is Iterable
+          ? eventMaps
+              .whereType<Map>()
+              .map((map) => EventSuggestion.fromMap(
+                    Map<String, dynamic>.from(map),
+                  ))
+              .where((event) => query.contains(event.startDateTime))
+              .toList()
+          : const <EventSuggestion>[];
+      final warnings = <OutsideEventSourceWarning>[
+        for (final warning in _readStringList(decoded['warnings']))
+          OutsideEventSourceWarning(
+            sourceId: _sourceId,
+            sourceName: _displayName,
+            message: warning,
+          ),
+      ];
+      return OutsideEventSourceResult(
+        source: config,
+        suggestions: suggestions,
+        warnings: warnings,
+      );
+    } catch (_) {
+      return OutsideEventSourceResult(
+        source: config,
+        warnings: const [
+          OutsideEventSourceWarning(
+            sourceId: _sourceId,
+            sourceName: _displayName,
+            message:
+                'Ticketmaster could not load. Other sources can still refresh.',
+          ),
+        ],
+      );
+    }
+  }
+
+  Map<String, dynamic> _decodeJson(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  List<String> _readStringList(Object? value) {
+    if (value is! Iterable) return const [];
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
 }
 
 class EventbriteOutsideEventAdapter extends _UnconfiguredApiAdapter {
@@ -460,8 +561,12 @@ class EventbriteOutsideEventAdapter extends _UnconfiguredApiAdapter {
           displayName: 'Eventbrite',
           type: OutsideEventSourceType.eventbrite,
           envName: 'EVENTBRITE_API_TOKEN',
-          description: 'Eventbrite adapter seam. Token/access shape still '
-              'needs verification before live calls are enabled.',
+          description: 'Eventbrite adapter seam - not wired to a live fetch.',
+          todo: 'Eventbrite retired public city-wide event search in 2020; '
+              'EVENTBRITE_API_TOKEN can only list events for your own '
+              'organizer account via the Organizations API. Decide whether '
+              'organizer-scoped listings are useful here before wiring a '
+              'live fetch, since there is no city-wide discovery endpoint.',
         );
 }
 
@@ -472,7 +577,11 @@ class BandsintownOutsideEventAdapter extends _UnconfiguredApiAdapter {
           displayName: 'Bandsintown',
           type: OutsideEventSourceType.bandsintown,
           envName: 'BANDSINTOWN_APP_ID',
-          description: 'Bandsintown artist/events adapter seam.',
+          description: 'Bandsintown adapter seam - not wired to a live fetch.',
+          todo: "Bandsintown's public API lists upcoming events for one "
+              'artist at a time (by name) via BANDSINTOWN_APP_ID; it has no '
+              'city-wide discovery endpoint. Decide on a seed artist list '
+              '(e.g. favorite touring acts) before wiring a live fetch.',
         );
 }
 
@@ -483,6 +592,7 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
     required this.type,
     required this.envName,
     required this.description,
+    required this.todo,
   });
 
   final String sourceId;
@@ -490,6 +600,11 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
   final OutsideEventSourceType type;
   final String envName;
   final String description;
+
+  /// What's still unclear/undecided about wiring this source to a live
+  /// fetch (e.g. an API shape that doesn't fit a city-wide query), shown to
+  /// developers via [OutsideEventSourceConfig.helpText].
+  final String todo;
 
   @override
   OutsideEventSourceConfig get config => OutsideEventSourceConfig(
@@ -500,8 +615,8 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
         needsApiKey: true,
         configured: false,
         description: description,
-        helpText: 'Future live support should read $envName inside a Netlify '
-            'Function. Do not pass this key to Flutter or commit it.',
+        helpText: 'TODO: $todo Do not pass $envName to Flutter or commit it '
+            '- it would only ever be read inside a Netlify Function.',
       );
 
   @override
@@ -512,9 +627,8 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
         OutsideEventSourceWarning(
           sourceId: sourceId,
           sourceName: displayName,
-          message: '$displayName is a backend adapter seam for later. Set '
-              '$envName only in server-side Netlify configuration when a live '
-              'fetcher exists.',
+          message: '$displayName is not wired to a live fetch yet. See '
+              'Settings help text for why.',
         ),
       ],
     );
