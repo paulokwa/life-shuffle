@@ -1,5 +1,10 @@
+import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart';
+
 import '../models/event_suggestion.dart';
+import 'curated_rss_feed_registry.dart';
 import 'outside_event_source_adapter.dart';
+import 'rss_atom_feed_parser.dart';
 
 class MockOutsideEventAdapter implements OutsideEventSourceAdapter {
   const MockOutsideEventAdapter();
@@ -107,7 +112,17 @@ class MockOutsideEventAdapter implements OutsideEventSourceAdapter {
 }
 
 class CuratedRssOutsideEventAdapter implements OutsideEventSourceAdapter {
-  const CuratedRssOutsideEventAdapter();
+  CuratedRssOutsideEventAdapter({
+    http.Client? client,
+    List<CuratedRssFeedSource> sources = curatedRssFeedSources,
+    RssAtomFeedParser parser = const RssAtomFeedParser(),
+  })  : _client = client ?? http.Client(),
+        _sources = sources,
+        _parser = parser;
+
+  final http.Client _client;
+  final List<CuratedRssFeedSource> _sources;
+  final RssAtomFeedParser _parser;
 
   @override
   OutsideEventSourceConfig get config => const OutsideEventSourceConfig(
@@ -117,77 +132,92 @@ class CuratedRssOutsideEventAdapter implements OutsideEventSourceAdapter {
         enabled: true,
         needsApiKey: false,
         configured: true,
-        description: 'Hardcoded trusted local feeds. This spike uses '
-            'RSS-style sample entries until real feed URLs are vetted.',
+        description: 'Hardcoded trusted Halifax/Nova Scotia RSS/Atom feeds '
+            'loaded through the Netlify RSS proxy when available.',
         helpText: 'User-supplied feed URLs are intentionally not supported.',
       );
 
   @override
   Future<OutsideEventSourceResult> fetch(OutsideEventQuery query) async {
-    final start = _dateOnly(query.start);
-    final suggestions = [
-      EventSuggestion(
-        id: 'rss-style-public-garden-walk',
-        title: '<b>Public Gardens evening walk</b>',
-        description: 'A guided seasonal stroll through the gardens with short '
-            'stops for local history and plant notes.',
-        startDateTime:
-            start.add(const Duration(days: 2, hours: 17, minutes: 30)),
-        endDateTime: start.add(const Duration(days: 2, hours: 18, minutes: 30)),
-        venueName: 'Halifax Public Gardens',
-        address: 'Spring Garden Road',
-        city: query.city,
-        sourceName: 'Curated RSS sample',
-        sourceType: OutsideEventSourceType.rssAtom,
-        sourceUrl: 'https://example.com/rss/public-garden-walk',
-        priceLabel: null,
-        tags: const ['outdoors', 'community'],
-        missingFields: const ['price'],
-        raw: const {'adapter': 'curated-rss-sample'},
-        dedupeKey: eventDedupeKey(
-          title: 'Public Gardens evening walk',
-          start: start.add(
-            const Duration(days: 2, hours: 17, minutes: 30),
+    final suggestions = <EventSuggestion>[];
+    final warnings = <OutsideEventSourceWarning>[];
+
+    for (final source in _sources) {
+      final xmlText = await _loadFeedXml(source, warnings);
+      if (xmlText == null) continue;
+      try {
+        final parsed = _parser.parse(
+          xmlText: xmlText,
+          source: source,
+          query: query,
+        );
+        suggestions.addAll(parsed.suggestions);
+        warnings.addAll(parsed.warnings);
+      } on XmlParserException {
+        warnings.add(
+          OutsideEventSourceWarning(
+            sourceId: source.id,
+            sourceName: source.displayName,
+            message: 'Feed returned malformed XML and was skipped.',
           ),
-          venueName: 'Halifax Public Gardens',
-        ),
-      ),
-      EventSuggestion(
-        id: 'rss-style-night-market',
-        title: 'North End Night Market',
-        description: 'Food vendors, small makers, and a short acoustic set.',
-        startDateTime: start.add(const Duration(days: 6, hours: 18)),
-        endDateTime: start.add(const Duration(days: 6, hours: 21)),
-        venueName: 'Local Source Market',
-        address: 'Windsor Street',
-        city: query.city,
-        sourceName: 'Curated RSS sample',
-        sourceType: OutsideEventSourceType.rssAtom,
-        sourceUrl: 'https://example.com/rss/night-market',
-        priceLabel: 'Free entry',
-        isFree: true,
-        tags: const ['market', 'food', 'music', 'free/low-cost'],
-        raw: const {'adapter': 'curated-rss-sample'},
-        dedupeKey: eventDedupeKey(
-          title: 'North End Night Market',
-          start: start.add(const Duration(days: 6, hours: 18)),
-          venueName: 'Local Source Market',
-        ),
-      ),
-    ].where((event) => query.contains(event.startDateTime)).toList();
+        );
+      } catch (_) {
+        warnings.add(
+          OutsideEventSourceWarning(
+            sourceId: source.id,
+            sourceName: source.displayName,
+            message: 'Feed could not be parsed and was skipped.',
+          ),
+        );
+      }
+    }
 
     return OutsideEventSourceResult(
       source: config,
       suggestions: suggestions,
-      warnings: const [
-        OutsideEventSourceWarning(
-          sourceId: 'curated-rss',
-          sourceName: 'Curated RSS/Atom',
-          message: 'Using vetted sample entries until real Halifax feeds are '
-              'chosen and checked for CORS/format reliability.',
-        ),
-      ],
+      warnings: warnings,
     );
+  }
+
+  Future<String?> _loadFeedXml(
+    CuratedRssFeedSource source,
+    List<OutsideEventSourceWarning> warnings,
+  ) async {
+    final proxyUri = Uri(
+      path: '/.netlify/functions/outside-events-rss',
+      queryParameters: {'source': source.id},
+    );
+    final proxied = await _tryLoadUri(proxyUri);
+    if (proxied != null) return proxied;
+
+    final direct = await _tryLoadUri(Uri.parse(source.url));
+    if (direct != null) return direct;
+
+    warnings.add(
+      OutsideEventSourceWarning(
+        sourceId: source.id,
+        sourceName: source.displayName,
+        message: 'Feed could not load from the Netlify proxy or direct URL.',
+      ),
+    );
+    return null;
+  }
+
+  Future<String?> _tryLoadUri(Uri uri) async {
+    try {
+      final response = await _client.get(
+        uri,
+        headers: const {
+          'Accept': 'application/rss+xml, application/atom+xml, text/xml',
+        },
+      );
+      if (response.statusCode != 200) return null;
+      final body = response.body.trimLeft();
+      if (!body.startsWith('<')) return null;
+      return response.body;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -200,7 +230,9 @@ class TicketmasterOutsideEventAdapter extends _UnconfiguredApiAdapter {
           configured:
               const String.fromEnvironment('TICKETMASTER_API_KEY').isNotEmpty,
           envName: 'TICKETMASTER_API_KEY',
-          description: 'Ticketmaster Discovery API adapter seam.',
+          description: 'Ticketmaster Discovery API adapter seam. Live calls '
+              'should run through a backend function so the API key is not '
+              'exposed in Flutter web.',
         );
 }
 
@@ -258,7 +290,9 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
         configured: configured,
         description: description,
         helpText: 'Set $envName as a compile-time environment value. No key '
-            'should be committed to the repo.',
+            'should be committed to the repo. For Flutter web, prefer a '
+            'Netlify Function/server environment variable so credentials are '
+            'not shipped to the browser.',
       );
 
   @override
@@ -282,9 +316,9 @@ class _UnconfiguredApiAdapter implements OutsideEventSourceAdapter {
         OutsideEventSourceWarning(
           sourceId: sourceId,
           sourceName: displayName,
-          message: '$displayName has configuration, but live normalization is '
-              'left as a spike TODO so the prototype does not block on API '
-              'contract/rate-limit details.',
+          message: '$displayName has configuration, but this prototype still '
+              'needs a backend fetcher and response normalizer before it can '
+              'return live suggestions.',
         ),
       ],
     );

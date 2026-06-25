@@ -1,10 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/event_suggestion.dart';
+import 'package:life_shuffle/services/curated_rss_feed_registry.dart';
+import 'package:life_shuffle/services/outside_event_adapters.dart';
 import 'package:life_shuffle/services/outside_event_discovery_service.dart';
 import 'package:life_shuffle/services/outside_event_organizer_service.dart';
 import 'package:life_shuffle/services/outside_event_source_adapter.dart';
 import 'package:life_shuffle/services/persistence_service.dart';
+import 'package:life_shuffle/services/rss_atom_feed_parser.dart';
 
 void main() {
   group('EventSuggestion', () {
@@ -116,6 +121,157 @@ void main() {
 
       expect(result.events.map((e) => e.id), ['one', 'later']);
       expect(result.warnings.single.message, 'B is partial');
+    });
+  });
+
+  group('RssAtomFeedParser', () {
+    test('parses RSS entries into event suggestions', () {
+      const parser = RssAtomFeedParser();
+      final result = parser.parse(
+        xmlText: '''
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Waterfront concert June 28, 2026 at 7:30pm</title>
+      <link>https://example.com/waterfront-concert</link>
+      <description>Music outside by the harbour.</description>
+      <pubDate>Wed, 24 Jun 2026 18:52:19 +0000</pubDate>
+    </item>
+  </channel>
+</rss>
+''',
+        source: const CuratedRssFeedSource(
+          id: 'fixture-rss',
+          displayName: 'Fixture RSS',
+          url: 'https://example.com/feed.xml',
+          defaultCity: 'Halifax',
+          defaultTags: ['music'],
+        ),
+        query: OutsideEventQuery(
+          start: DateTime(2026, 6, 25),
+          end: DateTime(2026, 6, 30),
+        ),
+      );
+
+      expect(result.warnings, isEmpty);
+      expect(result.suggestions.single.displayTitle, 'Waterfront concert');
+      expect(result.suggestions.single.startDateTime,
+          DateTime(2026, 6, 28, 19, 30));
+      expect(result.suggestions.single.tags, contains('music'));
+      expect(result.suggestions.single.missingFields,
+          containsAll(['address', 'price', 'venue']));
+    });
+
+    test('handles empty feeds with a warning', () {
+      const parser = RssAtomFeedParser();
+      final result = parser.parse(
+        xmlText: '<rss version="2.0"><channel></channel></rss>',
+        source: const CuratedRssFeedSource(
+          id: 'empty',
+          displayName: 'Empty',
+          url: 'https://example.com/feed.xml',
+          defaultCity: 'Halifax',
+        ),
+        query: OutsideEventQuery(
+          start: DateTime(2026, 6, 25),
+          end: DateTime(2026, 6, 30),
+        ),
+      );
+
+      expect(result.suggestions, isEmpty);
+      expect(result.warnings.single.message,
+          'Feed loaded but did not contain any RSS/Atom entries.');
+    });
+  });
+
+  group('CuratedRssOutsideEventAdapter', () {
+    test('loads live feed XML through the proxy source id first', () async {
+      final requested = <Uri>[];
+      final adapter = CuratedRssOutsideEventAdapter(
+        sources: const [
+          CuratedRssFeedSource(
+            id: 'fixture',
+            displayName: 'Fixture feed',
+            url: 'https://example.com/feed.xml',
+            defaultCity: 'Halifax',
+            defaultTags: ['community'],
+          ),
+        ],
+        client: MockClient((request) async {
+          requested.add(request.url);
+          expect(request.url.path, '/.netlify/functions/outside-events-rss');
+          expect(request.url.queryParameters['source'], 'fixture');
+          return http.Response('''
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Library night July 2, 2026 at 6:00pm</title>
+      <link>https://example.com/library-night</link>
+      <description>A community event.</description>
+    </item>
+  </channel>
+</rss>
+''', 200);
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7),
+        ),
+      );
+
+      expect(requested, hasLength(1));
+      expect(result.suggestions.single.displayTitle, 'Library night');
+      expect(result.suggestions.single.sourceName, 'Fixture feed');
+    });
+
+    test('keeps other sources working when one feed is malformed', () async {
+      final adapter = CuratedRssOutsideEventAdapter(
+        sources: const [
+          CuratedRssFeedSource(
+            id: 'bad',
+            displayName: 'Bad feed',
+            url: 'https://example.com/bad.xml',
+            defaultCity: 'Halifax',
+          ),
+          CuratedRssFeedSource(
+            id: 'good',
+            displayName: 'Good feed',
+            url: 'https://example.com/good.xml',
+            defaultCity: 'Halifax',
+          ),
+        ],
+        client: MockClient((request) async {
+          if (request.url.queryParameters['source'] == 'bad') {
+            return http.Response('<rss><channel><item>', 200);
+          }
+          return http.Response('''
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Good event July 4, 2026</title>
+      <link>https://example.com/good-event</link>
+    </item>
+  </channel>
+</rss>
+''', 200);
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7),
+        ),
+      );
+
+      expect(result.suggestions.single.displayTitle, 'Good event');
+      expect(
+        result.warnings.map((warning) => warning.message),
+        contains('Feed could not be parsed and was skipped.'),
+      );
     });
   });
 

@@ -26,7 +26,7 @@ class OutsideEventDiscoveryService {
 
   static List<OutsideEventSourceAdapter> get defaultAdapters => [
         const MockOutsideEventAdapter(),
-        const CuratedRssOutsideEventAdapter(),
+        CuratedRssOutsideEventAdapter(),
         TicketmasterOutsideEventAdapter(),
         EventbriteOutsideEventAdapter(),
         BandsintownOutsideEventAdapter(),
