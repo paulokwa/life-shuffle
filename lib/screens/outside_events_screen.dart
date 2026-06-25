@@ -19,7 +19,6 @@ class OutsideEventsScreen extends StatefulWidget {
 }
 
 class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
-  final OutsideEventDiscoveryService _service = OutsideEventDiscoveryService();
   Future<OutsideEventDiscoveryResult>? _future;
   final Set<OutsideEventSourceType> _selectedSources = {};
   final Set<String> _selectedTags = {};
@@ -32,23 +31,14 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
 
   Future<OutsideEventDiscoveryResult> _load() {
     final state = AppStateScope.of(context);
-    final days = state.generatedRange.days;
-    final start = days.isNotEmpty ? days.first.date : DateTime.now();
-    final end = days.isNotEmpty
-        ? days.last.date
-        : DateTime.now().add(const Duration(days: 6));
-    return _service.discover(
-      OutsideEventQuery(
-        start: DateTime(start.year, start.month, start.day),
-        end: DateTime(end.year, end.month, end.day, 23, 59),
-        city: 'Halifax',
-      ),
-    );
+    final cached = state.cachedOutsideEventDiscoveryResult();
+    if (cached.events.isNotEmpty) return Future.value(cached);
+    return state.refreshOutsideEventSources();
   }
 
   void _refresh() {
     setState(() {
-      _future = _load();
+      _future = AppStateScope.of(context).refreshOutsideEventSources();
     });
   }
 
@@ -133,6 +123,22 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _SourceStatusCard(result: result),
+                          if (AppStateScope.of(context)
+                                  .cachedOutsideEventsFetchedAtMillis !=
+                              null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Last fetched: ${_shortTimestamp(AppStateScope.of(context).cachedOutsideEventsFetchedAtMillis!)}',
+                              key: const ValueKey(
+                                'outside-events-last-fetched',
+                              ),
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
+                                color: textMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           _FilterSection(
                             sources: result.sources,
@@ -235,6 +241,16 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
       ),
     );
     setState(() {});
+  }
+
+  static String _shortTimestamp(int millis) {
+    final value = DateTime.fromMillisecondsSinceEpoch(millis);
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final period = value.hour >= 12 ? 'PM' : 'AM';
+    return '${value.year}-$month-$day $hour:$minute $period';
   }
 }
 
@@ -560,6 +576,10 @@ class _EventSuggestionCard extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              _MetaPill(
+                icon: Icons.source_rounded,
+                label: event.sourceType.label,
+              ),
               _MetaPill(
                 icon: Icons.schedule_rounded,
                 label: _dateTimeLabel(event.startDateTime),

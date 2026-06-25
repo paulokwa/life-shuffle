@@ -27,7 +27,8 @@ class _SignInScreenState extends State<SignInScreen> {
       await AuthService.signInWithGoogle();
       // AuthGate rebuilds automatically via authStateChanges stream.
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AuthDebug] FirebaseAuthException code=${e.code} message=${e.message} origin=${origin ?? 'native'}');
+      debugPrint(
+          '[AuthDebug] FirebaseAuthException code=${e.code} message=${e.message} origin=${origin ?? 'native'}');
       if (mounted) {
         setState(() {
           _error = _friendlyAuthError(e, origin);
@@ -47,7 +48,8 @@ class _SignInScreenState extends State<SignInScreen> {
 
   String _friendlyAuthError(FirebaseAuthException e, [String? origin]) {
     // Dynamic code generated when the API key HTTP-referrer restriction blocks the request.
-    if (e.code.startsWith('requests-from-referer-') && e.code.endsWith('-are-blocked')) {
+    if (e.code.startsWith('requests-from-referer-') &&
+        e.code.endsWith('-are-blocked')) {
       return 'Sign-in failed: API key blocks requests from origin "${origin ?? '?'}". '
           'Add this referrer under Google Cloud Console → APIs & Services → Credentials → [API key] → HTTP referrers.';
     }

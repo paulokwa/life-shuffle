@@ -4304,8 +4304,7 @@ void main() {
     expect(result, FeedRefreshResult.success);
     // The SavedState actually sent to Firestore must be the live, freshly
     // rebuilt ICS - not a stale snapshot from before the refresh ran.
-    expect(capturedRefreshStates.single.cachedIcsText,
-        appState.cachedIcsText);
+    expect(capturedRefreshStates.single.cachedIcsText, appState.cachedIcsText);
     expect(capturedRefreshStates.single.cachedIcsUpdatedAtMillis,
         appState.cachedIcsUpdatedAtMillis);
   });
@@ -4407,7 +4406,8 @@ void main() {
     );
 
     final initialSyncSaveDone = Completer<void>();
-    final saveCalls = <({String userId, String calendarId, SavedState state})>[];
+    final saveCalls =
+        <({String userId, String calendarId, SavedState state})>[];
     final appState = AppState(
       activities: PlannerService.defaultActivities,
       loadAccessibleCalendars: (_) async => [defaultCalendar, otherCalendar],
@@ -5006,9 +5006,8 @@ void main() {
     );
     final planned = plan.expand((day) => day.activities).toList();
 
-    String timeSlotFor(String activityId) => planned
-        .firstWhere((p) => p.activity.id == activityId)
-        .timeSlot;
+    String timeSlotFor(String activityId) =>
+        planned.firstWhere((p) => p.activity.id == activityId).timeSlot;
 
     expect(timeSlotFor('outside-evening'), '7:00 PM');
     expect(timeSlotFor('outside-afternoon'), '3:00 PM');
@@ -6617,8 +6616,7 @@ void main() {
 
   test(
       'regenerate() advances a stale rangeStart to today instead of '
-      'reusing a past generation start date (midnight rollover)',
-      () async {
+      'reusing a past generation start date (midnight rollover)', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final today = _today();
@@ -8036,8 +8034,7 @@ void main() {
 
   testWidgets(
       'Month grid highlights today with a terracotta border and a TODAY '
-      'label, leaving other days unchanged',
-      (WidgetTester tester) async {
+      'label, leaving other days unchanged', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);

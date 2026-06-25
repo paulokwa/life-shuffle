@@ -71,8 +71,8 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
     if (!mounted || printed != false) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-            'Use your browser or device print option to print this page.'),
+        content:
+            Text('Use your browser or device print option to print this page.'),
       ),
     );
   }

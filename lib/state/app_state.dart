@@ -8,11 +8,17 @@ import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/generated_plan_range.dart';
 import '../models/manual_plan_item.dart';
+import '../models/event_suggestion.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
+import '../models/user_event_source.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
+import '../services/outside_event_adapters.dart';
+import '../services/outside_event_discovery_service.dart';
+import '../services/outside_event_organizer_service.dart';
+import '../services/outside_event_source_adapter.dart';
 import '../services/persistence_service.dart';
 import '../services/planner_service.dart' show PlannerService, PlanStyle;
 import '../services/range_planner_service.dart'
@@ -122,6 +128,9 @@ class AppState extends ChangeNotifier {
   /// pinned user content, not generated-occurrence customizations. See
   /// [addManualPlanItem] and [removeManualPlanItem].
   Map<String, ManualPlanItem> _manualPlanItems = {};
+  List<UserEventSource> _outsideEventSources = const [];
+  List<EventSuggestion> _cachedOutsideEvents = const [];
+  int? _cachedOutsideEventsFetchedAtMillis;
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -216,6 +225,10 @@ class AppState extends ChangeNotifier {
       _rangeStart = _dateOnly(DateTime.now());
       _generatedDays = _buildPlan();
     }
+    _outsideEventSources = PersistenceService.loadOutsideEventSources();
+    _cachedOutsideEvents = PersistenceService.loadCachedOutsideEvents();
+    _cachedOutsideEventsFetchedAtMillis =
+        PersistenceService.loadCachedOutsideEventsFetchedAtMillis();
   }
 
   /// The 7-day slice of [generatedRange] that Today/Progress/print/ICS use,
@@ -363,6 +376,12 @@ class AppState extends ChangeNotifier {
   /// for tests; screens should read the merged [DayPlan.activities].
   List<ManualPlanItem> get manualPlanItems =>
       List.unmodifiable(_manualPlanItems.values);
+  List<UserEventSource> get outsideEventSources =>
+      List.unmodifiable(_outsideEventSources);
+  List<EventSuggestion> get cachedOutsideEvents =>
+      List.unmodifiable(_cachedOutsideEvents);
+  int? get cachedOutsideEventsFetchedAtMillis =>
+      _cachedOutsideEventsFetchedAtMillis;
 
   /// Calm, plain-language description of the current sync problem or
   /// notice, or `null` when sync is healthy. Never exposes raw Firebase
@@ -1242,6 +1261,161 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addOutsideEventSource({
+    required String displayName,
+    required String url,
+    required UserEventSourceKind kind,
+  }) {
+    final normalizedUrl = url.trim();
+    final normalizedName = displayName.trim().isEmpty
+        ? _sourceNameFromUrl(normalizedUrl)
+        : displayName.trim();
+    final source = UserEventSource(
+      id: 'user_src_${DateTime.now().microsecondsSinceEpoch}',
+      displayName: normalizedName,
+      url: normalizedUrl,
+      kind: kind,
+    );
+    _outsideEventSources = [..._outsideEventSources, source];
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void updateOutsideEventSource(UserEventSource source) {
+    var changed = false;
+    _outsideEventSources = _outsideEventSources.map((existing) {
+      if (existing.id != source.id) return existing;
+      changed = true;
+      return source;
+    }).toList();
+    if (!changed) return;
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void setOutsideEventSourceEnabled(String id, bool enabled) {
+    _outsideEventSources = _outsideEventSources.map((source) {
+      return source.id == id ? source.copyWith(enabled: enabled) : source;
+    }).toList();
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void deleteOutsideEventSource(String id) {
+    final filtered =
+        _outsideEventSources.where((source) => source.id != id).toList();
+    if (filtered.length == _outsideEventSources.length) return;
+    _outsideEventSources = filtered;
+    _cachedOutsideEvents = _cachedOutsideEvents
+        .where((event) => event.raw['userSourceId'] != id)
+        .toList();
+    _persistOutsideEventSources();
+    _persistCachedOutsideEvents();
+    notifyListeners();
+  }
+
+  Future<OutsideEventDiscoveryResult> refreshOutsideEventSources() async {
+    final days = generatedRange.days;
+    final start = days.isNotEmpty ? days.first.date : DateTime.now();
+    final end = days.isNotEmpty
+        ? days.last.date
+        : DateTime.now().add(const Duration(days: 6));
+    final adapters = <OutsideEventSourceAdapter>[
+      const MockOutsideEventAdapter(),
+      CuratedRssOutsideEventAdapter(),
+      ..._outsideEventSources.map(_adapterForSource),
+      TicketmasterOutsideEventAdapter(),
+      EventbriteOutsideEventAdapter(),
+      BandsintownOutsideEventAdapter(),
+    ];
+    final service = OutsideEventDiscoveryService(
+      adapters: adapters,
+      organizer: const OutsideEventOrganizerService(),
+    );
+    final result = await service.discover(
+      OutsideEventQuery(
+        start: DateTime(start.year, start.month, start.day),
+        end: DateTime(end.year, end.month, end.day, 23, 59),
+        city: 'Halifax',
+      ),
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _cachedOutsideEvents = result.events;
+    _cachedOutsideEventsFetchedAtMillis = now;
+    _outsideEventSources = _outsideEventSources.map((source) {
+      final warning = _firstSourceWarning(result.warnings, source.id);
+      return source.copyWith(
+        lastFetchedAtMillis: now,
+        lastError: warning,
+        clearLastError: warning == null,
+      );
+    }).toList();
+    _persistOutsideEventSources();
+    _persistCachedOutsideEvents();
+    notifyListeners();
+    return result;
+  }
+
+  OutsideEventDiscoveryResult cachedOutsideEventDiscoveryResult() {
+    final adapters = <OutsideEventSourceAdapter>[
+      const MockOutsideEventAdapter(),
+      CuratedRssOutsideEventAdapter(),
+      ..._outsideEventSources.map(_adapterForSource),
+      TicketmasterOutsideEventAdapter(),
+      EventbriteOutsideEventAdapter(),
+      BandsintownOutsideEventAdapter(),
+    ];
+    return OutsideEventDiscoveryResult(
+      events: _cachedOutsideEvents,
+      sources: adapters.map((adapter) => adapter.config).toList(),
+      warnings: [
+        for (final source in _outsideEventSources)
+          if (source.lastError?.trim().isNotEmpty == true)
+            OutsideEventSourceWarning(
+              sourceId: source.id,
+              sourceName: source.displayName,
+              message: source.lastError!,
+            ),
+      ],
+      aiStatusMessage:
+          'Webpage AI organizer runs server-side when configured. Without '
+          'an AI key, webpage sources use deterministic date/title fallback.',
+    );
+  }
+
+  OutsideEventSourceAdapter _adapterForSource(UserEventSource source) {
+    return switch (source.kind) {
+      UserEventSourceKind.rssAtom => UserRssAtomOutsideEventAdapter(
+          source: source,
+        ),
+      UserEventSourceKind.webPage => WebPageEventSourceAdapter(source: source),
+      UserEventSourceKind.autoDetect => _looksLikeFeed(source.url)
+          ? UserRssAtomOutsideEventAdapter(source: source)
+          : WebPageEventSourceAdapter(source: source),
+    };
+  }
+
+  void _persistOutsideEventSources() {
+    PersistenceService.saveOutsideEventSources(_outsideEventSources);
+  }
+
+  void _persistCachedOutsideEvents() {
+    PersistenceService.saveCachedOutsideEvents(_cachedOutsideEvents);
+    PersistenceService.saveCachedOutsideEventsFetchedAtMillis(
+      _cachedOutsideEventsFetchedAtMillis,
+    );
+  }
+
+  static String? _firstSourceWarning(
+    List<OutsideEventSourceWarning> warnings,
+    String sourceId,
+  ) {
+    for (final warning in warnings) {
+      if (warning.sourceId == sourceId) return warning.message;
+    }
+    return null;
+  }
+
   static String _occurrenceKey(DateTime date, String activityId) =>
       '${DayPlan.dateKey(date)}:$activityId';
 
@@ -1993,6 +2167,23 @@ class AppState extends ChangeNotifier {
 
   static String _normalizeActivityTitle(String title) {
     return title.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  static bool _looksLikeFeed(String url) {
+    final lower = url.trim().toLowerCase();
+    return lower.endsWith('.rss') ||
+        lower.endsWith('.xml') ||
+        lower.endsWith('/feed') ||
+        lower.endsWith('/feed/') ||
+        lower.contains('rss') ||
+        lower.contains('atom');
+  }
+
+  static String _sourceNameFromUrl(String url) {
+    final parsed = Uri.tryParse(url);
+    final host = parsed?.host;
+    if (host == null || host.isEmpty) return 'Event source';
+    return host.replaceFirst(RegExp(r'^www\.'), '');
   }
 
   void _enableFeed() {

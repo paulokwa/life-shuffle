@@ -4,8 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
 import '../models/day_plan.dart' show OccurrenceOverride;
+import '../models/event_suggestion.dart';
 import '../models/manual_plan_item.dart';
 import '../models/range_type.dart';
+import '../models/user_event_source.dart';
 
 /// Lightweight local storage for in-session state.
 /// Wraps SharedPreferences (localStorage on web).
@@ -58,10 +60,18 @@ class PersistenceService {
   static const _keyRemovedMap = 'ls_removed_map';
   static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
   static const _keyManualPlanItems = 'ls_manual_plan_items';
+  static const _keyOutsideEventSources = 'ls_outside_event_sources';
+  static const _keyCachedOutsideEvents = 'ls_cached_outside_events';
+  static const _keyCachedOutsideEventsFetchedAtMillis =
+      'ls_cached_outside_events_fetched_at_millis';
+  static bool _initialized = false;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    _initialized = true;
   }
+
+  static bool get isInitialized => _initialized;
 
   static SavedState load(List<Activity> defaultActivities) {
     final activities = _loadActivities(defaultActivities);
@@ -326,6 +336,73 @@ class PersistenceService {
         _keyManualPlanItems,
         jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
       );
+
+  static List<UserEventSource> loadOutsideEventSources() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyOutsideEventSources);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((map) => UserEventSource.fromMap(
+                  Map<String, dynamic>.from(map),
+                ))
+            .where((source) => source.url.trim().isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      // A malformed local-only source list should not break app startup.
+    }
+    return const [];
+  }
+
+  static void saveOutsideEventSources(List<UserEventSource> sources) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyOutsideEventSources,
+      jsonEncode(sources.map((source) => source.toMap()).toList()),
+    );
+  }
+
+  static List<EventSuggestion> loadCachedOutsideEvents() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyCachedOutsideEvents);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((map) => EventSuggestion.fromMap(
+                  Map<String, dynamic>.from(map),
+                ))
+            .toList();
+      }
+    } catch (_) {
+      // Ignore malformed cache; refresh can rebuild it.
+    }
+    return const [];
+  }
+
+  static void saveCachedOutsideEvents(List<EventSuggestion> events) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyCachedOutsideEvents,
+      jsonEncode(events.map((event) => event.toMap()).toList()),
+    );
+  }
+
+  static int? loadCachedOutsideEventsFetchedAtMillis() {
+    if (!_initialized) return null;
+    return _prefs.getInt(_keyCachedOutsideEventsFetchedAtMillis);
+  }
+
+  static void saveCachedOutsideEventsFetchedAtMillis(int? value) {
+    if (!_initialized) return;
+    _saveNullableInt(_keyCachedOutsideEventsFetchedAtMillis, value);
+  }
 
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);

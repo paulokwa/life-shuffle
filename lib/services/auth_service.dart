@@ -25,5 +25,6 @@ class AuthService {
     } catch (_) {}
   }
 
-  static User? get currentUser => _ready ? FirebaseAuth.instance.currentUser : null;
+  static User? get currentUser =>
+      _ready ? FirebaseAuth.instance.currentUser : null;
 }

@@ -28,9 +28,9 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
   void _cycleStatus() {
     setState(() {
       _status = switch (_status) {
-        CheckStatus.none    => CheckStatus.done,
-        CheckStatus.done    => CheckStatus.partly,
-        CheckStatus.partly  => CheckStatus.skipped,
+        CheckStatus.none => CheckStatus.done,
+        CheckStatus.done => CheckStatus.partly,
+        CheckStatus.partly => CheckStatus.skipped,
         CheckStatus.skipped => CheckStatus.none,
       };
       widget.activity.status = _status;
@@ -40,14 +40,14 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
   }
 
   IconData get _icon => switch (widget.activity.category) {
-    'Creative'    => Icons.menu_book_rounded,
-    'Outside'     => Icons.waves_rounded,
-    'Couple time' => Icons.restaurant_rounded,
-    'Social'      => Icons.people_rounded,
-    'At home'     => Icons.home_rounded,
-    'Rest'        => Icons.self_improvement_rounded,
-    _             => Icons.star_rounded,
-  };
+        'Creative' => Icons.menu_book_rounded,
+        'Outside' => Icons.waves_rounded,
+        'Couple time' => Icons.restaurant_rounded,
+        'Social' => Icons.people_rounded,
+        'At home' => Icons.home_rounded,
+        'Rest' => Icons.self_improvement_rounded,
+        _ => Icons.star_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +99,8 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
                     children: [
                       Text(
                         widget.activity.time,
-                        style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                        style:
+                            GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                       ),
                       CategoryChip(category: widget.activity.category),
                     ],

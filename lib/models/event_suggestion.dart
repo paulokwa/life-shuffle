@@ -4,6 +4,7 @@ import 'manual_plan_item.dart';
 
 enum OutsideEventSourceType {
   rssAtom,
+  webPage,
   ticketmaster,
   eventbrite,
   bandsintown,
@@ -14,12 +15,22 @@ enum OutsideEventSourceType {
 extension OutsideEventSourceTypeLabel on OutsideEventSourceType {
   String get label => switch (this) {
         OutsideEventSourceType.rssAtom => 'RSS/Atom',
+        OutsideEventSourceType.webPage => 'Web page',
         OutsideEventSourceType.ticketmaster => 'Ticketmaster',
         OutsideEventSourceType.eventbrite => 'Eventbrite',
         OutsideEventSourceType.bandsintown => 'Bandsintown',
         OutsideEventSourceType.mock => 'Sample',
         OutsideEventSourceType.ai => 'AI organizer',
       };
+
+  String get storageName => name;
+
+  static OutsideEventSourceType fromStorage(String? value) {
+    return OutsideEventSourceType.values.firstWhere(
+      (type) => type.name == value,
+      orElse: () => OutsideEventSourceType.mock,
+    );
+  }
 }
 
 class EventSuggestion {
@@ -185,6 +196,82 @@ class EventSuggestion {
     );
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      if (cleanedTitle != null) 'cleanedTitle': cleanedTitle,
+      if (description != null) 'description': description,
+      if (summary != null) 'summary': summary,
+      'startDateTimeMillis': startDateTime.millisecondsSinceEpoch,
+      if (endDateTime != null)
+        'endDateTimeMillis': endDateTime!.millisecondsSinceEpoch,
+      if (durationMinutes != null) 'durationMinutes': durationMinutes,
+      if (venueName != null) 'venueName': venueName,
+      if (address != null) 'address': address,
+      if (city != null) 'city': city,
+      'sourceName': sourceName,
+      'sourceType': sourceType.storageName,
+      if (sourceUrl != null) 'sourceUrl': sourceUrl,
+      if (ticketUrl != null) 'ticketUrl': ticketUrl,
+      if (priceLabel != null) 'priceLabel': priceLabel,
+      if (isFree != null) 'isFree': isFree,
+      'tags': tags,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (confidence != null) 'confidence': confidence,
+      'missingFields': missingFields,
+      'raw': raw,
+      'dedupeKey': dedupeKey,
+    };
+  }
+
+  factory EventSuggestion.fromMap(Map<String, dynamic> map) {
+    final startMillis = _readInt(map['startDateTimeMillis']);
+    final start = startMillis == null
+        ? DateTime.now()
+        : DateTime.fromMillisecondsSinceEpoch(startMillis);
+    final endMillis = _readInt(map['endDateTimeMillis']);
+    return EventSuggestion(
+      id: _readString(map['id'],
+          fallback: 'event-${start.microsecondsSinceEpoch}'),
+      title: _readString(map['title'], fallback: 'Untitled event'),
+      cleanedTitle: _readNullableString(map['cleanedTitle']),
+      description: _readNullableString(map['description']),
+      summary: _readNullableString(map['summary']),
+      startDateTime: start,
+      endDateTime: endMillis == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(endMillis),
+      durationMinutes: _readInt(map['durationMinutes']),
+      venueName: _readNullableString(map['venueName']),
+      address: _readNullableString(map['address']),
+      city: _readNullableString(map['city']),
+      sourceName: _readString(map['sourceName'], fallback: 'Outside event'),
+      sourceType: OutsideEventSourceTypeLabel.fromStorage(
+        map['sourceType'] as String?,
+      ),
+      sourceUrl: _readNullableString(map['sourceUrl']),
+      ticketUrl: _readNullableString(map['ticketUrl']),
+      priceLabel: _readNullableString(map['priceLabel']),
+      isFree: map['isFree'] is bool ? map['isFree'] as bool : null,
+      tags: _readStringList(map['tags']),
+      imageUrl: _readNullableString(map['imageUrl']),
+      confidence: _readDouble(map['confidence']),
+      missingFields: _readStringList(map['missingFields']),
+      raw: map['raw'] is Map
+          ? Map<String, Object?>.from(map['raw'] as Map)
+          : const {},
+      dedupeKey: _readString(
+        map['dedupeKey'],
+        fallback: eventDedupeKey(
+          title: _readString(map['title'], fallback: 'Untitled event'),
+          start: start,
+          venueName: _readNullableString(map['venueName']),
+        ),
+      ),
+    );
+  }
+
   static String _formatTime(DateTime value) {
     final hour = value.hour;
     final minute = value.minute;
@@ -192,6 +279,39 @@ class EventSuggestion {
     final displayHour = hour % 12 == 0 ? 12 : hour % 12;
     return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
+}
+
+String _readString(Object? value, {required String fallback}) {
+  if (value is! String) return fallback;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? fallback : trimmed;
+}
+
+String? _readNullableString(Object? value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+int? _readInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return null;
+}
+
+double? _readDouble(Object? value) {
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return null;
+}
+
+List<String> _readStringList(Object? value) {
+  if (value is! Iterable) return const [];
+  return value
+      .whereType<String>()
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 String eventDedupeKey({

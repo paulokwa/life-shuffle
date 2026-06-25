@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/event_suggestion.dart';
+import 'package:life_shuffle/models/user_event_source.dart';
 import 'package:life_shuffle/services/curated_rss_feed_registry.dart';
 import 'package:life_shuffle/services/outside_event_adapters.dart';
 import 'package:life_shuffle/services/outside_event_discovery_service.dart';
@@ -272,6 +273,98 @@ void main() {
         result.warnings.map((warning) => warning.message),
         contains('Feed could not be parsed and was skipped.'),
       );
+    });
+  });
+
+  group('User-managed event source adapters', () {
+    test('loads user RSS URLs through the Netlify proxy url parameter',
+        () async {
+      final adapter = UserRssAtomOutsideEventAdapter(
+        source: const UserEventSource(
+          id: 'user-rss',
+          displayName: 'User feed',
+          url: 'https://example.com/events/feed.xml',
+          kind: UserEventSourceKind.rssAtom,
+        ),
+        client: MockClient((request) async {
+          expect(request.url.path, '/.netlify/functions/outside-events-rss');
+          expect(request.url.queryParameters['url'],
+              'https://example.com/events/feed.xml');
+          return http.Response('''
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>User feed event July 2, 2026 at 7:00pm</title>
+      <link>https://example.com/user-event</link>
+    </item>
+  </channel>
+</rss>
+''', 200);
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7),
+        ),
+      );
+
+      expect(
+          result.suggestions.single.sourceType, OutsideEventSourceType.rssAtom);
+      expect(result.suggestions.single.sourceName, 'User feed');
+    });
+
+    test('loads webpage URLs through the webpage Netlify function', () async {
+      final adapter = WebPageEventSourceAdapter(
+        source: const UserEventSource(
+          id: 'user-web',
+          displayName: 'Venue page',
+          url: 'https://example.com/events',
+          kind: UserEventSourceKind.webPage,
+        ),
+        client: MockClient((request) async {
+          expect(
+              request.url.path, '/.netlify/functions/outside-events-webpage');
+          expect(
+              request.url.queryParameters['url'], 'https://example.com/events');
+          return http.Response(
+            '''
+{
+  "warnings": ["AI organizer not configured. Used deterministic webpage extraction; review dates and details before adding."],
+  "events": [
+    {
+      "id": "web-1",
+      "title": "Garden concert",
+      "cleanedTitle": "Garden concert",
+      "summary": "Free outdoor music.",
+      "startDateTimeMillis": 1783116000000,
+      "sourceName": "Venue page",
+      "sourceType": "webPage",
+      "sourceUrl": "https://example.com/events",
+      "tags": ["music"],
+      "missingFields": ["venue", "address", "price"],
+      "dedupeKey": "garden concert|2026-07-03|19|00|"
+    }
+  ]
+}
+''',
+            200,
+          );
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7, 23, 59),
+        ),
+      );
+
+      expect(
+          result.suggestions.single.sourceType, OutsideEventSourceType.webPage);
+      expect(result.suggestions.single.sourceName, 'Venue page');
+      expect(result.warnings.single.message, contains('AI organizer'));
     });
   });
 
