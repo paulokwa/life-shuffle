@@ -114,16 +114,13 @@ async function readLimitedText(response) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function fetchPage(url, fetchImpl) {
+async function fetchText(url, fetchImpl, headers) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const response = await fetchImpl(url, {
       method: 'GET',
-      headers: {
-        Accept: 'text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5',
-        'User-Agent': 'LifeShuffleOutsideEvents/1.0',
-      },
+      headers: { 'User-Agent': 'LifeShuffleOutsideEvents/1.0', ...headers },
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Page returned ${response.status}`);
@@ -131,6 +128,41 @@ async function fetchPage(url, fetchImpl) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchPage(url, fetchImpl) {
+  return fetchText(url, fetchImpl, {
+    Accept: 'text/html, application/xhtml+xml, text/plain;q=0.9, */*;q=0.5',
+  });
+}
+
+// ---- Known-source resolvers ----------------------------------------------
+//
+// Some sites (e.g. JS-heavy event calendars) return unusable static HTML, but
+// expose the same data through an underlying web API. A resolver lets a known
+// source bypass the generic page fetch and pull that data directly, without
+// the main handler needing to know about any specific site.
+
+const NSCC_EVENT_PATH_PATTERN = /nscc\.ca\/alumni\/get-involved\/events\/eventdetails\.aspx/i;
+const NSCC_EVENT_ID_PATTERN = /eventid=(\d+)/i;
+
+const nsccResolver = {
+  id: 'nscc',
+  matches(url) {
+    return NSCC_EVENT_PATH_PATTERN.test(url) && NSCC_EVENT_ID_PATTERN.test(url);
+  },
+  async fetchContent(url, { fetchImpl }) {
+    const eventId = NSCC_EVENT_ID_PATTERN.exec(url)[1];
+    const apiUrl = `https://webapi.nscc.ca/nsccapi/api/events/event/${eventId}`;
+    const text = await fetchText(apiUrl, fetchImpl, { Accept: 'application/json' });
+    return { text, contentType: 'json' };
+  },
+};
+
+const SOURCE_RESOLVERS = [nsccResolver];
+
+function findSourceResolver(url) {
+  return SOURCE_RESOLVERS.find((resolver) => resolver.matches(url)) || null;
 }
 
 function cleanHtml(rawHtml) {
@@ -243,6 +275,254 @@ function titleFromSnippet(snippet) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 90) || 'Possible event';
+}
+
+// ---- Structured data extraction ------------------------------------------
+//
+// Before falling back to heuristic text scanning or AI, look for data the
+// source already published in a structured, machine-readable form: schema.org
+// JSON-LD markup, embedded `application/json` blocks, or (for known-source
+// resolvers) a JSON API response. This is high-confidence and source-agnostic
+// - no site-specific code lives here.
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+}
+
+function extractScriptBlocks(html, scriptType) {
+  const blocks = [];
+  const pattern = new RegExp(
+    `<script[^>]*type=["']${escapeRegExp(scriptType)}["'][^>]*>([\\s\\S]*?)<\\/script>`,
+    'gi',
+  );
+  let match;
+  while ((match = pattern.exec(html)) && blocks.length < 20) {
+    blocks.push(match[1]);
+  }
+  return blocks;
+}
+
+function isEventType(type) {
+  if (typeof type === 'string') return /event$/i.test(type.trim());
+  if (Array.isArray(type)) return type.some(isEventType);
+  return false;
+}
+
+function flattenJsonLdNodes(parsed) {
+  if (Array.isArray(parsed)) return parsed.flatMap(flattenJsonLdNodes);
+  if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed['@graph'])) return parsed['@graph'].flatMap(flattenJsonLdNodes);
+    return [parsed];
+  }
+  return [];
+}
+
+function venueFromJsonLdLocation(location) {
+  if (!location) return { venue: undefined, address: undefined };
+  if (typeof location === 'string') return { venue: location.trim(), address: undefined };
+  if (Array.isArray(location)) return venueFromJsonLdLocation(location[0]);
+  if (typeof location === 'object') {
+    const venue = typeof location.name === 'string' ? location.name.trim() : undefined;
+    let address;
+    if (typeof location.address === 'string') {
+      address = location.address.trim();
+    } else if (location.address && typeof location.address === 'object') {
+      address =
+        [
+          location.address.streetAddress,
+          location.address.addressLocality,
+          location.address.addressRegion,
+        ]
+          .filter((part) => typeof part === 'string' && part.trim().length > 0)
+          .join(', ') || undefined;
+    }
+    return { venue, address };
+  }
+  return { venue: undefined, address: undefined };
+}
+
+function priceFromJsonLdOffers(offers) {
+  const offer = Array.isArray(offers) ? offers[0] : offers;
+  if (!offer || typeof offer !== 'object') return undefined;
+  if (typeof offer.price !== 'string' && typeof offer.price !== 'number') return undefined;
+  const price = `${offer.price}`.trim();
+  if (price.length === 0) return undefined;
+  return offer.priceCurrency ? `${price} ${offer.priceCurrency}` : price;
+}
+
+function mapJsonLdEvent(node, ctx) {
+  if (!node || typeof node !== 'object' || !isEventType(node['@type'])) return null;
+  const title = typeof node.name === 'string' ? node.name.trim() : '';
+  if (!title) return null;
+  const start = node.startDate ? new Date(node.startDate) : null;
+  if (!start || Number.isNaN(start.getTime())) return null;
+  if (start < ctx.rangeStart || start > ctx.rangeEnd) return null;
+  const end = node.endDate ? new Date(node.endDate) : null;
+  const { venue, address } = venueFromJsonLdLocation(node.location);
+  const summary =
+    typeof node.description === 'string' ? node.description.trim().slice(0, 280) : undefined;
+  const price = priceFromJsonLdOffers(node.offers);
+  const ticketUrl = typeof node.url === 'string' ? node.url.trim() : undefined;
+
+  return {
+    id: `${ctx.sourceId}-${stableId(`${title}|${start.toISOString()}|${ctx.sourceUrl}`)}`,
+    title,
+    cleanedTitle: title,
+    summary,
+    startDateTimeMillis: start.getTime(),
+    endDateTimeMillis:
+      end && !Number.isNaN(end.getTime()) && end.getTime() > start.getTime()
+        ? end.getTime()
+        : undefined,
+    venueName: venue,
+    address,
+    city: ctx.city || undefined,
+    sourceName: ctx.sourceName,
+    sourceType: 'webPage',
+    sourceUrl: ctx.sourceUrl,
+    ticketUrl,
+    priceLabel: price,
+    isFree: price ? /free|^0(\s|$)/i.test(price) : undefined,
+    tags: inferTags(`${title} ${summary || ''}`),
+    confidence: 0.9,
+    missingFields: [venue ? null : 'venue', address ? null : 'address', price ? null : 'price'].filter(
+      Boolean,
+    ),
+    raw: { userSourceId: ctx.sourceId, extractionMode: 'deterministic-json-ld' },
+    dedupeKey: eventDedupeKey(title, start, venue),
+  };
+}
+
+function extractJsonLdEvents(html, ctx) {
+  const events = [];
+  const seen = new Set();
+  for (const block of extractScriptBlocks(html, 'application/ld+json')) {
+    let parsed;
+    try {
+      parsed = JSON.parse(block);
+    } catch (_) {
+      continue;
+    }
+    for (const node of flattenJsonLdNodes(parsed)) {
+      const mapped = mapJsonLdEvent(node, ctx);
+      if (!mapped || seen.has(mapped.dedupeKey)) continue;
+      seen.add(mapped.dedupeKey);
+      events.push(mapped);
+    }
+  }
+  return events;
+}
+
+const EVENT_JSON_TITLE_FIELDS = ['title', 'name', 'Name', 'eventName'];
+const EVENT_JSON_START_FIELDS = ['startDate', 'DateStart', 'start', 'startTime', 'date'];
+const EVENT_JSON_END_FIELDS = ['endDate', 'DateEnd', 'end', 'endTime'];
+const EVENT_JSON_SUMMARY_FIELDS = ['summary', 'description', 'Summary', 'Details'];
+const EVENT_JSON_VENUE_FIELDS = ['venueName', 'venue', 'OffsiteLocation', 'location'];
+const EVENT_JSON_PRICE_FIELDS = ['priceLabel', 'price', 'Fee'];
+const EVENT_JSON_ARRAY_FIELDS = ['events', 'items', 'results', 'data', 'Events'];
+
+function firstStringField(item, fields) {
+  for (const field of fields) {
+    const value = item[field];
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
+function venueFromEventJson(item) {
+  const direct = firstStringField(item, EVENT_JSON_VENUE_FIELDS);
+  if (direct) return direct;
+  if (Array.isArray(item.Locations) && item.Locations[0] && typeof item.Locations[0].LongName === 'string') {
+    return item.Locations[0].LongName.trim() || undefined;
+  }
+  return undefined;
+}
+
+function mapEventLikeJsonItem(item, ctx) {
+  if (!item || typeof item !== 'object') return null;
+  const title = firstStringField(item, EVENT_JSON_TITLE_FIELDS);
+  const startRaw = firstStringField(item, EVENT_JSON_START_FIELDS);
+  if (!title || !startRaw) return null;
+  const start = new Date(startRaw);
+  if (Number.isNaN(start.getTime())) return null;
+  if (start < ctx.rangeStart || start > ctx.rangeEnd) return null;
+  const endRaw = firstStringField(item, EVENT_JSON_END_FIELDS);
+  const end = endRaw ? new Date(endRaw) : null;
+  const summary = firstStringField(item, EVENT_JSON_SUMMARY_FIELDS);
+  const venue = venueFromEventJson(item);
+  const price = firstStringField(item, EVENT_JSON_PRICE_FIELDS);
+
+  return {
+    id: `${ctx.sourceId}-${stableId(`${title}|${start.toISOString()}|${ctx.sourceUrl}`)}`,
+    title,
+    cleanedTitle: title,
+    summary: summary ? summary.replace(/<[^>]+>/g, ' ').slice(0, 280).trim() : undefined,
+    startDateTimeMillis: start.getTime(),
+    endDateTimeMillis: end && !Number.isNaN(end.getTime()) ? end.getTime() : undefined,
+    venueName: venue,
+    sourceName: ctx.sourceName,
+    sourceType: 'webPage',
+    sourceUrl: ctx.sourceUrl,
+    city: ctx.city || undefined,
+    priceLabel: price,
+    isFree: price ? /free/i.test(price) : undefined,
+    tags: inferTags(`${title} ${summary || ''}`),
+    confidence: 0.95,
+    missingFields: [venue ? null : 'venue', price ? null : 'price'].filter(Boolean),
+    raw: { userSourceId: ctx.sourceId, extractionMode: 'deterministic-json' },
+    dedupeKey: eventDedupeKey(title, start, venue),
+  };
+}
+
+function eventLikeArrayFrom(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object') {
+    for (const field of EVENT_JSON_ARRAY_FIELDS) {
+      if (Array.isArray(parsed[field])) return parsed[field];
+    }
+    return [parsed];
+  }
+  return [];
+}
+
+function extractEventLikeJsonBlobs(text, ctx) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    return [];
+  }
+  const events = [];
+  const seen = new Set();
+  for (const item of eventLikeArrayFrom(parsed)) {
+    const mapped = mapEventLikeJsonItem(item, ctx);
+    if (!mapped || seen.has(mapped.dedupeKey)) continue;
+    seen.add(mapped.dedupeKey);
+    events.push(mapped);
+  }
+  return events;
+}
+
+function extractStructuredEvents({ html, jsonText, sourceId, sourceName, sourceUrl, city, rangeStart, rangeEnd }) {
+  const ctx = { sourceId, sourceName, sourceUrl, city, rangeStart, rangeEnd };
+  const events = [];
+  const seen = new Set();
+  const addAll = (found) => {
+    for (const ev of found) {
+      if (!ev || seen.has(ev.dedupeKey)) continue;
+      seen.add(ev.dedupeKey);
+      events.push(ev);
+    }
+  };
+
+  if (jsonText) addAll(extractEventLikeJsonBlobs(jsonText, ctx));
+  if (html) {
+    addAll(extractJsonLdEvents(html, ctx));
+    for (const block of extractScriptBlocks(html, 'application/json')) {
+      addAll(extractEventLikeJsonBlobs(block, ctx));
+    }
+  }
+  return events.slice(0, 30);
 }
 
 function extractDeterministicEvents({
@@ -720,19 +1000,52 @@ async function handler(event, context) {
 
   try {
     const fetchImpl = (context && context.fetch) || fetch;
-    const rawHtml = await fetchPage(parsedUrl.href, fetchImpl);
-    const text = cleanHtml(rawHtml);
-    const extraction = await extractEventsWithAiOrFallback({
-      text,
+    const env = (context && context.env) || process.env;
+    const resolver = findSourceResolver(parsedUrl.href);
+
+    let html = null;
+    let jsonText = null;
+    if (resolver) {
+      const resolved = await resolver.fetchContent(parsedUrl.href, { fetchImpl });
+      if (resolved.contentType === 'json') {
+        jsonText = resolved.text;
+      } else {
+        html = resolved.text;
+      }
+    } else {
+      html = await fetchPage(parsedUrl.href, fetchImpl);
+    }
+
+    const structuredEvents = extractStructuredEvents({
+      html,
+      jsonText,
       sourceId,
       sourceName,
       sourceUrl: parsedUrl.href,
       city,
       rangeStart,
       rangeEnd,
-      fetchImpl,
-      env: (context && context.env) || process.env,
     });
+
+    const text = html ? cleanHtml(html) : jsonText || '';
+    const extraction =
+      structuredEvents.length > 0
+        ? {
+            events: structuredEvents,
+            warnings: [],
+            aiConfigured: Boolean(env.OPENAI_API_KEY || env.GEMINI_API_KEY),
+          }
+        : await extractEventsWithAiOrFallback({
+            text,
+            sourceId,
+            sourceName,
+            sourceUrl: parsedUrl.href,
+            city,
+            rangeStart,
+            rangeEnd,
+            fetchImpl,
+            env,
+          });
     return jsonResponse(200, {
       sourceId,
       sourceName,
@@ -760,6 +1073,11 @@ module.exports = {
   assertPublicUrl,
   cleanHtml,
   parseDateTime,
+  findSourceResolver,
+  sourceResolvers: SOURCE_RESOLVERS,
+  extractJsonLdEvents,
+  extractEventLikeJsonBlobs,
+  extractStructuredEvents,
   extractDeterministicEvents,
   extractEventsWithAiOrFallback,
   extractEventsWithAi,

@@ -78,6 +78,7 @@ test('handler fetches a public webpage and returns extracted events', async () =
             '<article><h2>Garden concert July 3, 2026 at 7pm</h2><p>Free outdoor music.</p></article>',
         };
       },
+      env: {},
     },
   );
 
@@ -326,4 +327,216 @@ test('extractEventsWithAi merges and dedupes events across multiple chunks', asy
   assert.ok(calls > 1);
   assert.equal(result.failed, false);
   assert.equal(result.events.length, 1);
+});
+
+// ---- Known-source resolvers ----------------------------------------------
+
+test('findSourceResolver detects NSCC event detail URLs and ignores others', () => {
+  const resolver = webpage.findSourceResolver(
+    'https://www.nscc.ca/alumni/get-involved/events/eventdetails.aspx?eventid=6574&recurs=0&rd=1782577800000',
+  );
+  assert.ok(resolver);
+  assert.equal(resolver.id, 'nscc');
+
+  assert.equal(webpage.findSourceResolver('https://example.com/events/123'), null);
+  assert.equal(
+    webpage.findSourceResolver('https://www.nscc.ca/alumni/get-involved/events/eventdetails.aspx'),
+    null,
+  );
+});
+
+test('handler resolves NSCC URLs via the NSCC web API and normalizes the JSON', async () => {
+  const nsccUrl =
+    'https://www.nscc.ca/alumni/get-involved/events/eventdetails.aspx?eventid=6574&recurs=0&rd=1782577800000';
+  const apiUrl = 'https://webapi.nscc.ca/nsccapi/api/events/event/6574';
+  const fetchedUrls = [];
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: nsccUrl,
+        start: '2026-06-01T00:00:00Z',
+        end: '2026-07-01T23:59:59Z',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async (url) => {
+        fetchedUrls.push(url);
+        if (url === apiUrl) {
+          return {
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            text: async () =>
+              JSON.stringify({
+                EventId: 6574,
+                Name: 'Truro Pride Parade',
+                Summary: 'Celebrate Pride with NSCC',
+                DateStart: '2026-06-27T13:30:00',
+                DateEnd: '2026-06-27T14:30:00',
+                OffsiteLocation: 'Truro, Nova Scotia',
+                IsPublished: true,
+              }),
+          };
+        }
+        return { ok: false, status: 404 };
+      },
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].title, 'Truro Pride Parade');
+  assert.equal(payload.events[0].venueName, 'Truro, Nova Scotia');
+  assert.equal(payload.events[0].raw.extractionMode, 'deterministic-json');
+  assert.ok(fetchedUrls.includes(apiUrl));
+  assert.ok(!fetchedUrls.includes(nsccUrl));
+});
+
+test('handler returns no events when the NSCC API responds with unusable data', async () => {
+  const nsccUrl =
+    'https://www.nscc.ca/alumni/get-involved/events/eventdetails.aspx?eventid=9999';
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: nsccUrl,
+        start: '2026-06-01T00:00:00Z',
+        end: '2026-07-01T23:59:59Z',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ EventId: 9999, IsPublished: false }),
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 0);
+});
+
+// ---- Structured data extraction -------------------------------------------
+
+test('extractEventLikeJsonBlobs parses NSCC-shaped JSON via generic field aliases', () => {
+  const json = JSON.stringify({
+    Name: 'Test Event',
+    DateStart: '2026-06-27T13:30:00',
+    Summary: 'Test Summary',
+    OffsiteLocation: 'Test Venue',
+  });
+
+  const events = webpage.extractEventLikeJsonBlobs(json, {
+    sourceId: 'src-1',
+    sourceName: 'NSCC',
+    sourceUrl: 'https://example.com',
+    rangeStart: new Date('2026-01-01'),
+    rangeEnd: new Date('2026-12-31'),
+  });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].title, 'Test Event');
+  assert.equal(events[0].venueName, 'Test Venue');
+  assert.equal(events[0].raw.extractionMode, 'deterministic-json');
+});
+
+test('extractJsonLdEvents extracts schema.org Event markup from a webpage', () => {
+  const html = `
+    <html><head>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Event","name":"Garden Concert",
+       "startDate":"2026-07-03T19:00:00","endDate":"2026-07-03T21:00:00",
+       "description":"Free outdoor music in the park.",
+       "location":{"@type":"Place","name":"City Park","address":"123 Main St, Halifax"},
+       "offers":{"price":"0","priceCurrency":"CAD"}}
+    </script>
+    </head><body></body></html>
+  `;
+
+  const events = webpage.extractJsonLdEvents(html, {
+    sourceId: 'src-1',
+    sourceName: 'Venue page',
+    sourceUrl: 'https://example.com/events',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-07T23:59:00'),
+  });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].title, 'Garden Concert');
+  assert.equal(events[0].venueName, 'City Park');
+  assert.equal(events[0].address, '123 Main St, Halifax');
+  assert.equal(events[0].raw.extractionMode, 'deterministic-json-ld');
+});
+
+test('handler extracts events from JSON-LD on a normal (non-resolver) webpage', async () => {
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: 'https://example.com/events',
+        start: '2026-07-01T00:00:00',
+        end: '2026-07-07T23:59:00',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () =>
+          '<html><script type="application/ld+json">' +
+          '{"@type":"Event","name":"Market Day","startDate":"2026-07-02T10:00:00"}' +
+          '</script></html>',
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].title, 'Market Day');
+  assert.equal(payload.events[0].raw.extractionMode, 'deterministic-json-ld');
+});
+
+test('handler falls back to existing AI/deterministic extraction when no resolver matches and no structured data is present', async () => {
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: 'https://example.com/events',
+        start: '2026-07-01T00:00:00',
+        end: '2026-07-07T23:59:00',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () =>
+          '<article><h2>Garden concert July 3, 2026 at 7pm</h2><p>Free outdoor music.</p></article>',
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].raw.extractionMode, 'deterministic-webpage-fallback');
 });
