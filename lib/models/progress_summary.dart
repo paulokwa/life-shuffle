@@ -176,10 +176,7 @@ class ProgressSummaryCalculator {
     );
   }
 
-  static RhythmProgressSummary rhythm(
-    List<DayPlan> plans, {
-    DateTime? now,
-  }) {
+  static RhythmProgressSummary rhythm(List<DayPlan> plans, {DateTime? now}) {
     final today = _dateOnly(now ?? DateTime.now());
     final past7Start = today.subtract(const Duration(days: 6));
     final previous7Start = today.subtract(const Duration(days: 13));
@@ -283,8 +280,10 @@ class ProgressSummaryCalculator {
       status == CheckStatus.done || status == CheckStatus.partly;
 
   static int _timeRank(String value) {
-    final match = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', caseSensitive: false)
-        .firstMatch(value.trim());
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
     if (match == null) return 24 * 60;
 
     var hour = int.tryParse(match.group(1) ?? '') ?? 0;

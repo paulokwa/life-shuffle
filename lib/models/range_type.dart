@@ -33,8 +33,11 @@ extension RangeTypeHorizon on RangeType {
       case RangeType.twoWeek:
         return 14;
       case RangeType.month:
-        final nextMonthSameDay =
-            DateTime(start.year, start.month + 1, start.day);
+        final nextMonthSameDay = DateTime(
+          start.year,
+          start.month + 1,
+          start.day,
+        );
         return nextMonthSameDay.difference(start).inDays;
     }
   }

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/day_plan.dart';
 import '../state/app_state.dart';
 import 'category_chip.dart';
 import 'check_in_circle.dart';
+import 'outside_event_metadata_card.dart';
 
 class ActivityPlanCard extends StatefulWidget {
   const ActivityPlanCard({super.key, required this.activity});
@@ -28,9 +30,9 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
   void _cycleStatus() {
     setState(() {
       _status = switch (_status) {
-        CheckStatus.none    => CheckStatus.done,
-        CheckStatus.done    => CheckStatus.partly,
-        CheckStatus.partly  => CheckStatus.skipped,
+        CheckStatus.none => CheckStatus.done,
+        CheckStatus.done => CheckStatus.partly,
+        CheckStatus.partly => CheckStatus.skipped,
         CheckStatus.skipped => CheckStatus.none,
       };
       widget.activity.status = _status;
@@ -40,18 +42,28 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
   }
 
   IconData get _icon => switch (widget.activity.category) {
-    'Creative'    => Icons.menu_book_rounded,
-    'Outside'     => Icons.waves_rounded,
+    'Creative' => Icons.menu_book_rounded,
+    'Outside' => Icons.waves_rounded,
     'Couple time' => Icons.restaurant_rounded,
-    'Social'      => Icons.people_rounded,
-    'At home'     => Icons.home_rounded,
-    'Rest'        => Icons.self_improvement_rounded,
-    _             => Icons.star_rounded,
+    'Social' => Icons.people_rounded,
+    'At home' => Icons.home_rounded,
+    'Rest' => Icons.self_improvement_rounded,
+    _ => Icons.star_rounded,
   };
 
   @override
   Widget build(BuildContext context) {
     final isSkipped = _status == CheckStatus.skipped;
+    ManualPlanItem? manualItem;
+    final manualId = widget.activity.manualItemId;
+    if (manualId != null) {
+      for (final item in AppStateScope.of(context).manualPlanItems) {
+        if (item.id == manualId && item.isOutsideEvent) {
+          manualItem = item;
+          break;
+        }
+      }
+    }
     return AnimatedOpacity(
       opacity: isSkipped ? 0.55 : 1.0,
       duration: const Duration(milliseconds: 200),
@@ -62,53 +74,67 @@ class _ActivityPlanCardState extends State<ActivityPlanCard> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: borderWarm, width: 1),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: backgroundCream,
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                _icon,
-                size: 16,
-                color: categoryIconColor(widget.activity.category),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.activity.title,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: textPrimary,
-                      decoration: isSkipped ? TextDecoration.lineThrough : null,
-                    ),
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: backgroundCream,
                   ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    _icon,
+                    size: 16,
+                    color: categoryIconColor(widget.activity.category),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.activity.time,
-                        style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                        widget.activity.title,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: textPrimary,
+                          decoration: isSkipped
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
                       ),
-                      CategoryChip(category: widget.activity.category),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            widget.activity.time,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: textMuted,
+                            ),
+                          ),
+                          CategoryChip(category: widget.activity.category),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                CheckInCircle(status: _status, onTap: _cycleStatus),
+              ],
             ),
-            const SizedBox(width: 8),
-            CheckInCircle(status: _status, onTap: _cycleStatus),
+            if (manualItem != null) ...[
+              const SizedBox(height: 10),
+              OutsideEventMetadataCard(item: manualItem),
+            ],
           ],
         ),
       ),

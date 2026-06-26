@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/outside_event_metadata_card.dart';
 import '../widgets/status_choice.dart';
 import 'activities_screen.dart'
     show DimensionFields, SheetButton, showActivityFormSheet;
@@ -131,9 +132,7 @@ class PlanScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                   ],
                   if (state.canUndoLastRegeneration) ...[
-                    _RegenerationUndoCard(
-                      onUndo: state.undoLastRegeneration,
-                    ),
+                    _RegenerationUndoCard(onUndo: state.undoLastRegeneration),
                     const SizedBox(height: 16),
                   ],
                   if (state.plannerConflictMessage != null) ...[
@@ -185,8 +184,10 @@ class PlanScreen extends StatelessWidget {
                       Text(
                         '$restCount rest ${restCount == 1 ? "day" : "days"} '
                         'this week',
-                        style:
-                            GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          color: textMuted,
+                        ),
                       ),
                     ],
                   ],
@@ -412,10 +413,10 @@ class _RangeExpansionCard extends StatelessWidget {
   final VoidCallback onGenerate;
 
   String get _label => switch (viewMode) {
-        RangeType.week => '1 week',
-        RangeType.twoWeek => '2 weeks',
-        RangeType.month => 'a month',
-      };
+    RangeType.week => '1 week',
+    RangeType.twoWeek => '2 weeks',
+    RangeType.month => 'a month',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -561,13 +562,11 @@ class _MonthGrid extends StatelessWidget {
               final date = gridStart.add(Duration(days: index));
               final inRange =
                   !date.isBefore(rangeStart) && !date.isAfter(rangeEnd);
-              final plan = dayByKey[PlanScreen._dateKey(date)] ??
+              final plan =
+                  dayByKey[PlanScreen._dateKey(date)] ??
                   DayPlan(date: date, activities: []);
-              final showMonthLabel = inRange &&
-                  _showsMonthLabel(
-                    date,
-                    rangeStart,
-                  );
+              final showMonthLabel =
+                  inRange && _showsMonthLabel(date, rangeStart);
               return _MonthDayCell(
                 plan: plan,
                 inRange: inRange,
@@ -684,9 +683,7 @@ class _MonthDayCell extends StatelessWidget {
                         ] else if (showMonthLabel) ...[
                           Text(
                             PlanScreen._monthAbbrevs[plan.date.month - 1],
-                            key: ValueKey(
-                              'month-grid-month-label-$dateKey',
-                            ),
+                            key: ValueKey('month-grid-month-label-$dateKey'),
                             style: GoogleFonts.dmSans(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
@@ -698,9 +695,7 @@ class _MonthDayCell extends StatelessWidget {
                         ],
                         Text(
                           '${plan.date.day}',
-                          key: ValueKey(
-                            'month-grid-day-number-$dateKey',
-                          ),
+                          key: ValueKey('month-grid-day-number-$dateKey'),
                           style: GoogleFonts.dmSans(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -717,10 +712,8 @@ class _MonthDayCell extends StatelessWidget {
                         key: ValueKey(
                           'month-grid-add-${PlanScreen._dateKey(plan.date)}',
                         ),
-                        onTap: () => showAddPlanItemSheet(
-                          context,
-                          date: plan.date,
-                        ),
+                        onTap: () =>
+                            showAddPlanItemSheet(context, date: plan.date),
                         behavior: HitTestBehavior.opaque,
                         child: const Center(
                           child: Icon(
@@ -787,11 +780,7 @@ class _MonthDaySummary extends StatelessWidget {
                 ),
               ),
             if (hasLocked)
-              const Icon(
-                Icons.lock_rounded,
-                size: 9,
-                color: primaryTerracotta,
-              ),
+              const Icon(Icons.lock_rounded, size: 9, color: primaryTerracotta),
           ],
         ),
         const SizedBox(height: 3),
@@ -895,11 +884,7 @@ class _PlannerConflictCard extends StatelessWidget {
               shape: BoxShape.circle,
               color: Color(0x1AC8943A),
             ),
-            child: const Icon(
-              Icons.tune_rounded,
-              size: 18,
-              color: sand,
-            ),
+            child: const Icon(Icons.tune_rounded, size: 18, color: sand),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1043,8 +1028,8 @@ class _DayStrip extends StatelessWidget {
                       color: isToday
                           ? Colors.white
                           : hasActivities
-                              ? textPrimary
-                              : textMuted,
+                          ? textPrimary
+                          : textMuted,
                     ),
                   ),
                 ),
@@ -1138,18 +1123,18 @@ class _DayBlock extends StatelessWidget {
                   key: ValueKey(
                     'plan-day-card-add-${PlanScreen._dateKey(plan.date)}',
                   ),
-                  onPressed: () => showAddPlanItemSheet(
-                    context,
-                    date: plan.date,
-                  ),
+                  onPressed: () =>
+                      showAddPlanItemSheet(context, date: plan.date),
                   icon: const Icon(
                     Icons.add_rounded,
                     size: 18,
                     color: primaryTerracotta,
                   ),
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   tooltip: 'Add item',
                 ),
               ],
@@ -1158,10 +1143,7 @@ class _DayBlock extends StatelessWidget {
             if (plan.activities.isEmpty)
               Text(
                 'No planned items.',
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  color: textMuted,
-                ),
+                style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
               )
             else
               ...plan.activities.map(
@@ -1287,8 +1269,8 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                         widget.plan.activities.isEmpty
                             ? 'No planned items to check in.'
                             : canCheckIn
-                                ? 'Mark what happened. No typing needed.'
-                                : 'Check in after this day.',
+                            ? 'Mark what happened. No typing needed.'
+                            : 'Check in after this day.',
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
                           color: textMuted,
@@ -1299,10 +1281,8 @@ class _DayCheckInSheetState extends State<_DayCheckInSheet> {
                 ),
                 IconButton(
                   key: const ValueKey('day-sheet-add-item'),
-                  onPressed: () => showAddPlanItemSheet(
-                    context,
-                    date: widget.plan.date,
-                  ),
+                  onPressed: () =>
+                      showAddPlanItemSheet(context, date: widget.plan.date),
                   icon: const Icon(Icons.add_rounded, color: primaryTerracotta),
                 ),
                 IconButton(
@@ -1422,17 +1402,29 @@ class _DaySheetActivityCard extends StatelessWidget {
   final VoidCallback onRemove;
 
   IconData get _icon => switch (activity.category) {
-        'Creative' => Icons.menu_book_rounded,
-        'Outside' => Icons.waves_rounded,
-        'Couple time' => Icons.restaurant_rounded,
-        'Social' => Icons.people_rounded,
-        'At home' => Icons.home_rounded,
-        'Rest' => Icons.self_improvement_rounded,
-        _ => Icons.star_rounded,
-      };
+    'Creative' => Icons.menu_book_rounded,
+    'Outside' => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Social' => Icons.people_rounded,
+    'At home' => Icons.home_rounded,
+    'Rest' => Icons.self_improvement_rounded,
+    _ => Icons.star_rounded,
+  };
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    ManualPlanItem? manualItem;
+    final manualId = activity.manualItemId;
+    if (manualId != null) {
+      for (final item in state.manualPlanItems) {
+        if (item.id == manualId && item.isOutsideEvent) {
+          manualItem = item;
+          break;
+        }
+      }
+    }
+
     return Container(
       key: ValueKey('day-sheet-activity-${activity.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1493,6 +1485,10 @@ class _DaySheetActivityCard extends StatelessWidget {
               ),
             ],
           ),
+          if (manualItem != null) ...[
+            const SizedBox(height: 10),
+            OutsideEventMetadataCard(item: manualItem),
+          ],
           const SizedBox(height: 12),
           if (canCheckIn)
             Wrap(
@@ -1626,8 +1622,9 @@ Future<void> showPlanItemEditorSheet(
 /// to parse the occurrence's existing time into a [TimeOfDay] for
 /// [showTimePicker]'s initial selection - the picker itself, not typing,
 /// is the primary way to change the time.
-final RegExp _planItemTimePattern =
-    RegExp(r'^([1-9]|1[0-2]):([0-5][0-9])\s*([AaPp][Mm])$');
+final RegExp _planItemTimePattern = RegExp(
+  r'^([1-9]|1[0-2]):([0-5][0-9])\s*([AaPp][Mm])$',
+);
 
 TimeOfDay? _parsePlanItemTimeSlot(String slot) {
   final match = _planItemTimePattern.firstMatch(slot.trim());
@@ -1773,10 +1770,7 @@ class _PlanItemEditorSheetState extends State<_PlanItemEditorSheet> {
                   ),
                   child: Text(
                     _timeSlot,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 15,
-                      color: textPrimary,
-                    ),
+                    style: GoogleFonts.dmSans(fontSize: 15, color: textPrimary),
                   ),
                 ),
               ),
@@ -2127,13 +2121,13 @@ class _AddPlanItemSheetState extends State<_AddPlanItemSheet> {
                   onTap: _pickTime,
                   behavior: HitTestBehavior.opaque,
                   child: InputDecorator(
-                    decoration:
-                        _sheetInputDecoration('Scheduled time').copyWith(
-                      suffixIcon: const Icon(
-                        Icons.access_time_rounded,
-                        color: textMuted,
-                      ),
-                    ),
+                    decoration: _sheetInputDecoration('Scheduled time')
+                        .copyWith(
+                          suffixIcon: const Icon(
+                            Icons.access_time_rounded,
+                            color: textMuted,
+                          ),
+                        ),
                     child: Text(
                       _timeSlot,
                       style: GoogleFonts.dmSans(
@@ -2298,9 +2292,7 @@ class _PlanRow extends StatelessWidget {
                   // whatever's left and ellipsizes via `CategoryChip`'s own
                   // overflow handling, rather than forcing the row wider
                   // than the screen on narrow phones.
-                  Flexible(
-                    child: CategoryChip(category: activity.category),
-                  ),
+                  Flexible(child: CategoryChip(category: activity.category)),
                 ],
               ),
             ],
@@ -2314,8 +2306,9 @@ class _PlanRow extends StatelessWidget {
             child: Icon(
               activity.locked ? Icons.lock_rounded : Icons.lock_open_rounded,
               size: 16,
-              color:
-                  activity.locked ? primaryTerracotta : const Color(0xFFBBB5AC),
+              color: activity.locked
+                  ? primaryTerracotta
+                  : const Color(0xFFBBB5AC),
             ),
           ),
         ),

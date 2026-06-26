@@ -73,9 +73,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
   void _openOneByOneReview(AppState state) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CheckInOneByOneScreen(appState: state),
-      ),
+      MaterialPageRoute(builder: (_) => CheckInOneByOneScreen(appState: state)),
     );
   }
 
@@ -96,10 +94,12 @@ class _TodayScreenState extends State<TodayScreen> {
 
     final allActivities = week.expand((d) => d.activities).toList();
     final planned = allActivities.length;
-    final done =
-        allActivities.where((a) => a.status == CheckStatus.done).length;
-    final partly =
-        allActivities.where((a) => a.status == CheckStatus.partly).length;
+    final done = allActivities
+        .where((a) => a.status == CheckStatus.done)
+        .length;
+    final partly = allActivities
+        .where((a) => a.status == CheckStatus.partly)
+        .length;
 
     final todayActivities = today?.activities ?? [];
     final pending = todayActivities
@@ -169,8 +169,10 @@ class _GreetingBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(dateLabel,
-            style: GoogleFonts.dmSans(fontSize: 14, color: textMuted)),
+        Text(
+          dateLabel,
+          style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
+        ),
       ],
     );
   }
@@ -184,14 +186,14 @@ class _NextUpCard extends StatelessWidget {
   final PlannedActivity? nextUp;
 
   IconData _icon(String category) => switch (category) {
-        'Creative' => Icons.menu_book_rounded,
-        'Outside' => Icons.waves_rounded,
-        'Couple time' => Icons.restaurant_rounded,
-        'Rest' => Icons.self_improvement_rounded,
-        'Social' => Icons.people_rounded,
-        'At home' => Icons.home_rounded,
-        _ => Icons.star_rounded,
-      };
+    'Creative' => Icons.menu_book_rounded,
+    'Outside' => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Rest' => Icons.self_improvement_rounded,
+    'Social' => Icons.people_rounded,
+    'At home' => Icons.home_rounded,
+    _ => Icons.star_rounded,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +214,11 @@ class _NextUpCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.5),
               ),
               alignment: Alignment.center,
-              child:
-                  const Icon(Icons.check_rounded, size: 18, color: accentSage),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 18,
+                color: accentSage,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -445,7 +450,10 @@ class _ThisWeekCard extends StatelessWidget {
           Row(
             children: [
               _StatCell(
-                  value: '$planned', label: 'Planned', valueColor: textPrimary),
+                value: '$planned',
+                label: 'Planned',
+                valueColor: textPrimary,
+              ),
               _StatCell(value: '$done', label: 'Done', valueColor: accentSage),
               _StatCell(value: '$partly', label: 'Partly', valueColor: sand),
             ],
@@ -484,8 +492,10 @@ class _StatCell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(label,
-              style: GoogleFonts.dmSans(fontSize: 12, color: textMuted)),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+          ),
         ],
       ),
     );
@@ -635,7 +645,10 @@ class _TodaysPlanSection extends StatelessWidget {
             child: Text(
               'No activities planned for today. Go to the Plan tab to generate or adjust your week.',
               style: GoogleFonts.dmSans(
-                  fontSize: 14, color: textMuted, height: 1.5),
+                fontSize: 14,
+                color: textMuted,
+                height: 1.5,
+              ),
             ),
           )
         else

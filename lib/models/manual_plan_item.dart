@@ -23,6 +23,19 @@ class ManualPlanItem {
     this.energy = 'medium',
     this.social = 'either',
     this.sourceActivityId,
+    this.outsideEventId,
+    this.outsideEventSourceName,
+    this.outsideEventSourceUrl,
+    this.outsideEventTicketUrl,
+    this.outsideEventPriceLabel,
+    this.outsideEventVenueName,
+    this.outsideEventAddress,
+    this.outsideEventSummary,
+    this.outsideEventSourceType,
+    this.outsideEventConfidence,
+    this.outsideEventTags = const [],
+    this.outsideEventUncertainFields = const [],
+    this.outsideEventExtractionMode,
   });
 
   /// Stable identifier for this manual item.
@@ -43,6 +56,35 @@ class ManualPlanItem {
   /// (existing-activity path) or saved into (one-off + "Save to library").
   String? sourceActivityId;
 
+  /// Optional sourced-event metadata. These fields keep outside events
+  /// separate from reusable [Activity] templates while still letting them
+  /// reuse the fixed, regeneration-safe manual-plan-item path.
+  String? outsideEventId;
+  String? outsideEventSourceName;
+  String? outsideEventSourceUrl;
+  String? outsideEventTicketUrl;
+  String? outsideEventPriceLabel;
+  String? outsideEventVenueName;
+  String? outsideEventAddress;
+  String? outsideEventSummary;
+
+  /// [OutsideEventSourceType.storageName] of the source this event came
+  /// from, e.g. `webPage` or `rssAtom`.
+  String? outsideEventSourceType;
+
+  /// The source's own 0-1 confidence estimate for this event, when known.
+  double? outsideEventConfidence;
+  List<String> outsideEventTags;
+
+  /// Field names the source could not confirm (e.g. `venue`, `price`).
+  List<String> outsideEventUncertainFields;
+
+  /// How the source produced this event, e.g. `ai-openai-webpage` or
+  /// `deterministic-webpage-fallback`. Null for sources that don't tag it.
+  String? outsideEventExtractionMode;
+
+  bool get isOutsideEvent => outsideEventId != null;
+
   ManualPlanItem copy() {
     return ManualPlanItem(
       id: id,
@@ -55,6 +97,19 @@ class ManualPlanItem {
       energy: energy,
       social: social,
       sourceActivityId: sourceActivityId,
+      outsideEventId: outsideEventId,
+      outsideEventSourceName: outsideEventSourceName,
+      outsideEventSourceUrl: outsideEventSourceUrl,
+      outsideEventTicketUrl: outsideEventTicketUrl,
+      outsideEventPriceLabel: outsideEventPriceLabel,
+      outsideEventVenueName: outsideEventVenueName,
+      outsideEventAddress: outsideEventAddress,
+      outsideEventSummary: outsideEventSummary,
+      outsideEventSourceType: outsideEventSourceType,
+      outsideEventConfidence: outsideEventConfidence,
+      outsideEventTags: outsideEventTags,
+      outsideEventUncertainFields: outsideEventUncertainFields,
+      outsideEventExtractionMode: outsideEventExtractionMode,
     );
   }
 
@@ -101,6 +156,30 @@ class ManualPlanItem {
       'energy': energy,
       'social': social,
       if (sourceActivityId != null) 'sourceActivityId': sourceActivityId,
+      if (outsideEventId != null) 'outsideEventId': outsideEventId,
+      if (outsideEventSourceName != null)
+        'outsideEventSourceName': outsideEventSourceName,
+      if (outsideEventSourceUrl != null)
+        'outsideEventSourceUrl': outsideEventSourceUrl,
+      if (outsideEventTicketUrl != null)
+        'outsideEventTicketUrl': outsideEventTicketUrl,
+      if (outsideEventPriceLabel != null)
+        'outsideEventPriceLabel': outsideEventPriceLabel,
+      if (outsideEventVenueName != null)
+        'outsideEventVenueName': outsideEventVenueName,
+      if (outsideEventAddress != null)
+        'outsideEventAddress': outsideEventAddress,
+      if (outsideEventSummary != null)
+        'outsideEventSummary': outsideEventSummary,
+      if (outsideEventSourceType != null)
+        'outsideEventSourceType': outsideEventSourceType,
+      if (outsideEventConfidence != null)
+        'outsideEventConfidence': outsideEventConfidence,
+      if (outsideEventTags.isNotEmpty) 'outsideEventTags': outsideEventTags,
+      if (outsideEventUncertainFields.isNotEmpty)
+        'outsideEventUncertainFields': outsideEventUncertainFields,
+      if (outsideEventExtractionMode != null)
+        'outsideEventExtractionMode': outsideEventExtractionMode,
     };
   }
 
@@ -109,8 +188,9 @@ class ManualPlanItem {
       id: map['id'] is String ? map['id'] as String : '',
       dateKey: map['dateKey'] is String ? map['dateKey'] as String : '',
       title: map['title'] is String ? map['title'] as String : 'Untitled',
-      timeSlot:
-          map['timeSlot'] is String ? map['timeSlot'] as String : '9:00 AM',
+      timeSlot: map['timeSlot'] is String
+          ? map['timeSlot'] as String
+          : '9:00 AM',
       category: Activity.categories.contains(map['category'])
           ? map['category'] as String
           : 'Outside',
@@ -121,7 +201,51 @@ class ManualPlanItem {
       sourceActivityId: map['sourceActivityId'] is String
           ? map['sourceActivityId'] as String
           : null,
+      outsideEventId: _readNullableString(map['outsideEventId']),
+      outsideEventSourceName: _readNullableString(
+        map['outsideEventSourceName'],
+      ),
+      outsideEventSourceUrl: _readNullableString(map['outsideEventSourceUrl']),
+      outsideEventTicketUrl: _readNullableString(map['outsideEventTicketUrl']),
+      outsideEventPriceLabel: _readNullableString(
+        map['outsideEventPriceLabel'],
+      ),
+      outsideEventVenueName: _readNullableString(map['outsideEventVenueName']),
+      outsideEventAddress: _readNullableString(map['outsideEventAddress']),
+      outsideEventSummary: _readNullableString(map['outsideEventSummary']),
+      outsideEventSourceType: _readNullableString(
+        map['outsideEventSourceType'],
+      ),
+      outsideEventConfidence: _readDouble(map['outsideEventConfidence']),
+      outsideEventTags: _readStringList(map['outsideEventTags']),
+      outsideEventUncertainFields: _readStringList(
+        map['outsideEventUncertainFields'],
+      ),
+      outsideEventExtractionMode: _readNullableString(
+        map['outsideEventExtractionMode'],
+      ),
     );
+  }
+
+  static String? _readNullableString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static double? _readDouble(Object? value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return null;
+  }
+
+  static List<String> _readStringList(Object? value) {
+    if (value is! Iterable) return const [];
+    return value
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   static int _readDifficulty(Object? value) {

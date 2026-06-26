@@ -43,8 +43,9 @@ void main() {
     expect(find.byType(LifeShuffleApp), findsOneWidget);
   });
 
-  testWidgets('Display name confirmation uses provided default name',
-      (WidgetTester tester) async {
+  testWidgets('Display name confirmation uses provided default name', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: DisplayNameScreen(
@@ -58,8 +59,9 @@ void main() {
     expect(find.widgetWithText(TextField, 'Kwame Google'), findsOneWidget);
   });
 
-  testWidgets('Display name confirmation allows editing a non-empty name',
-      (WidgetTester tester) async {
+  testWidgets('Display name confirmation allows editing a non-empty name', (
+    WidgetTester tester,
+  ) async {
     String? savedName;
     await tester.pumpWidget(
       MaterialApp(
@@ -98,8 +100,9 @@ void main() {
     expect(saved.displayNameConfirmed, isTrue);
   });
 
-  testWidgets('Calendar name prompt uses provided default name',
-      (WidgetTester tester) async {
+  testWidgets('Calendar name prompt uses provided default name', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CalendarNameScreen(
@@ -113,8 +116,9 @@ void main() {
     expect(find.widgetWithText(TextField, 'Kwame and Laura'), findsOneWidget);
   });
 
-  testWidgets('Calendar name prompt allows editing a non-empty name',
-      (WidgetTester tester) async {
+  testWidgets('Calendar name prompt allows editing a non-empty name', (
+    WidgetTester tester,
+  ) async {
     String? savedName;
     await tester.pumpWidget(
       MaterialApp(
@@ -153,43 +157,45 @@ void main() {
     expect(saved.calendarNameConfirmed, isTrue);
   });
 
-  test('AppState rename syncs calendar title without changing feed token',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final renamedSync = Completer<SavedState>();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadDefaultCalendar: (_) async => null,
-      saveFirestoreState: (_, state) async {
-        if (state.calendarTitle == 'Renamed calendar' &&
-            !renamedSync.isCompleted) {
-          renamedSync.complete(state);
-        }
-        return FirestoreSyncResult.success();
-      },
-    );
+  test(
+    'AppState rename syncs calendar title without changing feed token',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final renamedSync = Completer<SavedState>();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadDefaultCalendar: (_) async => null,
+        saveFirestoreState: (_, state) async {
+          if (state.calendarTitle == 'Renamed calendar' &&
+              !renamedSync.isCompleted) {
+            renamedSync.complete(state);
+          }
+          return FirestoreSyncResult.success();
+        },
+      );
 
-    appState.setFeedEnabled(true);
-    final originalToken = appState.feedToken;
-    expect(originalToken, isNotNull);
+      appState.setFeedEnabled(true);
+      final originalToken = appState.feedToken;
+      expect(originalToken, isNotNull);
 
-    appState.setUserId('rename_user');
-    expect(appState.renameCalendarTitle('  Renamed   calendar  '), isTrue);
+      appState.setUserId('rename_user');
+      expect(appState.renameCalendarTitle('  Renamed   calendar  '), isTrue);
 
-    final syncedState = await renamedSync.future.timeout(
-      const Duration(seconds: 1),
-    );
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
+      final syncedState = await renamedSync.future.timeout(
+        const Duration(seconds: 1),
+      );
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
 
-    expect(appState.calendarTitle, 'Renamed calendar');
-    expect(appState.feedToken, originalToken);
-    expect(appState.feedEnabled, isTrue);
-    expect(syncedState.calendarTitle, 'Renamed calendar');
-    expect(syncedState.feedToken, originalToken);
-    expect(saved.calendarTitle, 'Renamed calendar');
-    expect(saved.feedToken, originalToken);
-  });
+      expect(appState.calendarTitle, 'Renamed calendar');
+      expect(appState.feedToken, originalToken);
+      expect(appState.feedEnabled, isTrue);
+      expect(syncedState.calendarTitle, 'Renamed calendar');
+      expect(syncedState.feedToken, originalToken);
+      expect(saved.calendarTitle, 'Renamed calendar');
+      expect(saved.feedToken, originalToken);
+    },
+  );
 
   test('AppState completes and persists intro onboarding', () async {
     SharedPreferences.setMockInitialValues({});
@@ -204,10 +210,7 @@ void main() {
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.introOnboardingCompleted, isTrue);
 
-    final restored = AppState(
-      activities: saved.activities,
-      savedState: saved,
-    );
+    final restored = AppState(activities: saved.activities, savedState: saved);
     expect(restored.introOnboardingCompleted, isTrue);
   });
 
@@ -258,8 +261,7 @@ void main() {
     expect(fromUnknownValue.rangeType, RangeType.week);
   });
 
-  test(
-      'SavedState defaults a missing viewMode to rangeType, and round-trips '
+  test('SavedState defaults a missing viewMode to rangeType, and round-trips '
       'an explicit one', () {
     const defaultedToWeek = SavedState(
       activities: [],
@@ -325,44 +327,44 @@ void main() {
   });
 
   testWidgets(
-      'Fresh user flow asks display name, calendar name, onboarding, then app',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Fresh user flow asks display name, calendar name, onboarding, then app',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+      await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
 
-    expect(find.byType(DisplayNameScreen), findsOneWidget);
-    expect(find.byType(CalendarNameScreen), findsNothing);
+      expect(find.byType(DisplayNameScreen), findsOneWidget);
+      expect(find.byType(CalendarNameScreen), findsNothing);
 
-    await tester.enterText(find.byType(TextField), 'Kwame');
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Kwame');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
 
-    expect(find.byType(DisplayNameScreen), findsNothing);
-    expect(find.byType(CalendarNameScreen), findsOneWidget);
+      expect(find.byType(DisplayNameScreen), findsNothing);
+      expect(find.byType(CalendarNameScreen), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
 
-    expect(find.byType(CalendarNameScreen), findsNothing);
-    expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(find.byType(CalendarNameScreen), findsNothing);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
 
-    await _completeOnboarding(tester);
+      await _completeOnboarding(tester);
 
-    expect(find.byType(OnboardingScreen), findsNothing);
-    expect(find.byType(BottomNavShell), findsOneWidget);
-    expect(appState.introOnboardingCompleted, isTrue);
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.introOnboardingCompleted, isTrue);
-  });
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.byType(BottomNavShell), findsOneWidget);
+      expect(appState.introOnboardingCompleted, isTrue);
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.introOnboardingCompleted, isTrue);
+    },
+  );
 
-  testWidgets('Onboarding shows planning-dimensions step with toggles',
-      (WidgetTester tester) async {
+  testWidgets('Onboarding shows planning-dimensions step with toggles', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -402,91 +404,92 @@ void main() {
   });
 
   testWidgets(
-      'Toggling dimensions during onboarding updates AppState and persists',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Toggling dimensions during onboarding updates AppState and persists',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: OnboardingScreen(onComplete: () {}),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: OnboardingScreen(onComplete: () {}),
+          ),
         ),
-      ),
-    );
+      );
 
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('Next'));
-      await tester.pumpAndSettle();
-    }
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
 
-    expect(appState.difficultyEnabled, isFalse);
-    expect(appState.energyEnabled, isFalse);
-    expect(appState.socialEnabled, isFalse);
+      expect(appState.difficultyEnabled, isFalse);
+      expect(appState.energyEnabled, isFalse);
+      expect(appState.socialEnabled, isFalse);
 
-    final switches = find.byType(Switch);
-    await tester.tap(switches.at(0));
-    await tester.pump();
-    await tester.tap(switches.at(1));
-    await tester.pump();
-    await tester.tap(switches.at(2));
-    await tester.pump();
+      final switches = find.byType(Switch);
+      await tester.tap(switches.at(0));
+      await tester.pump();
+      await tester.tap(switches.at(1));
+      await tester.pump();
+      await tester.tap(switches.at(2));
+      await tester.pump();
 
-    expect(appState.difficultyEnabled, isTrue);
-    expect(appState.energyEnabled, isTrue);
-    expect(appState.socialEnabled, isTrue);
+      expect(appState.difficultyEnabled, isTrue);
+      expect(appState.energyEnabled, isTrue);
+      expect(appState.socialEnabled, isTrue);
 
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.difficultyEnabled, isTrue);
-    expect(saved.energyEnabled, isTrue);
-    expect(saved.socialEnabled, isTrue);
-  });
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.difficultyEnabled, isTrue);
+      expect(saved.energyEnabled, isTrue);
+      expect(saved.socialEnabled, isTrue);
+    },
+  );
 
   testWidgets(
-      'Completing onboarding persists chosen dimension settings alongside completion',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Completing onboarding persists chosen dimension settings alongside completion',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+      await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
 
-    await tester.enterText(find.byType(TextField), 'Kwame');
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Kwame');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
 
-    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
 
-    expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
 
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('Next'));
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
+
+      await tester.tap(find.byType(Switch).first);
+      await tester.pump();
+
+      await tester.tap(find.text('Get started'));
       await tester.pumpAndSettle();
-    }
 
-    await tester.tap(find.byType(Switch).first);
-    await tester.pump();
+      expect(find.byType(BottomNavShell), findsOneWidget);
+      expect(appState.introOnboardingCompleted, isTrue);
+      expect(appState.difficultyEnabled, isTrue);
 
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.introOnboardingCompleted, isTrue);
+      expect(saved.difficultyEnabled, isTrue);
+    },
+  );
 
-    expect(find.byType(BottomNavShell), findsOneWidget);
-    expect(appState.introOnboardingCompleted, isTrue);
-    expect(appState.difficultyEnabled, isTrue);
-
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.introOnboardingCompleted, isTrue);
-    expect(saved.difficultyEnabled, isTrue);
-  });
-
-  testWidgets('Returning local user skips mini onboarding when completed',
-      (WidgetTester tester) async {
+  testWidgets('Returning local user skips mini onboarding when completed', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -506,9 +509,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+    await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
     await tester.pump();
 
     expect(find.byType(DisplayNameScreen), findsNothing);
@@ -517,8 +518,9 @@ void main() {
     expect(find.byType(BottomNavShell), findsOneWidget);
   });
 
-  testWidgets('Returning remote user skips both name screens',
-      (WidgetTester tester) async {
+  testWidgets('Returning remote user skips both name screens', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final remoteLoad = Completer<FirestoreCalendar?>();
@@ -529,9 +531,7 @@ void main() {
     );
 
     appState.setUserId('returning_user');
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+    await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(DisplayNameScreen), findsNothing);
@@ -552,120 +552,118 @@ void main() {
   });
 
   testWidgets(
-      'Cleared local data with remote intro completed skips mini onboarding',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final remoteLoad = Completer<FirestoreCalendar?>();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadDefaultCalendar: (_) => remoteLoad.future,
-      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
-    );
+    'Cleared local data with remote intro completed skips mini onboarding',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final remoteLoad = Completer<FirestoreCalendar?>();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadDefaultCalendar: (_) => remoteLoad.future,
+        saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+      );
 
-    appState.setUserId('remote_intro_completed_user');
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+      appState.setUserId('remote_intro_completed_user');
+      await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(OnboardingScreen), findsNothing);
 
-    remoteLoad.complete(
-      _remoteCalendar(
-        userId: 'remote_intro_completed_user',
-        displayNameConfirmed: true,
-        calendarNameConfirmed: true,
-        introOnboardingCompleted: true,
-      ),
-    );
-    await tester.pumpAndSettle();
+      remoteLoad.complete(
+        _remoteCalendar(
+          userId: 'remote_intro_completed_user',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+          introOnboardingCompleted: true,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(appState.introOnboardingCompleted, isTrue);
-    expect(find.byType(DisplayNameScreen), findsNothing);
-    expect(find.byType(CalendarNameScreen), findsNothing);
-    expect(find.byType(OnboardingScreen), findsNothing);
-    expect(find.byType(BottomNavShell), findsOneWidget);
-  });
-
-  testWidgets(
-      'Partial remote state with only calendar confirmed asks display name only',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final remoteLoad = Completer<FirestoreCalendar?>();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadDefaultCalendar: (_) => remoteLoad.future,
-      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
-    );
-
-    appState.setUserId('partial_display_user');
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
-
-    remoteLoad.complete(
-      _remoteCalendar(
-        userId: 'partial_display_user',
-        displayNameConfirmed: false,
-        calendarNameConfirmed: true,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(DisplayNameScreen), findsOneWidget);
-    expect(find.byType(CalendarNameScreen), findsNothing);
-
-    await tester.enterText(find.byType(TextField), 'Kwame');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(DisplayNameScreen), findsNothing);
-    expect(find.byType(CalendarNameScreen), findsNothing);
-    expect(find.byType(OnboardingScreen), findsOneWidget);
-  });
+      expect(appState.introOnboardingCompleted, isTrue);
+      expect(find.byType(DisplayNameScreen), findsNothing);
+      expect(find.byType(CalendarNameScreen), findsNothing);
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.byType(BottomNavShell), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'Partial remote state with only display confirmed asks calendar name only',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final remoteLoad = Completer<FirestoreCalendar?>();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadDefaultCalendar: (_) => remoteLoad.future,
-      saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
-    );
+    'Partial remote state with only calendar confirmed asks display name only',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final remoteLoad = Completer<FirestoreCalendar?>();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadDefaultCalendar: (_) => remoteLoad.future,
+        saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+      );
 
-    appState.setUserId('partial_calendar_user');
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+      appState.setUserId('partial_display_user');
+      await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
 
-    remoteLoad.complete(
-      _remoteCalendar(
-        userId: 'partial_calendar_user',
-        displayNameConfirmed: true,
-        calendarNameConfirmed: false,
-      ),
-    );
-    await tester.pumpAndSettle();
+      remoteLoad.complete(
+        _remoteCalendar(
+          userId: 'partial_display_user',
+          displayNameConfirmed: false,
+          calendarNameConfirmed: true,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(DisplayNameScreen), findsNothing);
-    expect(find.byType(CalendarNameScreen), findsOneWidget);
+      expect(find.byType(DisplayNameScreen), findsOneWidget);
+      expect(find.byType(CalendarNameScreen), findsNothing);
 
-    await tester.enterText(find.byType(TextField), 'Kwame and Laura');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Kwame');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(DisplayNameScreen), findsNothing);
-    expect(find.byType(CalendarNameScreen), findsNothing);
-    expect(find.byType(OnboardingScreen), findsOneWidget);
-  });
+      expect(find.byType(DisplayNameScreen), findsNothing);
+      expect(find.byType(CalendarNameScreen), findsNothing);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+    },
+  );
 
-  testWidgets('Delayed remote sync updates AuthGate routing after app boot',
-      (WidgetTester tester) async {
+  testWidgets(
+    'Partial remote state with only display confirmed asks calendar name only',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final remoteLoad = Completer<FirestoreCalendar?>();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadDefaultCalendar: (_) => remoteLoad.future,
+        saveFirestoreState: (_, __) async => FirestoreSyncResult.success(),
+      );
+
+      appState.setUserId('partial_calendar_user');
+      await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
+
+      remoteLoad.complete(
+        _remoteCalendar(
+          userId: 'partial_calendar_user',
+          displayNameConfirmed: true,
+          calendarNameConfirmed: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DisplayNameScreen), findsNothing);
+      expect(find.byType(CalendarNameScreen), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'Kwame and Laura');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DisplayNameScreen), findsNothing);
+      expect(find.byType(CalendarNameScreen), findsNothing);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets('Delayed remote sync updates AuthGate routing after app boot', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final remoteLoad = Completer<FirestoreCalendar?>();
@@ -676,9 +674,7 @@ void main() {
     );
 
     appState.setUserId('delayed_sync_user');
-    await tester.pumpWidget(
-      MaterialApp(home: AuthGate(appState: appState)),
-    );
+    await tester.pumpWidget(MaterialApp(home: AuthGate(appState: appState)));
     await tester.pump();
 
     expect(appState.isSyncingInitialState, isTrue);
@@ -702,8 +698,9 @@ void main() {
     expect(find.byType(OnboardingScreen), findsOneWidget);
   });
 
-  testWidgets('Settings displays confirmed display name',
-      (WidgetTester tester) async {
+  testWidgets('Settings displays confirmed display name', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -722,8 +719,9 @@ void main() {
     expect(find.text('Local-only mode'), findsNothing);
   });
 
-  testWidgets('Settings displays confirmed calendar name',
-      (WidgetTester tester) async {
+  testWidgets('Settings displays confirmed calendar name', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -743,8 +741,9 @@ void main() {
     expect(find.text('Kwame and Laura'), findsNothing);
   });
 
-  testWidgets('Settings current calendar row opens rename dialog',
-      (WidgetTester tester) async {
+  testWidgets('Settings current calendar row opens rename dialog', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -759,16 +758,18 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-current-calendar-row')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Rename calendar'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Weekend ideas'), findsOneWidget);
   });
 
-  testWidgets('Saving calendar rename updates Settings header and AppState',
-      (WidgetTester tester) async {
+  testWidgets('Saving calendar rename updates Settings header and AppState', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -790,8 +791,9 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-current-calendar-row')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('rename-calendar-text-field')),
@@ -824,8 +826,9 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-current-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-current-calendar-row')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('rename-calendar-text-field')),
@@ -839,8 +842,9 @@ void main() {
     expect(appState.calendarTitle, 'Weekend ideas');
   });
 
-  testWidgets('Settings hides sync diagnostics when there is no sync error',
-      (WidgetTester tester) async {
+  testWidgets('Settings hides sync diagnostics when there is no sync error', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -860,8 +864,9 @@ void main() {
     );
   });
 
-  testWidgets('Settings shows safe sync diagnostics after a sync error',
-      (WidgetTester tester) async {
+  testWidgets('Settings shows safe sync diagnostics after a sync error', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities)
@@ -898,110 +903,124 @@ void main() {
     expect(find.textContaining('private_key'), findsNothing);
   });
 
-  testWidgets('Calendar load failure shows diagnostics and does not save local',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    var saveCallCount = 0;
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async {
-        throw const FirestoreSyncException('Firestore permission denied');
-      },
-      saveSelectedFirestoreState: (_, __, ___) async {
-        saveCallCount++;
-        return FirestoreSyncResult.success();
-      },
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-    );
+  testWidgets(
+    'Calendar load failure shows diagnostics and does not save local',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      var saveCallCount = 0;
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async {
+          throw const FirestoreSyncException('Firestore permission denied');
+        },
+        saveSelectedFirestoreState: (_, __, ___) async {
+          saveCallCount++;
+          return FirestoreSyncResult.success();
+        },
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(saveCallCount, 0);
-    expect(appState.lastSyncErrorMessage, 'Firestore permission denied');
-    expect(appState.syncMessage?.title, "Can't access this calendar");
-    expect(appState.syncMessage?.body, isNot(contains('Firestore')));
-    expect(appState.syncMessage?.body, isNot(contains('Firebase')));
+      expect(saveCallCount, 0);
+      expect(appState.lastSyncErrorMessage, 'Firestore permission denied');
+      expect(appState.syncMessage?.title, "Can't access this calendar");
+      expect(appState.syncMessage?.body, isNot(contains('Firestore')));
+      expect(appState.syncMessage?.body, isNot(contains('Firebase')));
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text("Can't access this calendar"), findsOneWidget);
-    expect(find.text('Firestore permission denied'), findsNothing);
-  });
+      expect(find.text("Can't access this calendar"), findsOneWidget);
+      expect(find.text('Firestore permission denied'), findsNothing);
+    },
+  );
 
-  test('Member profile load failure keeps remote member metadata visible',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async => [
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: 'shared_calendar',
-          title: 'Shared week',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user', 'laura_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-      ],
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      loadUserProfiles: (_) async {
-        throw const FirestoreSyncException('Member profile lookup failed');
-      },
-    );
+  test(
+    'Member profile load failure keeps remote member metadata visible',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async => [
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'shared_calendar',
+            title: 'Shared week',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user', 'laura_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ],
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        loadUserProfiles: (_) async {
+          throw const FirestoreSyncException('Member profile lookup failed');
+        },
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.calendarId, 'shared_calendar');
-    expect(appState.calendarMemberUserIds, const ['owner_user', 'laura_user']);
-    expect(appState.calendarMemberDisplayLabels, const ['You', 'laura_us...']);
-    expect(appState.lastSyncErrorMessage, 'Member profile lookup failed');
-    expect(appState.syncMessage?.title, 'Member names unavailable');
-    expect(appState.syncMessage?.body,
-        isNot(contains('Member profile lookup failed')));
-  });
+      expect(appState.calendarId, 'shared_calendar');
+      expect(appState.calendarMemberUserIds, const [
+        'owner_user',
+        'laura_user',
+      ]);
+      expect(appState.calendarMemberDisplayLabels, const [
+        'You',
+        'laura_us...',
+      ]);
+      expect(appState.lastSyncErrorMessage, 'Member profile lookup failed');
+      expect(appState.syncMessage?.title, 'Member names unavailable');
+      expect(
+        appState.syncMessage?.body,
+        isNot(contains('Member profile lookup failed')),
+      );
+    },
+  );
 
-  test('Failed save shows a plain-language message and keeps local changes',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async => const [],
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.failure('Firebase unavailable'),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-    );
+  test(
+    'Failed save shows a plain-language message and keeps local changes',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async => const [],
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.failure('Firebase unavailable'),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.lastSyncErrorMessage, 'Firebase unavailable');
-    expect(appState.syncMessage, isNotNull);
-    expect(appState.syncMessage!.title, "Couldn't save");
-    expect(
-      appState.syncMessage!.body,
-      "Couldn't save just now. Your changes are still on this device.",
-    );
-    expect(appState.syncMessage!.body, isNot(contains('Firebase')));
-    expect(appState.syncMessage!.actionLabel, 'Retry');
-  });
+      expect(appState.lastSyncErrorMessage, 'Firebase unavailable');
+      expect(appState.syncMessage, isNotNull);
+      expect(appState.syncMessage!.title, "Couldn't save");
+      expect(
+        appState.syncMessage!.body,
+        "Couldn't save just now. Your changes are still on this device.",
+      );
+      expect(appState.syncMessage!.body, isNot(contains('Firebase')));
+      expect(appState.syncMessage!.actionLabel, 'Retry');
+    },
+  );
 
   test('Permission denied never exposes raw Firebase exception text', () async {
     SharedPreferences.setMockInitialValues({});
@@ -1048,8 +1067,9 @@ void main() {
     expect(appState.remoteUpdatedElsewhere, isFalse);
   });
 
-  testWidgets('Settings sync diagnostics shows Retry and it re-syncs',
-      (WidgetTester tester) async {
+  testWidgets('Settings sync diagnostics shows Retry and it re-syncs', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     // Both the implicit sync triggered by setUserId and the explicit await
@@ -1096,76 +1116,73 @@ void main() {
   });
 
   testWidgets(
-      'Plan screen shows updated-elsewhere notice and dismiss clears it',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    // Both calls in the first sync round (the implicit one from setUserId
-    // and the explicit awaited one below) must observe the same remote
-    // value, so the round is race-safe; the value is only bumped after that
-    // round has fully settled.
-    var remoteUpdatedAtMillis = 2000;
-    FirestoreCalendar buildCalendar() => FirestoreCalendar(
-          state: SavedState(
-            activities: PlannerService.defaultActivities,
-            seed: 0,
-            updatedAtMillis: remoteUpdatedAtMillis,
-            enabledMap: const {},
-            checkinMap: const {},
-            lockedMap: const {},
-          ),
-          metadata: CalendarMetadata(
-            calendarId: 'owner_user_default',
-            title: 'Kwame and Laura',
-            ownerUserId: 'owner_user',
-            memberUserIds: const ['owner_user'],
-            createdAtMillis: remoteUpdatedAtMillis,
-            updatedAtMillis: remoteUpdatedAtMillis,
-          ),
-        );
+    'Plan screen shows updated-elsewhere notice and dismiss clears it',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      // Both calls in the first sync round (the implicit one from setUserId
+      // and the explicit awaited one below) must observe the same remote
+      // value, so the round is race-safe; the value is only bumped after that
+      // round has fully settled.
+      var remoteUpdatedAtMillis = 2000;
+      FirestoreCalendar buildCalendar() => FirestoreCalendar(
+        state: SavedState(
+          activities: PlannerService.defaultActivities,
+          seed: 0,
+          updatedAtMillis: remoteUpdatedAtMillis,
+          enabledMap: const {},
+          checkinMap: const {},
+          lockedMap: const {},
+        ),
+        metadata: CalendarMetadata(
+          calendarId: 'owner_user_default',
+          title: 'Kwame and Laura',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          createdAtMillis: remoteUpdatedAtMillis,
+          updatedAtMillis: remoteUpdatedAtMillis,
+        ),
+      );
 
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async => [buildCalendar()],
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-    );
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async => [buildCalendar()],
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
-    expect(appState.remoteUpdatedElsewhere, isFalse);
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
+      expect(appState.remoteUpdatedElsewhere, isFalse);
 
-    remoteUpdatedAtMillis = 9000;
-    await appState.syncWithFirestore();
-    expect(appState.remoteUpdatedElsewhere, isTrue);
-    expect(appState.syncMessage?.title, 'Updated elsewhere');
+      remoteUpdatedAtMillis = 9000;
+      await appState.syncWithFirestore();
+      expect(appState.remoteUpdatedElsewhere, isTrue);
+      expect(appState.syncMessage?.title, 'Updated elsewhere');
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(state: appState, child: const PlanScreen()),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(state: appState, child: const PlanScreen()),
+        ),
+      );
 
-    expect(
-      find.byKey(const ValueKey('plan-sync-notice-card')),
-      findsOneWidget,
-    );
-    expect(find.text('Updated elsewhere'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('plan-sync-notice-card')),
+        findsOneWidget,
+      );
+      expect(find.text('Updated elsewhere'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('plan-sync-notice-dismiss')));
-    await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('plan-sync-notice-dismiss')));
+      await tester.pump();
 
-    expect(appState.remoteUpdatedElsewhere, isFalse);
-    expect(
-      find.byKey(const ValueKey('plan-sync-notice-card')),
-      findsNothing,
-    );
-  });
+      expect(appState.remoteUpdatedElsewhere, isFalse);
+      expect(find.byKey(const ValueKey('plan-sync-notice-card')), findsNothing);
+    },
+  );
 
-  test(
-      'Existing signed-in user still saves to default calendar when no shared '
+  test('Existing signed-in user still saves to default calendar when no shared '
       'calendar exists', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -1294,8 +1311,9 @@ void main() {
     );
   });
 
-  testWidgets('Settings member list uses profile labels when available',
-      (WidgetTester tester) async {
+  testWidgets('Settings member list uses profile labels when available', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1332,8 +1350,9 @@ void main() {
     expect(find.text('member_1...'), findsNothing);
   });
 
-  testWidgets('Settings Add member succeeds when profile exists',
-      (WidgetTester tester) async {
+  testWidgets('Settings Add member succeeds when profile exists', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     var remoteMemberIds = const ['owner_user'];
@@ -1390,8 +1409,9 @@ void main() {
     expect(appState.calendarMemberDisplayLabels, contains('Laura'));
   });
 
-  testWidgets('Settings Add member reports existing member without duplicate',
-      (WidgetTester tester) async {
+  testWidgets('Settings Add member reports existing member without duplicate', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     var addCallCount = 0;
@@ -1445,8 +1465,9 @@ void main() {
     );
   });
 
-  testWidgets('Settings Add member shows helpful message for unknown email',
-      (WidgetTester tester) async {
+  testWidgets('Settings Add member shows helpful message for unknown email', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1467,8 +1488,8 @@ void main() {
       loadUserProfiles: _loadProfilesForTest,
       addCalendarMember: ({required calendarId, required email}) async =>
           AddCalendarMemberResult.notFound(
-        'Laura needs to sign in once before she can be added.',
-      ),
+            'Laura needs to sign in once before she can be added.',
+          ),
     );
     appState.setUserId('owner_user');
     await appState.syncWithFirestore();
@@ -1496,11 +1517,14 @@ void main() {
       findsOneWidget,
     );
     expect(
-        find.byKey(const ValueKey('add-member-email-field')), findsOneWidget);
+      find.byKey(const ValueKey('add-member-email-field')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('Calendar switcher changes the selected calendar',
-      (WidgetTester tester) async {
+  testWidgets('Calendar switcher changes the selected calendar', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1543,8 +1567,9 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-switch-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-switch-calendar-row')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('settings-calendar-option-weekend_calendar')),
@@ -1556,8 +1581,9 @@ void main() {
     expect(find.text('Weekend ideas'), findsWidgets);
   });
 
-  testWidgets('Settings shows Create calendar for signed-in users',
-      (WidgetTester tester) async {
+  testWidgets('Settings shows Create calendar for signed-in users', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1588,12 +1614,15 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('settings-create-calendar-row')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-create-calendar-row')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('Creating a calendar selects it and persists selection',
-      (WidgetTester tester) async {
+  testWidgets('Creating a calendar selects it and persists selection', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1610,20 +1639,20 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
-      createCalendar: (
-          {required userId, required title, initialState, calendarId}) async {
-        return CreateCalendarResult.success(
-          _remoteCalendar(
-            userId: userId,
-            calendarId: 'generated_calendar',
-            title: title,
-            ownerUserId: userId,
-            memberUserIds: [userId],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        );
-      },
+      createCalendar:
+          ({required userId, required title, initialState, calendarId}) async {
+            return CreateCalendarResult.success(
+              _remoteCalendar(
+                userId: userId,
+                calendarId: 'generated_calendar',
+                title: title,
+                ownerUserId: userId,
+                memberUserIds: [userId],
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
+            );
+          },
       loadUserProfiles: _loadProfilesForTest,
     );
     appState.setUserId('owner_user');
@@ -1638,8 +1667,9 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-create-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-create-calendar-row')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('create-calendar-text-field')),
@@ -1650,15 +1680,18 @@ void main() {
 
     expect(appState.calendarId, 'generated_calendar');
     expect(appState.calendarTitle, 'Weekend ideas');
-    expect(appState.accessibleCalendars.map((c) => c.calendarId),
-        contains('generated_calendar'));
+    expect(
+      appState.accessibleCalendars.map((c) => c.calendarId),
+      contains('generated_calendar'),
+    );
     expect(find.text('Weekend ideas created.'), findsOneWidget);
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     expect(saved.selectedCalendarId, 'generated_calendar');
   });
 
-  testWidgets('Switcher includes newly created calendar',
-      (WidgetTester tester) async {
+  testWidgets('Switcher includes newly created calendar', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -1675,20 +1708,20 @@ void main() {
           FirestoreSyncResult.success(),
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
-      createCalendar: (
-          {required userId, required title, initialState, calendarId}) async {
-        return CreateCalendarResult.success(
-          _remoteCalendar(
-            userId: userId,
-            calendarId: 'generated_calendar',
-            title: title,
-            ownerUserId: userId,
-            memberUserIds: [userId],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        );
-      },
+      createCalendar:
+          ({required userId, required title, initialState, calendarId}) async {
+            return CreateCalendarResult.success(
+              _remoteCalendar(
+                userId: userId,
+                calendarId: 'generated_calendar',
+                title: title,
+                ownerUserId: userId,
+                memberUserIds: [userId],
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
+            );
+          },
       loadUserProfiles: _loadProfilesForTest,
     );
     appState.setUserId('owner_user');
@@ -1703,8 +1736,9 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-create-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-create-calendar-row')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('create-calendar-text-field')),
@@ -1713,10 +1747,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('create-calendar-save')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('settings-switch-calendar-row')),
-        findsOneWidget);
-    await tester
-        .tap(find.byKey(const ValueKey('settings-switch-calendar-row')));
+    expect(
+      find.byKey(const ValueKey('settings-switch-calendar-row')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-switch-calendar-row')),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -1748,20 +1785,20 @@ void main() {
       },
       upsertUserProfile: ({required userId, email, displayName}) async =>
           FirestoreSyncResult.success(),
-      createCalendar: (
-          {required userId, required title, initialState, calendarId}) async {
-        return CreateCalendarResult.success(
-          _remoteCalendar(
-            userId: userId,
-            calendarId: 'generated_calendar',
-            title: title,
-            ownerUserId: userId,
-            memberUserIds: [userId],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        );
-      },
+      createCalendar:
+          ({required userId, required title, initialState, calendarId}) async {
+            return CreateCalendarResult.success(
+              _remoteCalendar(
+                userId: userId,
+                calendarId: 'generated_calendar',
+                title: title,
+                ownerUserId: userId,
+                memberUserIds: [userId],
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
+            );
+          },
       loadUserProfiles: _loadProfilesForTest,
     );
     appState.setUserId('owner_user');
@@ -1777,202 +1814,220 @@ void main() {
     );
   });
 
-  test('Missing selected calendar falls back without overwriting fallback',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'ls_selected_calendar_id': 'missing_shared_calendar',
-      'ls_calendar_title': 'Missing shared',
-      'ls_calendar_name_confirmed': true,
-      'ls_updated_at_millis': 9999,
-    });
-    await PersistenceService.init();
-    final savedStates = <SavedState>[];
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      savedState: PersistenceService.load(PlannerService.defaultActivities),
-      loadAccessibleCalendars: (_) async => [
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
-          title: 'Personal default',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: 'shared_calendar',
-          title: 'Kwame and Laura',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user', 'laura_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-      ],
-      saveSelectedFirestoreState: (_, __, state) async {
-        savedStates.add(state);
-        return FirestoreSyncResult.success();
-      },
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      loadUserProfiles: _loadProfilesForTest,
-    );
+  test(
+    'Missing selected calendar falls back without overwriting fallback',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'ls_selected_calendar_id': 'missing_shared_calendar',
+        'ls_calendar_title': 'Missing shared',
+        'ls_calendar_name_confirmed': true,
+        'ls_updated_at_millis': 9999,
+      });
+      await PersistenceService.init();
+      final savedStates = <SavedState>[];
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        savedState: PersistenceService.load(PlannerService.defaultActivities),
+        loadAccessibleCalendars: (_) async => [
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
+            title: 'Personal default',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'shared_calendar',
+            title: 'Kwame and Laura',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user', 'laura_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ],
+        saveSelectedFirestoreState: (_, __, state) async {
+          savedStates.add(state);
+          return FirestoreSyncResult.success();
+        },
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.calendarId, 'shared_calendar');
-    expect(appState.calendarTitle, 'Kwame and Laura');
-    expect(
-      savedStates.map((state) => state.calendarTitle),
-      isNot(contains('Missing shared')),
-    );
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId, 'shared_calendar');
-    expect(saved.calendarTitle, 'Kwame and Laura');
-  });
+      expect(appState.calendarId, 'shared_calendar');
+      expect(appState.calendarTitle, 'Kwame and Laura');
+      expect(
+        savedStates.map((state) => state.calendarTitle),
+        isNot(contains('Missing shared')),
+      );
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.selectedCalendarId, 'shared_calendar');
+      expect(saved.calendarTitle, 'Kwame and Laura');
+    },
+  );
 
-  test('No accessible calendars after stale selection creates blank default',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final staleState = SavedState(
-      activities: [
-        Activity(
-          id: 'shared_only_activity',
-          title: 'Shared-only activity',
-          category: 'Social',
-          durationMinutes: 45,
-        ),
-      ],
-      seed: 12,
-      updatedAtMillis: 9999,
-      calendarTitle: 'Old shared',
-      selectedCalendarId: 'old_shared_calendar',
-      calendarNameConfirmed: true,
-      enabledMap: const {},
-      checkinMap: const {},
-      lockedMap: const {},
-    );
-    SavedState? savedDefault;
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      savedState: staleState,
-      loadAccessibleCalendars: (_) async => const [],
-      saveSelectedFirestoreState: (_, calendarId, state) async {
-        expect(
-            calendarId, FirestoreSyncService.defaultCalendarId('owner_user'));
-        savedDefault = state;
-        return FirestoreSyncResult.success();
-      },
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      loadUserProfiles: _loadProfilesForTest,
-    );
+  test(
+    'No accessible calendars after stale selection creates blank default',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final staleState = SavedState(
+        activities: [
+          Activity(
+            id: 'shared_only_activity',
+            title: 'Shared-only activity',
+            category: 'Social',
+            durationMinutes: 45,
+          ),
+        ],
+        seed: 12,
+        updatedAtMillis: 9999,
+        calendarTitle: 'Old shared',
+        selectedCalendarId: 'old_shared_calendar',
+        calendarNameConfirmed: true,
+        enabledMap: const {},
+        checkinMap: const {},
+        lockedMap: const {},
+      );
+      SavedState? savedDefault;
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        savedState: staleState,
+        loadAccessibleCalendars: (_) async => const [],
+        saveSelectedFirestoreState: (_, calendarId, state) async {
+          expect(
+            calendarId,
+            FirestoreSyncService.defaultCalendarId('owner_user'),
+          );
+          savedDefault = state;
+          return FirestoreSyncResult.success();
+        },
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.calendarId,
-        FirestoreSyncService.defaultCalendarId('owner_user'));
-    expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
-    expect(savedDefault, isNotNull);
-    expect(
-        savedDefault!.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
-    expect(savedDefault!.activities.map((a) => a.id),
-        isNot(contains('shared_only_activity')));
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId,
-        FirestoreSyncService.defaultCalendarId('owner_user'));
-  });
+      expect(
+        appState.calendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'),
+      );
+      expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
+      expect(savedDefault, isNotNull);
+      expect(
+        savedDefault!.calendarTitle,
+        FirestoreSyncService.defaultCalendarTitle,
+      );
+      expect(
+        savedDefault!.activities.map((a) => a.id),
+        isNot(contains('shared_only_activity')),
+      );
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(
+        saved.selectedCalendarId,
+        FirestoreSyncService.defaultCalendarId('owner_user'),
+      );
+    },
+  );
 
-  test('Reload prefers shared accessible calendar when no selection exists',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async => [
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
-          title: 'Personal default',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: 'shared_calendar',
-          title: 'Kwame and Laura',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user', 'laura_user', 'kwame_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-      ],
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      loadUserProfiles: _loadProfilesForTest,
-    );
+  test(
+    'Reload prefers shared accessible calendar when no selection exists',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async => [
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: FirestoreSyncService.defaultCalendarId('owner_user'),
+            title: 'Personal default',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'shared_calendar',
+            title: 'Kwame and Laura',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user', 'laura_user', 'kwame_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ],
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.calendarId, 'shared_calendar');
-    expect(appState.calendarTitle, 'Kwame and Laura');
-    expect(appState.calendarMemberUserIds, hasLength(3));
+      expect(appState.calendarId, 'shared_calendar');
+      expect(appState.calendarTitle, 'Kwame and Laura');
+      expect(appState.calendarMemberUserIds, hasLength(3));
 
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId, 'shared_calendar');
-  });
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.selectedCalendarId, 'shared_calendar');
+    },
+  );
 
-  test('Reload keeps locally selected calendar when multiple are accessible',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'ls_selected_calendar_id': 'weekend_calendar',
-    });
-    await PersistenceService.init();
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      savedState: PersistenceService.load(PlannerService.defaultActivities),
-      loadAccessibleCalendars: (_) async => [
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: 'shared_calendar',
-          title: 'Kwame and Laura',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user', 'laura_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-        _remoteCalendar(
-          userId: 'owner_user',
-          calendarId: 'weekend_calendar',
-          title: 'Weekend ideas',
-          ownerUserId: 'owner_user',
-          memberUserIds: const ['owner_user'],
-          displayNameConfirmed: true,
-          calendarNameConfirmed: true,
-        ),
-      ],
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      loadUserProfiles: _loadProfilesForTest,
-    );
+  test(
+    'Reload keeps locally selected calendar when multiple are accessible',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'ls_selected_calendar_id': 'weekend_calendar',
+      });
+      await PersistenceService.init();
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        savedState: PersistenceService.load(PlannerService.defaultActivities),
+        loadAccessibleCalendars: (_) async => [
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'shared_calendar',
+            title: 'Kwame and Laura',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user', 'laura_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+          _remoteCalendar(
+            userId: 'owner_user',
+            calendarId: 'weekend_calendar',
+            title: 'Weekend ideas',
+            ownerUserId: 'owner_user',
+            memberUserIds: const ['owner_user'],
+            displayNameConfirmed: true,
+            calendarNameConfirmed: true,
+          ),
+        ],
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    expect(appState.calendarId, 'weekend_calendar');
-    expect(appState.calendarTitle, 'Weekend ideas');
-  });
+      expect(appState.calendarId, 'weekend_calendar');
+      expect(appState.calendarTitle, 'Weekend ideas');
+    },
+  );
 
   testWidgets('Non-owner does not see Add member', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -2011,8 +2066,9 @@ void main() {
     expect(find.byKey(const ValueKey('settings-add-member-row')), findsNothing);
   });
 
-  testWidgets('Non-owner member sees Leave calendar',
-      (WidgetTester tester) async {
+  testWidgets('Non-owner member sees Leave calendar', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -2046,8 +2102,10 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('settings-leave-calendar-row')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-leave-calendar-row')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Owner sees Delete calendar', (WidgetTester tester) async {
@@ -2084,12 +2142,15 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('settings-delete-calendar-row')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-delete-calendar-row')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('Non-owner member does not see Delete calendar',
-      (WidgetTester tester) async {
+  testWidgets('Non-owner member does not see Delete calendar', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -2123,12 +2184,15 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('settings-delete-calendar-row')),
-        findsNothing);
+    expect(
+      find.byKey(const ValueKey('settings-delete-calendar-row')),
+      findsNothing,
+    );
   });
 
-  testWidgets('Delete confirmation requires exact calendar name',
-      (WidgetTester tester) async {
+  testWidgets('Delete confirmation requires exact calendar name', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -2162,18 +2226,20 @@ void main() {
       ),
     );
 
-    await tester
-        .tap(find.byKey(const ValueKey('settings-delete-calendar-row')));
+    await tester.tap(
+      find.byKey(const ValueKey('settings-delete-calendar-row')),
+    );
     await tester.pumpAndSettle();
 
     FilledButton deleteButton() => tester.widget<FilledButton>(
-          find.byKey(const ValueKey('delete-calendar-confirm')),
-        );
+      find.byKey(const ValueKey('delete-calendar-confirm')),
+    );
 
     expect(find.text('Delete this calendar?'), findsOneWidget);
     expect(
       find.text(
-          'This deletes it for everyone and turns off its calendar feed.'),
+        'This deletes it for everyone and turns off its calendar feed.',
+      ),
       findsOneWidget,
     );
     expect(deleteButton().onPressed, isNull);
@@ -2222,140 +2288,141 @@ void main() {
     expect(appState.canLeaveCurrentCalendar, isFalse);
     final result = await appState.leaveCurrentCalendar();
     expect(result.succeeded, isFalse);
-    expect(
-      result.status,
-      "Owners can't leave their own calendar.",
-    );
+    expect(result.status, "Owners can't leave their own calendar.");
   });
 
-  test('Leaving shared calendar removes only current user and keeps calendar',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    const calendarDeleted = false;
-    String? leftCalendarId;
-    String? leftUserId;
-    var sharedMemberIds = ['owner_user', 'laura_user', 'kwame_user'];
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (userId) async {
-        final calendars = <FirestoreCalendar>[];
-        if (sharedMemberIds.contains(userId)) {
+  test(
+    'Leaving shared calendar removes only current user and keeps calendar',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      const calendarDeleted = false;
+      String? leftCalendarId;
+      String? leftUserId;
+      var sharedMemberIds = ['owner_user', 'laura_user', 'kwame_user'];
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (userId) async {
+          final calendars = <FirestoreCalendar>[];
+          if (sharedMemberIds.contains(userId)) {
+            calendars.add(
+              _remoteCalendar(
+                userId: 'owner_user',
+                calendarId: 'shared_calendar',
+                title: 'Shared week',
+                ownerUserId: 'owner_user',
+                memberUserIds: sharedMemberIds,
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
+            );
+          }
           calendars.add(
             _remoteCalendar(
-              userId: 'owner_user',
-              calendarId: 'shared_calendar',
-              title: 'Shared week',
-              ownerUserId: 'owner_user',
-              memberUserIds: sharedMemberIds,
+              userId: 'laura_user',
+              calendarId: FirestoreSyncService.defaultCalendarId('laura_user'),
+              title: 'Personal default',
+              ownerUserId: 'laura_user',
+              memberUserIds: const ['laura_user'],
               displayNameConfirmed: true,
               calendarNameConfirmed: true,
             ),
           );
-        }
-        calendars.add(
-          _remoteCalendar(
-            userId: 'laura_user',
-            calendarId: FirestoreSyncService.defaultCalendarId('laura_user'),
-            title: 'Personal default',
-            ownerUserId: 'laura_user',
-            memberUserIds: const ['laura_user'],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        );
-        return calendars;
-      },
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      leaveCalendar: ({required calendarId, required userId}) async {
-        leftCalendarId = calendarId;
-        leftUserId = userId;
-        sharedMemberIds = sharedMemberIds
-            .where((memberUserId) => memberUserId != userId)
-            .toList();
-        return LeaveCalendarResult.success();
-      },
-      loadUserProfiles: _loadProfilesForTest,
-    );
+          return calendars;
+        },
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        leaveCalendar: ({required calendarId, required userId}) async {
+          leftCalendarId = calendarId;
+          leftUserId = userId;
+          sharedMemberIds = sharedMemberIds
+              .where((memberUserId) => memberUserId != userId)
+              .toList();
+          return LeaveCalendarResult.success();
+        },
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('laura_user');
-    await Future<void>.delayed(Duration.zero);
-    await appState.syncWithFirestore();
+      appState.setUserId('laura_user');
+      await Future<void>.delayed(Duration.zero);
+      await appState.syncWithFirestore();
 
-    final result = await appState.leaveCurrentCalendar();
+      final result = await appState.leaveCurrentCalendar();
 
-    expect(result.succeeded, isTrue);
-    expect(leftCalendarId, 'shared_calendar');
-    expect(leftUserId, 'laura_user');
-    expect(calendarDeleted, isFalse);
-    expect(sharedMemberIds, const ['owner_user', 'kwame_user']);
-    expect(sharedMemberIds, isNot(contains('laura_user')));
-  });
+      expect(result.succeeded, isTrue);
+      expect(leftCalendarId, 'shared_calendar');
+      expect(leftUserId, 'laura_user');
+      expect(calendarDeleted, isFalse);
+      expect(sharedMemberIds, const ['owner_user', 'kwame_user']);
+      expect(sharedMemberIds, isNot(contains('laura_user')));
+    },
+  );
 
-  test('Leaving selects another accessible calendar and persists selection',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    var sharedMemberIds = ['owner_user', 'laura_user'];
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (userId) async {
-        final calendars = <FirestoreCalendar>[];
-        if (sharedMemberIds.contains(userId)) {
+  test(
+    'Leaving selects another accessible calendar and persists selection',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      var sharedMemberIds = ['owner_user', 'laura_user'];
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (userId) async {
+          final calendars = <FirestoreCalendar>[];
+          if (sharedMemberIds.contains(userId)) {
+            calendars.add(
+              _remoteCalendar(
+                userId: 'owner_user',
+                calendarId: 'shared_calendar',
+                title: 'Shared week',
+                ownerUserId: 'owner_user',
+                memberUserIds: sharedMemberIds,
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
+            );
+          }
           calendars.add(
             _remoteCalendar(
-              userId: 'owner_user',
-              calendarId: 'shared_calendar',
-              title: 'Shared week',
-              ownerUserId: 'owner_user',
-              memberUserIds: sharedMemberIds,
+              userId: 'laura_user',
+              calendarId: 'weekend_calendar',
+              title: 'Weekend ideas',
+              ownerUserId: 'laura_user',
+              memberUserIds: const ['laura_user'],
               displayNameConfirmed: true,
               calendarNameConfirmed: true,
             ),
           );
-        }
-        calendars.add(
-          _remoteCalendar(
-            userId: 'laura_user',
-            calendarId: 'weekend_calendar',
-            title: 'Weekend ideas',
-            ownerUserId: 'laura_user',
-            memberUserIds: const ['laura_user'],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        );
-        return calendars;
-      },
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      leaveCalendar: ({required calendarId, required userId}) async {
-        sharedMemberIds = sharedMemberIds
-            .where((memberUserId) => memberUserId != userId)
-            .toList();
-        return LeaveCalendarResult.success();
-      },
-      loadUserProfiles: _loadProfilesForTest,
-    );
+          return calendars;
+        },
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        leaveCalendar: ({required calendarId, required userId}) async {
+          sharedMemberIds = sharedMemberIds
+              .where((memberUserId) => memberUserId != userId)
+              .toList();
+          return LeaveCalendarResult.success();
+        },
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('laura_user');
-    await Future<void>.delayed(Duration.zero);
-    await appState.syncWithFirestore();
-    expect(appState.calendarId, 'shared_calendar');
+      appState.setUserId('laura_user');
+      await Future<void>.delayed(Duration.zero);
+      await appState.syncWithFirestore();
+      expect(appState.calendarId, 'shared_calendar');
 
-    final result = await appState.leaveCurrentCalendar();
+      final result = await appState.leaveCurrentCalendar();
 
-    expect(result.succeeded, isTrue);
-    expect(appState.calendarId, 'weekend_calendar');
-    expect(appState.calendarTitle, 'Weekend ideas');
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId, 'weekend_calendar');
-  });
+      expect(result.succeeded, isTrue);
+      expect(appState.calendarId, 'weekend_calendar');
+      expect(appState.calendarTitle, 'Weekend ideas');
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.selectedCalendarId, 'weekend_calendar');
+    },
+  );
 
   test('Leaving only shared calendar creates blank personal default', () async {
     SharedPreferences.setMockInitialValues({});
@@ -2411,17 +2478,25 @@ void main() {
     final result = await appState.leaveCurrentCalendar();
 
     expect(result.succeeded, isTrue);
-    expect(appState.calendarId,
-        FirestoreSyncService.defaultCalendarId('laura_user'));
+    expect(
+      appState.calendarId,
+      FirestoreSyncService.defaultCalendarId('laura_user'),
+    );
     expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
     expect(savedDefault, isNotNull);
-    expect(savedDefault!.selectedCalendarId,
-        FirestoreSyncService.defaultCalendarId('laura_user'));
-    expect(savedDefault!.activities.map((activity) => activity.id),
-        isNot(contains('shared_only_activity')));
+    expect(
+      savedDefault!.selectedCalendarId,
+      FirestoreSyncService.defaultCalendarId('laura_user'),
+    );
+    expect(
+      savedDefault!.activities.map((activity) => activity.id),
+      isNot(contains('shared_only_activity')),
+    );
     final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId,
-        FirestoreSyncService.defaultCalendarId('laura_user'));
+    expect(
+      saved.selectedCalendarId,
+      FirestoreSyncService.defaultCalendarId('laura_user'),
+    );
   });
 
   test('Owner delete removes only current calendar', () async {
@@ -2475,65 +2550,70 @@ void main() {
 
     expect(result.succeeded, isTrue);
     expect(deletedCalendarIds, const ['shared_calendar']);
-    expect(appState.accessibleCalendars.map((c) => c.calendarId),
-        isNot(contains('shared_calendar')));
-    expect(appState.accessibleCalendars.map((c) => c.calendarId),
-        contains(personalCalendarId));
+    expect(
+      appState.accessibleCalendars.map((c) => c.calendarId),
+      isNot(contains('shared_calendar')),
+    );
+    expect(
+      appState.accessibleCalendars.map((c) => c.calendarId),
+      contains(personalCalendarId),
+    );
   });
 
   test(
-      'Owner delete selects another accessible calendar and persists selection',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    var sharedExists = true;
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (userId) async {
-        return [
-          if (sharedExists)
+    'Owner delete selects another accessible calendar and persists selection',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      var sharedExists = true;
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (userId) async {
+          return [
+            if (sharedExists)
+              _remoteCalendar(
+                userId: 'owner_user',
+                calendarId: 'shared_calendar',
+                title: 'Shared week',
+                ownerUserId: 'owner_user',
+                memberUserIds: const ['owner_user', 'laura_user'],
+                displayNameConfirmed: true,
+                calendarNameConfirmed: true,
+              ),
             _remoteCalendar(
               userId: 'owner_user',
-              calendarId: 'shared_calendar',
-              title: 'Shared week',
+              calendarId: 'weekend_calendar',
+              title: 'Weekend ideas',
               ownerUserId: 'owner_user',
-              memberUserIds: const ['owner_user', 'laura_user'],
+              memberUserIds: const ['owner_user'],
               displayNameConfirmed: true,
               calendarNameConfirmed: true,
             ),
-          _remoteCalendar(
-            userId: 'owner_user',
-            calendarId: 'weekend_calendar',
-            title: 'Weekend ideas',
-            ownerUserId: 'owner_user',
-            memberUserIds: const ['owner_user'],
-            displayNameConfirmed: true,
-            calendarNameConfirmed: true,
-          ),
-        ];
-      },
-      saveSelectedFirestoreState: (_, __, ___) async =>
-          FirestoreSyncResult.success(),
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-      deleteCalendar: ({required calendarId, required currentUserId}) async {
-        sharedExists = false;
-        return DeleteCalendarResult.success();
-      },
-      loadUserProfiles: _loadProfilesForTest,
-    );
+          ];
+        },
+        saveSelectedFirestoreState: (_, __, ___) async =>
+            FirestoreSyncResult.success(),
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+        deleteCalendar: ({required calendarId, required currentUserId}) async {
+          sharedExists = false;
+          return DeleteCalendarResult.success();
+        },
+        loadUserProfiles: _loadProfilesForTest,
+      );
 
-    appState.setUserId('owner_user');
-    await appState.syncWithFirestore();
+      appState.setUserId('owner_user');
+      await appState.syncWithFirestore();
 
-    final result = await appState.deleteCurrentCalendar();
+      final result = await appState.deleteCurrentCalendar();
 
-    expect(result.succeeded, isTrue);
-    expect(appState.calendarId, 'weekend_calendar');
-    expect(appState.calendarTitle, 'Weekend ideas');
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId, 'weekend_calendar');
-  });
+      expect(result.succeeded, isTrue);
+      expect(appState.calendarId, 'weekend_calendar');
+      expect(appState.calendarTitle, 'Weekend ideas');
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.selectedCalendarId, 'weekend_calendar');
+    },
+  );
 
   test('Owner delete only accessible calendar creates blank default', () async {
     SharedPreferences.setMockInitialValues({});
@@ -2586,17 +2666,25 @@ void main() {
     final result = await appState.deleteCurrentCalendar();
 
     expect(result.succeeded, isTrue);
-    expect(appState.calendarId,
-        FirestoreSyncService.defaultCalendarId('owner_user'));
+    expect(
+      appState.calendarId,
+      FirestoreSyncService.defaultCalendarId('owner_user'),
+    );
     expect(appState.calendarTitle, FirestoreSyncService.defaultCalendarTitle);
     expect(savedDefault, isNotNull);
-    expect(savedDefault!.selectedCalendarId,
-        FirestoreSyncService.defaultCalendarId('owner_user'));
-    expect(savedDefault!.activities.map((activity) => activity.id),
-        isNot(contains('shared_only_activity')));
+    expect(
+      savedDefault!.selectedCalendarId,
+      FirestoreSyncService.defaultCalendarId('owner_user'),
+    );
+    expect(
+      savedDefault!.activities.map((activity) => activity.id),
+      isNot(contains('shared_only_activity')),
+    );
     final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.selectedCalendarId,
-        FirestoreSyncService.defaultCalendarId('owner_user'));
+    expect(
+      saved.selectedCalendarId,
+      FirestoreSyncService.defaultCalendarId('owner_user'),
+    );
   });
 
   test('Non-owner member cannot call delete through AppState guard', () async {
@@ -2644,8 +2732,9 @@ void main() {
     expect(rules, isNot(contains('allow delete: if isMember')));
   });
 
-  testWidgets('Header displays confirmed calendar name',
-      (WidgetTester tester) async {
+  testWidgets('Header displays confirmed calendar name', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2699,10 +2788,7 @@ void main() {
     expect(saved.defaultEnergy, 'high');
     expect(saved.defaultSocial, 'together');
 
-    final restored = AppState(
-      activities: saved.activities,
-      savedState: saved,
-    );
+    final restored = AppState(activities: saved.activities, savedState: saved);
     expect(restored.difficultyEnabled, isTrue);
     expect(restored.energyEnabled, isTrue);
     expect(restored.socialEnabled, isTrue);
@@ -2711,8 +2797,9 @@ void main() {
     expect(restored.defaultSocialLabel, 'Together');
   });
 
-  testWidgets('Settings displays activity defaults and toggles dimensions',
-      (WidgetTester tester) async {
+  testWidgets('Settings displays activity defaults and toggles dimensions', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2743,8 +2830,9 @@ void main() {
     expect(find.text('On'), findsOneWidget);
   });
 
-  testWidgets('Settings displays privacy and feed explanation',
-      (WidgetTester tester) async {
+  testWidgets('Settings displays privacy and feed explanation', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2759,10 +2847,7 @@ void main() {
     );
 
     expect(find.text('PRIVACY / HELP'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('settings-privacy-help')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('settings-privacy-help')), findsOneWidget);
     expect(
       find.text('Life Shuffle calendars are private to signed-in members.'),
       findsOneWidget,
@@ -2791,8 +2876,9 @@ void main() {
     );
   });
 
-  testWidgets('Settings can replay intro without resetting completion',
-      (WidgetTester tester) async {
+  testWidgets('Settings can replay intro without resetting completion', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2822,8 +2908,9 @@ void main() {
     expect(appState.introOnboardingCompleted, isTrue);
   });
 
-  testWidgets('Settings displays publishing controls while disabled',
-      (WidgetTester tester) async {
+  testWidgets('Settings displays publishing controls while disabled', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2855,84 +2942,105 @@ void main() {
       findsOneWidget,
     );
     expect(
-        find.text(
-            'No feed link exists yet. Turning this on creates a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.'),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
-        findsNothing);
-  });
-
-  testWidgets('Settings publishing controls enable regenerate and revoke token',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
-        ),
-      ),
-    );
-
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
-    await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
-    await tester.pump();
-
-    final firstToken = appState.feedToken;
-    expect(appState.feedEnabled, isTrue);
-    expect(firstToken, isNotNull);
-    expect(firstToken!.length, greaterThanOrEqualTo(32));
-    expect(find.text('Feed is live'), findsOneWidget);
-    expect(
-      find.textContaining(
-        '/.netlify/functions/calendar-feed?token=$firstToken',
+      find.text(
+        'No feed link exists yet. Turning this on creates a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
       ),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
-        findsOneWidget);
     expect(
-        find.byKey(const ValueKey('settings-copy-feed-link')), findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-regenerate-feed-token')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-revoke-feed-token')),
-        findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('settings-copy-feed-link')));
-    await tester.pump();
-    expect(find.text('Feed link copied'), findsOneWidget);
-
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('settings-regenerate-feed-token')),
+      find.byKey(const ValueKey('settings-feed-token-preview')),
+      findsNothing,
     );
-    await tester
-        .tap(find.byKey(const ValueKey('settings-regenerate-feed-token')));
-    await tester.pump();
-
-    final regeneratedToken = appState.feedToken;
-    expect(regeneratedToken, isNot(firstToken));
-    expect(appState.feedEnabled, isTrue);
-    expect(appState.feedRevokedAtMillis, isNotNull);
-
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('settings-revoke-feed-token')),
-    );
-    await tester.tap(find.byKey(const ValueKey('settings-revoke-feed-token')));
-    await tester.pump();
-
-    expect(appState.feedEnabled, isFalse);
-    expect(appState.feedToken, isNull);
-    expect(find.text('Not enabled yet'), findsOneWidget);
-    expect(find.byKey(const ValueKey('settings-feed-token-preview')),
-        findsNothing);
   });
 
-  testWidgets('Settings shows feed not generated yet before the feed is on',
-      (WidgetTester tester) async {
+  testWidgets(
+    'Settings publishing controls enable regenerate and revoke token',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-feed-switch')),
+      );
+      await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
+      await tester.pump();
+
+      final firstToken = appState.feedToken;
+      expect(appState.feedEnabled, isTrue);
+      expect(firstToken, isNotNull);
+      expect(firstToken!.length, greaterThanOrEqualTo(32));
+      expect(find.text('Feed is live'), findsOneWidget);
+      expect(
+        find.textContaining(
+          '/.netlify/functions/calendar-feed?token=$firstToken',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-feed-token-preview')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-copy-feed-link')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-regenerate-feed-token')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-revoke-feed-token')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('settings-copy-feed-link')));
+      await tester.pump();
+      expect(find.text('Feed link copied'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-regenerate-feed-token')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('settings-regenerate-feed-token')),
+      );
+      await tester.pump();
+
+      final regeneratedToken = appState.feedToken;
+      expect(regeneratedToken, isNot(firstToken));
+      expect(appState.feedEnabled, isTrue);
+      expect(appState.feedRevokedAtMillis, isNotNull);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-revoke-feed-token')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('settings-revoke-feed-token')),
+      );
+      await tester.pump();
+
+      expect(appState.feedEnabled, isFalse);
+      expect(appState.feedToken, isNull);
+      expect(find.text('Not enabled yet'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-feed-token-preview')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('Settings shows feed not generated yet before the feed is on', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -2958,128 +3066,138 @@ void main() {
   });
 
   testWidgets(
-      'Settings shows last updated text, delay note, refresh, and download '
-      'raw ICS controls once the feed is live', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Settings shows last updated text, delay note, refresh, and download '
+    'raw ICS controls once the feed is live',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
-    await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
-    await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-feed-switch')),
+      );
+      await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
+      await tester.pump();
 
-    expect(find.text('Feed updated just now'), findsOneWidget);
-    expect(
-      find.text(
-        'Google Calendar may take a while to show changes from a '
-        "subscribed feed. Refreshing here updates Life Shuffle's "
-        'feed, but Google decides when to fetch it.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('settings-download-raw-ics')),
-        findsOneWidget);
-    expect(find.text('Download raw ICS'), findsOneWidget);
-    expect(
-      find.text(
-        'Download raw ICS is only for checking whether Life '
-        "Shuffle's feed has updated before Google Calendar "
-        'refreshes.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('settings-refresh-feed-now')),
-        findsOneWidget);
+      expect(find.text('Feed updated just now'), findsOneWidget);
+      expect(
+        find.text(
+          'Google Calendar may take a while to show changes from a '
+          "subscribed feed. Refreshing here updates Life Shuffle's "
+          'feed, but Google decides when to fetch it.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-download-raw-ics')),
+        findsOneWidget,
+      );
+      expect(find.text('Download raw ICS'), findsOneWidget);
+      expect(
+        find.text(
+          'Download raw ICS is only for checking whether Life '
+          "Shuffle's feed has updated before Google Calendar "
+          'refreshes.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-refresh-feed-now')),
+        findsOneWidget,
+      );
 
-    // No browser tab to open in the `flutter test` VM target, so opening
-    // falls back to copying the link instead of crashing.
-    await tester.tap(find.byKey(const ValueKey('settings-download-raw-ics')));
-    await tester.pump();
-    expect(
-      find.text("Couldn't open the raw feed. Link copied instead."),
-      findsOneWidget,
-    );
-    // Dismiss the first SnackBar immediately so the next one shows right
-    // away instead of just queuing behind it.
-    ScaffoldMessenger.of(tester.element(find.byType(SettingsScreen)))
-        .removeCurrentSnackBar();
-    await tester.pump();
+      // No browser tab to open in the `flutter test` VM target, so opening
+      // falls back to copying the link instead of crashing.
+      await tester.tap(find.byKey(const ValueKey('settings-download-raw-ics')));
+      await tester.pump();
+      expect(
+        find.text("Couldn't open the raw feed. Link copied instead."),
+        findsOneWidget,
+      );
+      // Dismiss the first SnackBar immediately so the next one shows right
+      // away instead of just queuing behind it.
+      ScaffoldMessenger.of(
+        tester.element(find.byType(SettingsScreen)),
+      ).removeCurrentSnackBar();
+      await tester.pump();
 
-    final beforeRefresh = appState.cachedIcsUpdatedAtMillis;
-    await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
-    await tester.pump();
+      final beforeRefresh = appState.cachedIcsUpdatedAtMillis;
+      await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
+      await tester.pump();
 
-    expect(find.text('Feed refreshed'), findsOneWidget);
-    expect(
-      appState.cachedIcsUpdatedAtMillis,
-      greaterThanOrEqualTo(beforeRefresh!),
-    );
-  });
+      expect(find.text('Feed refreshed'), findsOneWidget);
+      expect(
+        appState.cachedIcsUpdatedAtMillis,
+        greaterThanOrEqualTo(beforeRefresh!),
+      );
+    },
+  );
 
   testWidgets(
-      'Settings shows a sync-failure message, not "Feed refreshed", when '
-      'the Firestore save fails', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final initialSyncSaveDone = Completer<void>();
-    var callCount = 0;
-    final appState = AppState(
-      activities: PlannerService.defaultActivities,
-      loadAccessibleCalendars: (_) async => const [],
-      saveSelectedFirestoreState: (userId, calendarId, state) async {
-        callCount++;
-        if (callCount == 1) {
-          if (!initialSyncSaveDone.isCompleted) {
-            initialSyncSaveDone.complete();
+    'Settings shows a sync-failure message, not "Feed refreshed", when '
+    'the Firestore save fails',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final initialSyncSaveDone = Completer<void>();
+      var callCount = 0;
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        loadAccessibleCalendars: (_) async => const [],
+        saveSelectedFirestoreState: (userId, calendarId, state) async {
+          callCount++;
+          if (callCount == 1) {
+            if (!initialSyncSaveDone.isCompleted) {
+              initialSyncSaveDone.complete();
+            }
+            return FirestoreSyncResult.success();
           }
-          return FirestoreSyncResult.success();
-        }
-        return FirestoreSyncResult.failure('Network error');
-      },
-      upsertUserProfile: ({required userId, email, displayName}) async =>
-          FirestoreSyncResult.success(),
-    );
+          return FirestoreSyncResult.failure('Network error');
+        },
+        upsertUserProfile: ({required userId, email, displayName}) async =>
+            FirestoreSyncResult.success(),
+      );
 
-    appState.setFeedEnabled(true);
-    appState.setUserId('settings_refresh_failure_user');
-    await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
+      appState.setFeedEnabled(true);
+      appState.setUserId('settings_refresh_failure_user');
+      await initialSyncSaveDone.future.timeout(const Duration(seconds: 1));
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('settings-refresh-feed-now')));
-    await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
-    await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-refresh-feed-now')),
+      );
+      await tester.tap(find.byKey(const ValueKey('settings-refresh-feed-now')));
+      await tester.pump();
 
-    expect(
-      find.text(
-        "Feed updated on this device, but couldn't sync to the published "
-        'feed. Try again.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('Feed refreshed'), findsNothing);
-  });
+      expect(
+        find.text(
+          "Feed updated on this device, but couldn't sync to the published "
+          'feed. Try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Feed refreshed'), findsNothing);
+    },
+  );
 
-  testWidgets(
-      'Settings publishing card groups feed/diagnostics/token actions '
+  testWidgets('Settings publishing card groups feed/diagnostics/token actions '
       'without overflow at a narrow mobile width', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -3099,8 +3217,9 @@ void main() {
       ),
     );
 
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('settings-feed-switch')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-feed-switch')),
+    );
     await tester.tap(find.byKey(const ValueKey('settings-feed-switch')));
     await tester.pumpAndSettle();
 
@@ -3110,8 +3229,9 @@ void main() {
     expect(find.text('TOKEN'), findsOneWidget);
   });
 
-  testWidgets('Settings exposes week text export copy action',
-      (WidgetTester tester) async {
+  testWidgets('Settings exposes week text export copy action', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -3144,142 +3264,149 @@ void main() {
   });
 
   testWidgets(
-      'Settings export/print heading and summary explain what the current '
-      'view mode will copy/print', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Settings export/print heading and summary explain what the current '
+    'view mode will copy/print',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Export / print this week'), findsOneWidget);
-    expect(
-      find.textContaining('Exports the visible week.'),
-      findsOneWidget,
-    );
+      expect(find.text('Export / print this week'), findsOneWidget);
+      expect(find.textContaining('Exports the visible week.'), findsOneWidget);
 
-    appState.generateRange(RangeType.twoWeek);
-    await tester.pump();
+      appState.generateRange(RangeType.twoWeek);
+      await tester.pump();
 
-    expect(find.text('Export / print this 2-week range'), findsOneWidget);
-    expect(
-      find.textContaining('Copy text exports the generated 2-week range'),
-      findsOneWidget,
-    );
+      expect(find.text('Export / print this 2-week range'), findsOneWidget);
+      expect(
+        find.textContaining('Copy text exports the generated 2-week range'),
+        findsOneWidget,
+      );
 
-    appState.generateRange(RangeType.month);
-    await tester.pump();
+      appState.generateRange(RangeType.month);
+      await tester.pump();
 
-    expect(find.text('Export / print this month'), findsOneWidget);
-    expect(
-      find.textContaining('Exports the generated month range.'),
-      findsOneWidget,
-    );
-  });
+      expect(find.text('Export / print this month'), findsOneWidget);
+      expect(
+        find.textContaining('Exports the generated month range.'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
-      'Settings Copy text shows a pending message for Month view with no '
-      'generated range, and does not silently generate one',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    String? copiedText;
-    _captureClipboardText((text) => copiedText = text);
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.setViewMode(RangeType.month);
+    'Settings Copy text shows a pending message for Month view with no '
+    'generated range, and does not silently generate one',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      String? copiedText;
+      _captureClipboardText((text) => copiedText = text);
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.setViewMode(RangeType.month);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('settings-copy-week-text-export')),
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('settings-copy-week-text-export')),
-    );
-    await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-copy-week-text-export')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('settings-copy-week-text-export')),
+      );
+      await tester.pump();
 
-    expect(find.textContaining('Go to Plan, switch to Month'), findsOneWidget);
-    expect(copiedText, isNull);
-    expect(appState.rangeType, RangeType.week);
-    expect(appState.hasSufficientRangeForView, isFalse);
-  });
+      expect(
+        find.textContaining('Go to Plan, switch to Month'),
+        findsOneWidget,
+      );
+      expect(copiedText, isNull);
+      expect(appState.rangeType, RangeType.week);
+      expect(appState.hasSufficientRangeForView, isFalse);
+    },
+  );
 
   testWidgets(
-      'Settings shows output detail toggles with useful defaults, no dimension toggle when none enabled',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Settings shows output detail toggles with useful defaults, no dimension toggle when none enabled',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    const baseToggleKeys = [
-      'settings-export-toggle-time',
-      'settings-export-toggle-duration',
-      'settings-export-toggle-category',
-      'settings-export-toggle-checkin',
-      'settings-export-toggle-locked',
-    ];
-    for (final key in baseToggleKeys) {
-      final finder = find.byKey(ValueKey(key));
+      const baseToggleKeys = [
+        'settings-export-toggle-time',
+        'settings-export-toggle-duration',
+        'settings-export-toggle-category',
+        'settings-export-toggle-checkin',
+        'settings-export-toggle-locked',
+      ];
+      for (final key in baseToggleKeys) {
+        final finder = find.byKey(ValueKey(key));
+        await tester.ensureVisible(finder);
+        expect(finder, findsOneWidget);
+        expect(tester.widget<Switch>(finder).value, isTrue);
+      }
+
+      expect(
+        find.byKey(const ValueKey('settings-export-toggle-dimensions')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'Settings shows the enabled planning dimensions toggle only when a dimension is enabled',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.setDifficultyEnabled(true);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: SettingsScreen()),
+          ),
+        ),
+      );
+
+      final finder = find.byKey(
+        const ValueKey('settings-export-toggle-dimensions'),
+      );
       await tester.ensureVisible(finder);
       expect(finder, findsOneWidget);
-      expect(tester.widget<Switch>(finder).value, isTrue);
-    }
+      expect(find.text('Enabled planning dimensions'), findsOneWidget);
+    },
+  );
 
-    expect(
-      find.byKey(const ValueKey('settings-export-toggle-dimensions')),
-      findsNothing,
-    );
-  });
-
-  testWidgets(
-      'Settings shows the enabled planning dimensions toggle only when a dimension is enabled',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.setDifficultyEnabled(true);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: SettingsScreen()),
-        ),
-      ),
-    );
-
-    final finder =
-        find.byKey(const ValueKey('settings-export-toggle-dimensions'));
-    await tester.ensureVisible(finder);
-    expect(finder, findsOneWidget);
-    expect(find.text('Enabled planning dimensions'), findsOneWidget);
-  });
-
-  testWidgets('Toggling an output detail switch updates and persists',
-      (WidgetTester tester) async {
+  testWidgets('Toggling an output detail switch updates and persists', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -3293,8 +3420,9 @@ void main() {
       ),
     );
 
-    final finder =
-        find.byKey(const ValueKey('settings-export-toggle-duration'));
+    final finder = find.byKey(
+      const ValueKey('settings-export-toggle-duration'),
+    );
     await tester.ensureVisible(finder);
     await tester.tap(finder);
     await tester.pump();
@@ -3304,8 +3432,9 @@ void main() {
     expect(saved.exportShowDuration, isFalse);
   });
 
-  testWidgets('Settings exposes print preview action',
-      (WidgetTester tester) async {
+  testWidgets('Settings exposes print preview action', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -3327,30 +3456,23 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const ValueKey('settings-open-print-view')),
     );
-    await tester.tap(
-      find.byKey(const ValueKey('settings-open-print-view')),
-    );
+    await tester.tap(find.byKey(const ValueKey('settings-open-print-view')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('print-preview-screen')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('print-preview-screen')), findsOneWidget);
     expect(find.text('Print preview'), findsOneWidget);
   });
 
-  testWidgets(
-      'Printing pushes a controls-free view containing no back arrow, '
-      'label, or print icon, but keeps calendar content',
-      (WidgetTester tester) async {
+  testWidgets('Printing pushes a controls-free view containing no back arrow, '
+      'label, or print icon, but keeps calendar content', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(find.text('Print preview'), findsOneWidget);
@@ -3402,9 +3524,7 @@ void main() {
 
     expect(find.byKey(const ValueKey('print-only-screen')), findsNothing);
     expect(
-      find.text(
-        'Use your browser or device print option to print this page.',
-      ),
+      find.text('Use your browser or device print option to print this page.'),
       findsOneWidget,
     );
     expect(find.text('Print preview'), findsOneWidget);
@@ -3414,26 +3534,22 @@ void main() {
     );
   });
 
-  testWidgets('Print preview renders calendar title, week range, and days',
-      (WidgetTester tester) async {
+  testWidgets('Print preview renders calendar title, week range, and days', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(
       find.byKey(const ValueKey('print-preview-calendar-title')),
       findsOneWidget,
     );
-    expect(
-      find.text(appState.calendarTitle),
-      findsOneWidget,
-    );
+    expect(find.text(appState.calendarTitle), findsOneWidget);
     expect(
       find.byKey(const ValueKey('print-preview-week-range')),
       findsOneWidget,
@@ -3444,8 +3560,9 @@ void main() {
     }
   });
 
-  testWidgets('Print preview renders planned activity details',
-      (WidgetTester tester) async {
+  testWidgets('Print preview renders planned activity details', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -3455,23 +3572,19 @@ void main() {
     final plannedActivity = plannedDay.activities.first;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(
       find.byKey(const ValueKey('print-preview-empty-week')),
       findsNothing,
     );
-    expect(
-      find.text(plannedActivity.title),
-      findsWidgets,
-    );
+    expect(find.text(plannedActivity.title), findsWidgets);
   });
 
-  testWidgets('Print preview reflects an occurrence time/category override',
-      (WidgetTester tester) async {
+  testWidgets('Print preview reflects an occurrence time/category override', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final activity = Activity(
@@ -3495,9 +3608,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(find.textContaining('7:30 PM'), findsWidgets);
@@ -3505,16 +3616,15 @@ void main() {
     expect(activity.category, 'Couple time');
   });
 
-  testWidgets('Print preview shows a helpful empty-week message',
-      (WidgetTester tester) async {
+  testWidgets('Print preview shows a helpful empty-week message', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(
@@ -3525,91 +3635,87 @@ void main() {
   });
 
   testWidgets(
-      'Print preview hides duration, category, check-in, and locked status when disabled',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final plannedDay = appState.weekPlan.firstWhere(
-      (day) => day.activities.isNotEmpty,
-    );
-    final plannedActivity = plannedDay.activities.first;
-    plannedActivity.status = CheckStatus.done;
-    plannedActivity.locked = true;
+    'Print preview hides duration, category, check-in, and locked status when disabled',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final plannedDay = appState.weekPlan.firstWhere(
+        (day) => day.activities.isNotEmpty,
+      );
+      final plannedActivity = plannedDay.activities.first;
+      plannedActivity.status = CheckStatus.done;
+      plannedActivity.locked = true;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
 
-    expect(find.textContaining(plannedActivity.category), findsWidgets);
-    expect(find.text('Done'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+      expect(find.textContaining(plannedActivity.category), findsWidgets);
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
 
-    appState.setExportPrintOptions(
-      appState.exportPrintOptions.copyWith(
-        showDuration: false,
-        showCategory: false,
-        showCheckInStatus: false,
-        showLockedStatus: false,
-      ),
-    );
-    await tester.pump();
+      appState.setExportPrintOptions(
+        appState.exportPrintOptions.copyWith(
+          showDuration: false,
+          showCategory: false,
+          showCheckInStatus: false,
+          showLockedStatus: false,
+        ),
+      );
+      await tester.pump();
 
-    expect(find.text(plannedActivity.title), findsWidgets);
-    expect(find.textContaining(plannedActivity.category), findsNothing);
-    expect(find.text('Done'), findsNothing);
-    expect(find.byIcon(Icons.lock_rounded), findsNothing);
-  });
-
-  testWidgets(
-      'Print preview shows enabled planning dimensions only when toggled and enabled',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final plannedDay = appState.weekPlan.firstWhere(
-      (day) => day.activities.isNotEmpty,
-    );
-    final plannedActivity = plannedDay.activities.first;
-    final difficultyLabel =
-        'Difficulty ${plannedActivity.activity.difficulty}/5';
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
-
-    expect(find.text(difficultyLabel), findsNothing);
-
-    appState.setDifficultyEnabled(true);
-    await tester.pump();
-
-    expect(find.text(difficultyLabel), findsWidgets);
-
-    appState.setExportPrintOptions(
-      appState.exportPrintOptions.copyWith(showEnabledDimensions: false),
-    );
-    await tester.pump();
-
-    expect(find.text(difficultyLabel), findsNothing);
-  });
+      expect(find.text(plannedActivity.title), findsWidgets);
+      expect(find.textContaining(plannedActivity.category), findsNothing);
+      expect(find.text('Done'), findsNothing);
+      expect(find.byIcon(Icons.lock_rounded), findsNothing);
+    },
+  );
 
   testWidgets(
-      'Print preview shows a pending message for Month view with no '
-      'generated range, and does not silently generate one',
-      (WidgetTester tester) async {
+    'Print preview shows enabled planning dimensions only when toggled and enabled',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final plannedDay = appState.weekPlan.firstWhere(
+        (day) => day.activities.isNotEmpty,
+      );
+      final plannedActivity = plannedDay.activities.first;
+      final difficultyLabel =
+          'Difficulty ${plannedActivity.activity.difficulty}/5';
+
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+
+      expect(find.text(difficultyLabel), findsNothing);
+
+      appState.setDifficultyEnabled(true);
+      await tester.pump();
+
+      expect(find.text(difficultyLabel), findsWidgets);
+
+      appState.setExportPrintOptions(
+        appState.exportPrintOptions.copyWith(showEnabledDimensions: false),
+      );
+      await tester.pump();
+
+      expect(find.text(difficultyLabel), findsNothing);
+    },
+  );
+
+  testWidgets('Print preview shows a pending message for Month view with no '
+      'generated range, and does not silently generate one', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.setViewMode(RangeType.month);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(find.text('Month view'), findsOneWidget);
@@ -3631,17 +3737,16 @@ void main() {
     expect(appState.hasSufficientRangeForView, isFalse);
   });
 
-  testWidgets('Print preview month grid renders a 7-column Monday-start grid',
-      (WidgetTester tester) async {
+  testWidgets('Print preview month grid renders a 7-column Monday-start grid', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.generateRange(RangeType.month);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     final table = tester.widget<Table>(
@@ -3665,68 +3770,67 @@ void main() {
   });
 
   testWidgets(
-      'Print preview month grid shows the generated range label and day '
-      'numbers', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-    final firstDay = appState.generatedRange.days.first;
+    'Print preview month grid shows the generated range label and day '
+    'numbers',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+      final firstDay = appState.generatedRange.days.first;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
 
-    expect(
-      find.text(
-        TextWeekExportService.weekRangeLabel(appState.generatedRange.days),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        ValueKey(
-          'print-preview-month-grid-day-number-${_dateKey(firstDay.date)}',
+      expect(
+        find.text(
+          TextWeekExportService.weekRangeLabel(appState.generatedRange.days),
         ),
-      ),
-      findsOneWidget,
-    );
-  });
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          ValueKey(
+            'print-preview-month-grid-day-number-${_dateKey(firstDay.date)}',
+          ),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
-      'Print preview month grid shows activity titles in generated date '
-      'cells', (WidgetTester tester) async {
+    'Print preview month grid shows activity titles in generated date '
+    'cells',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+      final plannedDay = appState.generatedRange.days.firstWhere(
+        (day) => day.activities.isNotEmpty,
+      );
+      final plannedActivity = plannedDay.activities.first;
+
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+
+      expect(find.text(plannedActivity.title), findsWidgets);
+    },
+  );
+
+  testWidgets('Print preview month grid filler cells render blank and dimmed', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.generateRange(RangeType.month);
-    final plannedDay = appState.generatedRange.days.firstWhere(
-      (day) => day.activities.isNotEmpty,
-    );
-    final plannedActivity = plannedDay.activities.first;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
-
-    expect(find.text(plannedActivity.title), findsWidgets);
-  });
-
-  testWidgets('Print preview month grid filler cells render blank and dimmed',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     // Matched by key prefix rather than a specific date: which side of the
@@ -3748,40 +3852,39 @@ void main() {
   });
 
   testWidgets(
-      'Print preview month grid does not dim in-range days that spill into '
-      'the next calendar month', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-    final lastDay = appState.generatedRange.days.last;
+    'Print preview month grid does not dim in-range days that spill into '
+    'the next calendar month',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+      final lastDay = appState.generatedRange.days.last;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
 
-    // The generated range's last day is always in-range, even though a
-    // ~30-day month horizon commonly spills into the next calendar month.
-    expect(
-      find.byKey(
-        ValueKey('print-preview-month-grid-day-${_dateKey(lastDay.date)}'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        ValueKey(
-          'print-preview-month-grid-filler-${_dateKey(lastDay.date)}',
+      // The generated range's last day is always in-range, even though a
+      // ~30-day month horizon commonly spills into the next calendar month.
+      expect(
+        find.byKey(
+          ValueKey('print-preview-month-grid-day-${_dateKey(lastDay.date)}'),
         ),
-      ),
-      findsNothing,
-    );
-  });
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          ValueKey('print-preview-month-grid-filler-${_dateKey(lastDay.date)}'),
+        ),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('Output detail toggles affect month grid activity details',
-      (WidgetTester tester) async {
+  testWidgets('Output detail toggles affect month grid activity details', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -3794,9 +3897,7 @@ void main() {
     plannedActivity.locked = true;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
+      MaterialApp(home: PrintPreviewScreen(appState: appState)),
     );
 
     expect(find.textContaining(plannedActivity.category), findsWidgets);
@@ -3820,235 +3921,239 @@ void main() {
   });
 
   testWidgets(
-      'Print preview does not regenerate an already-generated month range '
-      'on open', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-    final daysBefore = List<DayPlan>.from(appState.generatedRange.days);
+    'Print preview does not regenerate an already-generated month range '
+    'on open',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+      final daysBefore = List<DayPlan>.from(appState.generatedRange.days);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+      await tester.pump();
 
-    expect(appState.generatedRange.days.length, daysBefore.length);
-    expect(
-      appState.generatedRange.days.first.date,
-      daysBefore.first.date,
-    );
-    expect(appState.generatedRange.days.last.date, daysBefore.last.date);
-  });
+      expect(appState.generatedRange.days.length, daysBefore.length);
+      expect(appState.generatedRange.days.first.date, daysBefore.first.date);
+      expect(appState.generatedRange.days.last.date, daysBefore.last.date);
+    },
+  );
 
   testWidgets(
-      'Print preview keeps printing the visible week for 2-week view mode',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.twoWeek);
+    'Print preview keeps printing the visible week for 2-week view mode',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.twoWeek);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PrintPreviewScreen(appState: appState),
-      ),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
 
-    expect(find.text('2-week view'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('print-preview-month-grid')),
-      findsNothing,
-    );
-    for (final day in appState.weekPlan) {
-      expect(find.text(day.fullLabel), findsOneWidget);
-    }
-  });
-
-  testWidgets(
-      'Print preview shows a 2-week visible-week clarification note only '
-      'in 2-week view', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.twoWeek);
-
-    await tester.pumpWidget(
-      MaterialApp(home: PrintPreviewScreen(appState: appState)),
-    );
-    expect(
-      find.byKey(const ValueKey('print-preview-two-week-note')),
-      findsOneWidget,
-    );
-
-    appState.setViewMode(RangeType.week);
-    await tester.pumpWidget(
-      MaterialApp(home: PrintPreviewScreen(appState: appState)),
-    );
-    expect(
-      find.byKey(const ValueKey('print-preview-two-week-note')),
-      findsNothing,
-    );
-  });
+      expect(find.text('2-week view'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('print-preview-month-grid')),
+        findsNothing,
+      );
+      for (final day in appState.weekPlan) {
+        expect(find.text(day.fullLabel), findsOneWidget);
+      }
+    },
+  );
 
   testWidgets(
-      'Print preview month grid shows a month label on the first generated '
-      "date even when it isn't the 1st, and keeps the day number visible",
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final rangeStart = DateTime(2026, 6, 20);
-    final savedState = SavedState(
-      activities: const [],
-      seed: 0,
-      updatedAtMillis: 1,
-      rangeType: RangeType.month,
-      viewMode: RangeType.month,
-      rangeStart: rangeStart,
-      enabledMap: const {},
-      checkinMap: const {},
-      lockedMap: const {},
-    );
-    final appState = AppState(activities: const [], savedState: savedState);
+    'Print preview shows a 2-week visible-week clarification note only '
+    'in 2-week view',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.twoWeek);
 
-    await tester.pumpWidget(
-      MaterialApp(home: PrintPreviewScreen(appState: appState)),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+      expect(
+        find.byKey(const ValueKey('print-preview-two-week-note')),
+        findsOneWidget,
+      );
 
-    final labelFinder = find.byKey(
-      ValueKey('print-preview-month-grid-month-label-${_dateKey(rangeStart)}'),
-    );
-    expect(labelFinder, findsOneWidget);
-    expect(tester.widget<Text>(labelFinder).data, 'Jun');
-
-    final dayNumberFinder = find.byKey(
-      ValueKey('print-preview-month-grid-day-number-${_dateKey(rangeStart)}'),
-    );
-    expect(dayNumberFinder, findsOneWidget);
-    expect(tester.widget<Text>(dayNumberFinder).data, '20');
-  });
+      appState.setViewMode(RangeType.week);
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+      expect(
+        find.byKey(const ValueKey('print-preview-two-week-note')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets(
-      'Print preview month grid shows a month label on the 1st of a new '
-      'month inside the range, and keeps the day number visible',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final rangeStart = DateTime(2026, 6, 20);
-    final julyFirst = DateTime(2026, 7, 1);
-    final midRangeDate = DateTime(2026, 6, 21);
-    final savedState = SavedState(
-      activities: const [],
-      seed: 0,
-      updatedAtMillis: 1,
-      rangeType: RangeType.month,
-      viewMode: RangeType.month,
-      rangeStart: rangeStart,
-      enabledMap: const {},
-      checkinMap: const {},
-      lockedMap: const {},
-    );
-    final appState = AppState(activities: const [], savedState: savedState);
+    'Print preview month grid shows a month label on the first generated '
+    "date even when it isn't the 1st, and keeps the day number visible",
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final rangeStart = DateTime(2026, 6, 20);
+      final savedState = SavedState(
+        activities: const [],
+        seed: 0,
+        updatedAtMillis: 1,
+        rangeType: RangeType.month,
+        viewMode: RangeType.month,
+        rangeStart: rangeStart,
+        enabledMap: const {},
+        checkinMap: const {},
+        lockedMap: const {},
+      );
+      final appState = AppState(activities: const [], savedState: savedState);
 
-    await tester.pumpWidget(
-      MaterialApp(home: PrintPreviewScreen(appState: appState)),
-    );
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
 
-    final labelFinder = find.byKey(
-      ValueKey('print-preview-month-grid-month-label-${_dateKey(julyFirst)}'),
-    );
-    expect(labelFinder, findsOneWidget);
-    expect(tester.widget<Text>(labelFinder).data, 'Jul');
-
-    final dayNumberFinder = find.byKey(
-      ValueKey('print-preview-month-grid-day-number-${_dateKey(julyFirst)}'),
-    );
-    expect(dayNumberFinder, findsOneWidget);
-    expect(tester.widget<Text>(dayNumberFinder).data, '1');
-
-    // A day that's neither the range start nor the 1st of a month shows no
-    // label, but its day number stays visible.
-    expect(
-      find.byKey(
+      final labelFinder = find.byKey(
         ValueKey(
-          'print-preview-month-grid-month-label-${_dateKey(midRangeDate)}',
+          'print-preview-month-grid-month-label-${_dateKey(rangeStart)}',
         ),
-      ),
-      findsNothing,
-    );
-    expect(
-      tester
-          .widget<Text>(
-            find.byKey(
-              ValueKey(
-                'print-preview-month-grid-day-number-'
-                '${_dateKey(midRangeDate)}',
+      );
+      expect(labelFinder, findsOneWidget);
+      expect(tester.widget<Text>(labelFinder).data, 'Jun');
+
+      final dayNumberFinder = find.byKey(
+        ValueKey('print-preview-month-grid-day-number-${_dateKey(rangeStart)}'),
+      );
+      expect(dayNumberFinder, findsOneWidget);
+      expect(tester.widget<Text>(dayNumberFinder).data, '20');
+    },
+  );
+
+  testWidgets(
+    'Print preview month grid shows a month label on the 1st of a new '
+    'month inside the range, and keeps the day number visible',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final rangeStart = DateTime(2026, 6, 20);
+      final julyFirst = DateTime(2026, 7, 1);
+      final midRangeDate = DateTime(2026, 6, 21);
+      final savedState = SavedState(
+        activities: const [],
+        seed: 0,
+        updatedAtMillis: 1,
+        rangeType: RangeType.month,
+        viewMode: RangeType.month,
+        rangeStart: rangeStart,
+        enabledMap: const {},
+        checkinMap: const {},
+        lockedMap: const {},
+      );
+      final appState = AppState(activities: const [], savedState: savedState);
+
+      await tester.pumpWidget(
+        MaterialApp(home: PrintPreviewScreen(appState: appState)),
+      );
+
+      final labelFinder = find.byKey(
+        ValueKey('print-preview-month-grid-month-label-${_dateKey(julyFirst)}'),
+      );
+      expect(labelFinder, findsOneWidget);
+      expect(tester.widget<Text>(labelFinder).data, 'Jul');
+
+      final dayNumberFinder = find.byKey(
+        ValueKey('print-preview-month-grid-day-number-${_dateKey(julyFirst)}'),
+      );
+      expect(dayNumberFinder, findsOneWidget);
+      expect(tester.widget<Text>(dayNumberFinder).data, '1');
+
+      // A day that's neither the range start nor the 1st of a month shows no
+      // label, but its day number stays visible.
+      expect(
+        find.byKey(
+          ValueKey(
+            'print-preview-month-grid-month-label-${_dateKey(midRangeDate)}',
+          ),
+        ),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                ValueKey(
+                  'print-preview-month-grid-day-number-'
+                  '${_dateKey(midRangeDate)}',
+                ),
               ),
-            ),
-          )
-          .data,
-      '21',
-    );
-  });
+            )
+            .data,
+        '21',
+      );
+    },
+  );
 
-  test('Publishing metadata enables disables regenerates and persists',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+  test(
+    'Publishing metadata enables disables regenerates and persists',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    expect(appState.feedEnabled, isFalse);
-    expect(appState.isPublished, isFalse);
-    expect(appState.feedToken, isNull);
+      expect(appState.feedEnabled, isFalse);
+      expect(appState.isPublished, isFalse);
+      expect(appState.feedToken, isNull);
 
-    appState.setFeedEnabled(true);
+      appState.setFeedEnabled(true);
 
-    final firstToken = appState.feedToken;
-    expect(appState.feedEnabled, isTrue);
-    expect(appState.isPublished, isTrue);
-    expect(firstToken, isNotNull);
-    expect(firstToken!.length, greaterThanOrEqualTo(32));
-    expect(appState.feedCreatedAtMillis, isNotNull);
-    expect(appState.feedUpdatedAtMillis, isNotNull);
+      final firstToken = appState.feedToken;
+      expect(appState.feedEnabled, isTrue);
+      expect(appState.isPublished, isTrue);
+      expect(firstToken, isNotNull);
+      expect(firstToken!.length, greaterThanOrEqualTo(32));
+      expect(appState.feedCreatedAtMillis, isNotNull);
+      expect(appState.feedUpdatedAtMillis, isNotNull);
 
-    appState.setFeedEnabled(false);
+      appState.setFeedEnabled(false);
 
-    expect(appState.feedEnabled, isFalse);
-    expect(appState.feedToken, firstToken);
+      expect(appState.feedEnabled, isFalse);
+      expect(appState.feedToken, firstToken);
 
-    var saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.feedEnabled, isFalse);
-    expect(saved.feedToken, firstToken);
-    expect(saved.feedCreatedAtMillis, appState.feedCreatedAtMillis);
+      var saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.feedEnabled, isFalse);
+      expect(saved.feedToken, firstToken);
+      expect(saved.feedCreatedAtMillis, appState.feedCreatedAtMillis);
 
-    appState.setFeedEnabled(true);
-    expect(appState.feedToken, firstToken);
+      appState.setFeedEnabled(true);
+      expect(appState.feedToken, firstToken);
 
-    appState.regenerateFeedToken();
+      appState.regenerateFeedToken();
 
-    final regeneratedToken = appState.feedToken;
-    expect(appState.feedEnabled, isTrue);
-    expect(regeneratedToken, isNot(firstToken));
-    expect(appState.feedRevokedAtMillis, isNotNull);
+      final regeneratedToken = appState.feedToken;
+      expect(appState.feedEnabled, isTrue);
+      expect(regeneratedToken, isNot(firstToken));
+      expect(appState.feedRevokedAtMillis, isNotNull);
 
-    saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.feedEnabled, isTrue);
-    expect(saved.feedToken, regeneratedToken);
-    expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
+      saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.feedEnabled, isTrue);
+      expect(saved.feedToken, regeneratedToken);
+      expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
 
-    appState.revokeFeedToken();
+      appState.revokeFeedToken();
 
-    expect(appState.feedEnabled, isFalse);
-    expect(appState.feedToken, isNull);
-    expect(appState.feedRevokedAtMillis, isNotNull);
+      expect(appState.feedEnabled, isFalse);
+      expect(appState.feedToken, isNull);
+      expect(appState.feedRevokedAtMillis, isNotNull);
 
-    saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.feedEnabled, isFalse);
-    expect(saved.feedToken, isNull);
-    expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
-  });
+      saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.feedEnabled, isFalse);
+      expect(saved.feedToken, isNull);
+      expect(saved.feedRevokedAtMillis, appState.feedRevokedAtMillis);
+    },
+  );
 
   test('SavedState maps publishing metadata for Firestore sync', () {
     const state = SavedState(
@@ -4087,22 +4192,19 @@ void main() {
 
   test('CalendarMetadata parses publishing metadata', () {
     final fallback = FirestoreSyncService.defaultMetadata('user-1');
-    final metadata = CalendarMetadata.fromMap(
-      {
-        'calendarId': 'cal-1',
-        'title': 'Weekend ideas',
-        'ownerUserId': 'user-1',
-        'memberUserIds': ['user-1'],
-        'createdAtMillis': 100,
-        'updatedAtMillis': 200,
-        'feedEnabled': true,
-        'feedToken': 'token-1',
-        'feedCreatedAtMillis': 110,
-        'feedUpdatedAtMillis': 210,
-        'feedRevokedAtMillis': 190,
-      },
-      fallback: fallback,
-    );
+    final metadata = CalendarMetadata.fromMap({
+      'calendarId': 'cal-1',
+      'title': 'Weekend ideas',
+      'ownerUserId': 'user-1',
+      'memberUserIds': ['user-1'],
+      'createdAtMillis': 100,
+      'updatedAtMillis': 200,
+      'feedEnabled': true,
+      'feedToken': 'token-1',
+      'feedCreatedAtMillis': 110,
+      'feedUpdatedAtMillis': 210,
+      'feedRevokedAtMillis': 190,
+    }, fallback: fallback);
 
     expect(metadata.feedEnabled, isTrue);
     expect(metadata.feedToken, 'token-1');
@@ -4132,38 +4234,41 @@ void main() {
   });
 
   test(
-      'Cached ICS text updates when calendar title, plan, and feed token change',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+    'Cached ICS text updates when calendar title, plan, and feed token change',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    appState.setFeedEnabled(true);
-    final firstText = appState.cachedIcsText;
-    final firstUpdatedAt = appState.cachedIcsUpdatedAtMillis;
-    expect(firstText, isNot(contains('Weekend Crew')));
+      appState.setFeedEnabled(true);
+      final firstText = appState.cachedIcsText;
+      final firstUpdatedAt = appState.cachedIcsUpdatedAtMillis;
+      expect(firstText, isNot(contains('Weekend Crew')));
 
-    appState.confirmCalendarTitle('Weekend Crew');
+      appState.confirmCalendarTitle('Weekend Crew');
 
-    expect(appState.cachedIcsText, isNot(firstText));
-    expect(appState.cachedIcsText, contains('Weekend Crew'));
-    expect(appState.cachedIcsUpdatedAtMillis,
-        greaterThanOrEqualTo(firstUpdatedAt!));
+      expect(appState.cachedIcsText, isNot(firstText));
+      expect(appState.cachedIcsText, contains('Weekend Crew'));
+      expect(
+        appState.cachedIcsUpdatedAtMillis,
+        greaterThanOrEqualTo(firstUpdatedAt!),
+      );
 
-    final beforeRegenerate = appState.cachedIcsText;
-    appState.regenerate();
-    expect(appState.cachedIcsText, isNotNull);
+      final beforeRegenerate = appState.cachedIcsText;
+      appState.regenerate();
+      expect(appState.cachedIcsText, isNotNull);
 
-    final beforeTokenChange = appState.cachedIcsText;
-    appState.regenerateFeedToken();
-    expect(appState.cachedIcsText, isNotNull);
-    expect(appState.cachedIcsUpdatedAtMillis, isNotNull);
+      final beforeTokenChange = appState.cachedIcsText;
+      appState.regenerateFeedToken();
+      expect(appState.cachedIcsText, isNotNull);
+      expect(appState.cachedIcsUpdatedAtMillis, isNotNull);
 
-    // Sanity: every recompute keeps producing a valid calendar envelope,
-    // even when the rendered text happens to match the prior snapshot.
-    expect(beforeRegenerate, contains('BEGIN:VCALENDAR'));
-    expect(beforeTokenChange, contains('BEGIN:VCALENDAR'));
-  });
+      // Sanity: every recompute keeps producing a valid calendar envelope,
+      // even when the rendered text happens to match the prior snapshot.
+      expect(beforeRegenerate, contains('BEGIN:VCALENDAR'));
+      expect(beforeTokenChange, contains('BEGIN:VCALENDAR'));
+    },
+  );
 
   test('Disabling the feed clears cached ICS text', () async {
     SharedPreferences.setMockInitialValues({});
@@ -4183,8 +4288,7 @@ void main() {
     expect(saved.cachedIcsUpdatedAtMillis, isNull);
   });
 
-  test(
-      'refreshPublishedFeedNow rebuilds and persists the cached ICS feed '
+  test('refreshPublishedFeedNow rebuilds and persists the cached ICS feed '
       'locally when not signed in', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -4208,49 +4312,52 @@ void main() {
     expect(saved.cachedIcsUpdatedAtMillis, appState.cachedIcsUpdatedAtMillis);
   });
 
-  test('refreshPublishedFeedNow is a no-op when the feed is disabled',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+  test(
+    'refreshPublishedFeedNow is a no-op when the feed is disabled',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    // Never enabled: no token exists either.
-    expect(
-      await appState.refreshPublishedFeedNow(),
-      FeedRefreshResult.unavailable,
-    );
-    expect(appState.cachedIcsText, isNull);
+      // Never enabled: no token exists either.
+      expect(
+        await appState.refreshPublishedFeedNow(),
+        FeedRefreshResult.unavailable,
+      );
+      expect(appState.cachedIcsText, isNull);
 
-    // Enabled then disabled: token still exists, but the feed is off.
-    appState.setFeedEnabled(true);
-    appState.setFeedEnabled(false);
-    expect(appState.feedToken, isNotNull);
+      // Enabled then disabled: token still exists, but the feed is off.
+      appState.setFeedEnabled(true);
+      appState.setFeedEnabled(false);
+      expect(appState.feedToken, isNotNull);
 
-    expect(
-      await appState.refreshPublishedFeedNow(),
-      FeedRefreshResult.unavailable,
-    );
-    expect(appState.cachedIcsText, isNull);
-  });
-
-  test('refreshPublishedFeedNow is a no-op once the token is revoked',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-
-    appState.setFeedEnabled(true);
-    appState.revokeFeedToken();
-    expect(appState.feedToken, isNull);
-
-    expect(
-      await appState.refreshPublishedFeedNow(),
-      FeedRefreshResult.unavailable,
-    );
-  });
+      expect(
+        await appState.refreshPublishedFeedNow(),
+        FeedRefreshResult.unavailable,
+      );
+      expect(appState.cachedIcsText, isNull);
+    },
+  );
 
   test(
-      'refreshPublishedFeedNow awaits the Firestore save before resolving, '
+    'refreshPublishedFeedNow is a no-op once the token is revoked',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+
+      appState.setFeedEnabled(true);
+      appState.revokeFeedToken();
+      expect(appState.feedToken, isNull);
+
+      expect(
+        await appState.refreshPublishedFeedNow(),
+        FeedRefreshResult.unavailable,
+      );
+    },
+  );
+
+  test('refreshPublishedFeedNow awaits the Firestore save before resolving, '
       'and only reports success once it actually completes', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -4304,14 +4411,14 @@ void main() {
     expect(result, FeedRefreshResult.success);
     // The SavedState actually sent to Firestore must be the live, freshly
     // rebuilt ICS - not a stale snapshot from before the refresh ran.
-    expect(capturedRefreshStates.single.cachedIcsText,
-        appState.cachedIcsText);
-    expect(capturedRefreshStates.single.cachedIcsUpdatedAtMillis,
-        appState.cachedIcsUpdatedAtMillis);
+    expect(capturedRefreshStates.single.cachedIcsText, appState.cachedIcsText);
+    expect(
+      capturedRefreshStates.single.cachedIcsUpdatedAtMillis,
+      appState.cachedIcsUpdatedAtMillis,
+    );
   });
 
-  test(
-      'refreshPublishedFeedNow reports syncFailed (not success) when the '
+  test('refreshPublishedFeedNow reports syncFailed (not success) when the '
       'Firestore save fails', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -4351,8 +4458,7 @@ void main() {
     );
   });
 
-  test(
-      'refreshPublishedFeedNow saves to the currently selected calendarId '
+  test('refreshPublishedFeedNow saves to the currently selected calendarId '
       "(and that calendar's own feedToken), not a stale or default one, "
       'after switching calendars', () async {
     SharedPreferences.setMockInitialValues({});
@@ -4407,7 +4513,8 @@ void main() {
     );
 
     final initialSyncSaveDone = Completer<void>();
-    final saveCalls = <({String userId, String calendarId, SavedState state})>[];
+    final saveCalls =
+        <({String userId, String calendarId, SavedState state})>[];
     final appState = AppState(
       activities: PlannerService.defaultActivities,
       loadAccessibleCalendars: (_) async => [defaultCalendar, otherCalendar],
@@ -4497,111 +4604,120 @@ void main() {
     expect(restored.toMap()['social'], 'together');
   });
 
-  test('Activity mustIncludeInPlans defaults to false for new and legacy data',
-      () {
-    final activity = Activity(
-      id: 'must-defaults',
-      title: 'Eat Together',
-      category: 'Couple time',
-      durationMinutes: 30,
-    );
-    expect(activity.mustIncludeInPlans, isFalse);
+  test(
+    'Activity mustIncludeInPlans defaults to false for new and legacy data',
+    () {
+      final activity = Activity(
+        id: 'must-defaults',
+        title: 'Eat Together',
+        category: 'Couple time',
+        durationMinutes: 30,
+      );
+      expect(activity.mustIncludeInPlans, isFalse);
 
-    final legacyMap = activity.toMap()..remove('mustIncludeInPlans');
-    final legacyRestored = Activity.fromMap(legacyMap);
-    expect(legacyRestored.mustIncludeInPlans, isFalse);
-  });
+      final legacyMap = activity.toMap()..remove('mustIncludeInPlans');
+      final legacyRestored = Activity.fromMap(legacyMap);
+      expect(legacyRestored.mustIncludeInPlans, isFalse);
+    },
+  );
 
-  test('Activity mustIncludeInPlans survives copy(), toMap(), and fromMap()',
-      () {
-    final activity = Activity(
-      id: 'must-roundtrip',
-      title: 'Eat Together',
-      category: 'Couple time',
-      durationMinutes: 30,
-      mustIncludeInPlans: true,
-    );
+  test(
+    'Activity mustIncludeInPlans survives copy(), toMap(), and fromMap()',
+    () {
+      final activity = Activity(
+        id: 'must-roundtrip',
+        title: 'Eat Together',
+        category: 'Couple time',
+        durationMinutes: 30,
+        mustIncludeInPlans: true,
+      );
 
-    expect(activity.copy().mustIncludeInPlans, isTrue);
-    expect(activity.toMap()['mustIncludeInPlans'], isTrue);
+      expect(activity.copy().mustIncludeInPlans, isTrue);
+      expect(activity.toMap()['mustIncludeInPlans'], isTrue);
 
-    final restored = Activity.fromMap(activity.toMap());
-    expect(restored.mustIncludeInPlans, isTrue);
-  });
+      final restored = Activity.fromMap(activity.toMap());
+      expect(restored.mustIncludeInPlans, isTrue);
+    },
+  );
 
-  test('AppState uses dimension defaults and persists edited dimensions',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: const []);
-    appState.setDefaultDifficulty(4);
-    appState.setDefaultEnergy('high');
-    appState.setDefaultSocial('group');
+  test(
+    'AppState uses dimension defaults and persists edited dimensions',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: const []);
+      appState.setDefaultDifficulty(4);
+      appState.setDefaultEnergy('high');
+      appState.setDefaultSocial('group');
 
-    appState.addActivity(
-      title: 'Gallery visit',
-      category: 'Creative',
-      durationMinutes: 60,
-      preferredTime: 'afternoon',
-      maxPerWeek: 1,
-      allowedWeekdays: Activity.allWeekdays,
-      noConsecutiveDays: false,
-      enabled: true,
-    );
+      appState.addActivity(
+        title: 'Gallery visit',
+        category: 'Creative',
+        durationMinutes: 60,
+        preferredTime: 'afternoon',
+        maxPerWeek: 1,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+      );
 
-    final id = appState.activities.single.id;
-    expect(appState.activities.single.difficulty, 4);
-    expect(appState.activities.single.energy, 'high');
-    expect(appState.activities.single.social, 'group');
+      final id = appState.activities.single.id;
+      expect(appState.activities.single.difficulty, 4);
+      expect(appState.activities.single.energy, 'high');
+      expect(appState.activities.single.social, 'group');
 
-    appState.updateActivity(
-      id,
-      title: 'Quiet gallery visit',
-      category: 'Creative',
-      durationMinutes: 75,
-      preferredTime: 'morning',
-      difficulty: 2,
-      energy: 'low',
-      social: 'solo',
-      maxPerWeek: 1,
-      allowedWeekdays: [6],
-      noConsecutiveDays: false,
-      enabled: true,
-    );
+      appState.updateActivity(
+        id,
+        title: 'Quiet gallery visit',
+        category: 'Creative',
+        durationMinutes: 75,
+        preferredTime: 'morning',
+        difficulty: 2,
+        energy: 'low',
+        social: 'solo',
+        maxPerWeek: 1,
+        allowedWeekdays: [6],
+        noConsecutiveDays: false,
+        enabled: true,
+      );
 
-    final saved = PersistenceService.load(const []);
-    expect(saved.activities.single.title, 'Quiet gallery visit');
-    expect(saved.activities.single.difficulty, 2);
-    expect(saved.activities.single.energy, 'low');
-    expect(saved.activities.single.social, 'solo');
-  });
+      final saved = PersistenceService.load(const []);
+      expect(saved.activities.single.title, 'Quiet gallery visit');
+      expect(saved.activities.single.difficulty, 2);
+      expect(saved.activities.single.energy, 'low');
+      expect(saved.activities.single.social, 'solo');
+    },
+  );
 
-  testWidgets('Activity form hides dimension fields when settings are disabled',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: const []);
+  testWidgets(
+    'Activity form hides dimension fields when settings are disabled',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: const []);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: ActivitiesScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: ActivitiesScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Add'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Planning dimensions'), findsNothing);
-    expect(find.text('Difficulty'), findsNothing);
-    expect(find.text('Energy'), findsNothing);
-    expect(find.text('Social'), findsNothing);
-  });
+      expect(find.text('Planning dimensions'), findsNothing);
+      expect(find.text('Difficulty'), findsNothing);
+      expect(find.text('Energy'), findsNothing);
+      expect(find.text('Social'), findsNothing);
+    },
+  );
 
-  testWidgets('Activity form uses enabled dimension defaults when adding',
-      (WidgetTester tester) async {
+  testWidgets('Activity form uses enabled dimension defaults when adding', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -4643,8 +4759,9 @@ void main() {
     expect(appState.activities.single.social, 'group');
   });
 
-  testWidgets('Activity form shows Must include in plans toggle and saves it',
-      (WidgetTester tester) async {
+  testWidgets('Activity form shows Must include in plans toggle and saves it', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -4683,48 +4800,51 @@ void main() {
   });
 
   testWidgets(
-      'Activity form clamps max per week to the selected allowed days on '
-      'save', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: const []);
+    'Activity form clamps max per week to the selected allowed days on '
+    'save',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: const []);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: const Scaffold(body: ActivitiesScreen()),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: const Scaffold(body: ActivitiesScreen()),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('Add'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField).first, 'Eat Together');
+      await tester.enterText(find.byType(TextFormField).first, 'Eat Together');
 
-    // Weekday cells render in weekday order (M T W T F S S); deselect
-    // Tuesday, Thursday, Saturday, Sunday so only Mon/Wed/Fri (3 days)
-    // remain allowed.
-    await tester.tap(find.text('T').at(0));
-    await tester.tap(find.text('T').at(1));
-    await tester.tap(find.text('S').at(0));
-    await tester.tap(find.text('S').at(1));
-    await tester.pumpAndSettle();
+      // Weekday cells render in weekday order (M T W T F S S); deselect
+      // Tuesday, Thursday, Saturday, Sunday so only Mon/Wed/Fri (3 days)
+      // remain allowed.
+      await tester.tap(find.text('T').at(0));
+      await tester.tap(find.text('T').at(1));
+      await tester.tap(find.text('S').at(0));
+      await tester.tap(find.text('S').at(1));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Clamped to 3 based on allowed days'), findsOneWidget);
+      expect(find.text('Clamped to 3 based on allowed days'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).at(2), '6');
-    await tester.ensureVisible(find.text('Save'));
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).at(2), '6');
+      await tester.ensureVisible(find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
 
-    expect(appState.activities.single.maxPerWeek, 3);
-    expect(appState.activities.single.allowedWeekdays, [1, 3, 5]);
-  });
+      expect(appState.activities.single.maxPerWeek, 3);
+      expect(appState.activities.single.allowedWeekdays, [1, 3, 5]);
+    },
+  );
 
-  testWidgets('Activity cards show enabled dimension chips',
-      (WidgetTester tester) async {
+  testWidgets('Activity cards show enabled dimension chips', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -4765,8 +4885,9 @@ void main() {
     expect(find.text('Together'), findsOneWidget);
   });
 
-  testWidgets('Edit activity form shows saved dimension values',
-      (WidgetTester tester) async {
+  testWidgets('Edit activity form shows saved dimension values', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(
@@ -4804,8 +4925,9 @@ void main() {
     expect(find.text('Solo'), findsWidgets);
   });
 
-  testWidgets('Local-only app confirms display name before onboarding',
-      (WidgetTester tester) async {
+  testWidgets('Local-only app confirms display name before onboarding', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -4828,61 +4950,63 @@ void main() {
     expect(find.text('Your calm\nplanning partner'), findsOneWidget);
   });
 
-  test('AppState adds, edits, disables, regenerates, and persists activities',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: const []);
+  test(
+    'AppState adds, edits, disables, regenerates, and persists activities',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: const []);
 
-    appState.addActivity(
-      title: 'Sunrise walk',
-      category: 'Outside',
-      durationMinutes: 30,
-      preferredTime: 'morning',
-      maxPerWeek: 1,
-      allowedWeekdays: Activity.allWeekdays,
-      noConsecutiveDays: false,
-      enabled: true,
-    );
+      appState.addActivity(
+        title: 'Sunrise walk',
+        category: 'Outside',
+        durationMinutes: 30,
+        preferredTime: 'morning',
+        maxPerWeek: 1,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+      );
 
-    expect(appState.activities, hasLength(1));
-    expect(appState.activities.single.title, 'Sunrise walk');
+      expect(appState.activities, hasLength(1));
+      expect(appState.activities.single.title, 'Sunrise walk');
 
-    appState.regenerate();
-    expect(
-      appState.weekPlan.expand((day) => day.activities),
-      anyElement((planned) => planned.activity.title == 'Sunrise walk'),
-    );
+      appState.regenerate();
+      expect(
+        appState.weekPlan.expand((day) => day.activities),
+        anyElement((planned) => planned.activity.title == 'Sunrise walk'),
+      );
 
-    final id = appState.activities.single.id;
-    appState.updateActivity(
-      id,
-      title: 'Edited walk',
-      category: 'Health / movement',
-      durationMinutes: 45,
-      preferredTime: 'afternoon',
-      maxPerWeek: 1,
-      allowedWeekdays: [1, 3, 5],
-      noConsecutiveDays: true,
-      enabled: false,
-    );
+      final id = appState.activities.single.id;
+      appState.updateActivity(
+        id,
+        title: 'Edited walk',
+        category: 'Health / movement',
+        durationMinutes: 45,
+        preferredTime: 'afternoon',
+        maxPerWeek: 1,
+        allowedWeekdays: [1, 3, 5],
+        noConsecutiveDays: true,
+        enabled: false,
+      );
 
-    expect(appState.activities.single.title, 'Edited walk');
-    expect(appState.activities.single.enabled, isFalse);
+      expect(appState.activities.single.title, 'Edited walk');
+      expect(appState.activities.single.enabled, isFalse);
 
-    appState.regenerate();
-    expect(
-      appState.weekPlan.expand((day) => day.activities),
-      isNot(anyElement((planned) => planned.activity.id == id)),
-    );
+      appState.regenerate();
+      expect(
+        appState.weekPlan.expand((day) => day.activities),
+        isNot(anyElement((planned) => planned.activity.id == id)),
+      );
 
-    final saved = PersistenceService.load(const []);
-    expect(saved.activities.single.title, 'Edited walk');
-    expect(saved.activities.single.enabled, isFalse);
-    expect(saved.activities.single.durationMinutes, 45);
-    expect(saved.activities.single.allowedWeekdays, [1, 3, 5]);
-    expect(saved.activities.single.noConsecutiveDays, isTrue);
-  });
+      final saved = PersistenceService.load(const []);
+      expect(saved.activities.single.title, 'Edited walk');
+      expect(saved.activities.single.enabled, isFalse);
+      expect(saved.activities.single.durationMinutes, 45);
+      expect(saved.activities.single.allowedWeekdays, [1, 3, 5]);
+      expect(saved.activities.single.noConsecutiveDays, isTrue);
+    },
+  );
 
   test('Planner respects max per week and allowed weekdays', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
@@ -4914,7 +5038,8 @@ void main() {
     expect(planned, isNotEmpty);
     expect(
       planned.every(
-          (plannedActivity) => plannedActivity.activity.id == activity.id),
+        (plannedActivity) => plannedActivity.activity.id == activity.id,
+      ),
       isTrue,
     );
     expect(
@@ -4925,40 +5050,41 @@ void main() {
     );
   });
 
-  test('Planner avoids consecutive days when another placement is possible',
-      () {
-    final weekStart = DateTime(2026, 6, 15); // Monday
-    final activity = Activity(
-      id: 'rule-2',
-      title: 'Stretch',
-      category: 'Rest',
-      durationMinutes: 20,
-      maxPerWeek: 3,
-      noConsecutiveDays: true,
-    );
-
-    final plan = PlannerService.generate(
-      weekStart: weekStart,
-      pool: [activity],
-      seed: 4,
-    );
-    final days = <int>[];
-    for (var i = 0; i < plan.length; i++) {
-      if (plan[i]
-          .activities
-          .any((planned) => planned.activity.id == activity.id)) {
-        days.add(i);
-      }
-    }
-
-    expect(days.length, lessThanOrEqualTo(3));
-    for (var i = 1; i < days.length; i++) {
-      expect(days[i] - days[i - 1], greaterThan(1));
-    }
-  });
-
   test(
-      'Planner respects preferredTime for Outside/Rest activities instead '
+    'Planner avoids consecutive days when another placement is possible',
+    () {
+      final weekStart = DateTime(2026, 6, 15); // Monday
+      final activity = Activity(
+        id: 'rule-2',
+        title: 'Stretch',
+        category: 'Rest',
+        durationMinutes: 20,
+        maxPerWeek: 3,
+        noConsecutiveDays: true,
+      );
+
+      final plan = PlannerService.generate(
+        weekStart: weekStart,
+        pool: [activity],
+        seed: 4,
+      );
+      final days = <int>[];
+      for (var i = 0; i < plan.length; i++) {
+        if (plan[i].activities.any(
+          (planned) => planned.activity.id == activity.id,
+        )) {
+          days.add(i);
+        }
+      }
+
+      expect(days.length, lessThanOrEqualTo(3));
+      for (var i = 1; i < days.length; i++) {
+        expect(days[i] - days[i - 1], greaterThan(1));
+      }
+    },
+  );
+
+  test('Planner respects preferredTime for Outside/Rest activities instead '
       'of always defaulting them to a morning slot', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final outsideEvening = Activity(
@@ -5006,9 +5132,8 @@ void main() {
     );
     final planned = plan.expand((day) => day.activities).toList();
 
-    String timeSlotFor(String activityId) => planned
-        .firstWhere((p) => p.activity.id == activityId)
-        .timeSlot;
+    String timeSlotFor(String activityId) =>
+        planned.firstWhere((p) => p.activity.id == activityId).timeSlot;
 
     expect(timeSlotFor('outside-evening'), '7:00 PM');
     expect(timeSlotFor('outside-afternoon'), '3:00 PM');
@@ -5042,8 +5167,7 @@ void main() {
     expect(result.hasBlockedActivitySlots, isTrue);
   });
 
-  test(
-      'Must-include activity with 6 allowed days and maxPerWeek 6 appears 6 '
+  test('Must-include activity with 6 allowed days and maxPerWeek 6 appears 6 '
       'times when capacity allows', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5070,8 +5194,9 @@ void main() {
     expect(occurrences, 6);
 
     for (final day in plan) {
-      final countToday =
-          day.activities.where((a) => a.activity.id == activity.id).length;
+      final countToday = day.activities
+          .where((a) => a.activity.id == activity.id)
+          .length;
       expect(countToday, lessThanOrEqualTo(1));
       if (countToday == 1) {
         expect(day.date.weekday, isNot(DateTime.sunday));
@@ -5079,8 +5204,7 @@ void main() {
     }
   });
 
-  test(
-      'Must-include activity with 6 allowed days and maxPerWeek 5 appears 5 '
+  test('Must-include activity with 6 allowed days and maxPerWeek 5 appears 5 '
       'times, deterministically selected from the allowed days', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
 
@@ -5100,9 +5224,7 @@ void main() {
         seed: seed,
       );
       return plan
-          .where(
-            (day) => day.activities.any((a) => a.activity.id == 'must-5'),
-          )
+          .where((day) => day.activities.any((a) => a.activity.id == 'must-5'))
           .map((day) => day.date.weekday)
           .toList()
         ..sort();
@@ -5120,8 +5242,7 @@ void main() {
     expect(run1.contains(DateTime.sunday), isFalse);
   });
 
-  test(
-      'Must-include activity is scheduled first but does not crowd out '
+  test('Must-include activity is scheduled first but does not crowd out '
       'flexible variety', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final mustActivity = Activity(
@@ -5153,10 +5274,12 @@ void main() {
     );
 
     final allPlanned = plan.expand((day) => day.activities).toList();
-    final mustCount =
-        allPlanned.where((a) => a.activity.id == mustActivity.id).length;
-    final flexCount =
-        allPlanned.where((a) => a.activity.id.startsWith('flex-')).length;
+    final mustCount = allPlanned
+        .where((a) => a.activity.id == mustActivity.id)
+        .length;
+    final flexCount = allPlanned
+        .where((a) => a.activity.id.startsWith('flex-'))
+        .length;
 
     expect(mustCount, 7); // must-include still claims every allowed day
     // Flexible fill still reaches balanced style's full 5-per-week target
@@ -5176,8 +5299,7 @@ void main() {
     }
   });
 
-  test(
-      'Flexible activities are still generated on days that already contain '
+  test('Flexible activities are still generated on days that already contain '
       'a must-include activity', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final must = Activity(
@@ -5219,8 +5341,7 @@ void main() {
     expect(daysWithBoth.length, 7);
   });
 
-  test(
-      'Must-include placements do not change the plan-style target '
+  test('Must-include placements do not change the plan-style target '
       'activity count used for diagnostics', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final flexible = Activity(
@@ -5268,8 +5389,7 @@ void main() {
     expect(withMust.scheduledActivityCount, 14);
   });
 
-  test(
-      'Flexible fill never re-adds a must-include activity on a day beyond '
+  test('Flexible fill never re-adds a must-include activity on a day beyond '
       'its claimed subset', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5367,15 +5487,15 @@ void main() {
         seed: seed,
       );
       for (final day in plan) {
-        final countToday =
-            day.activities.where((a) => a.activity.id == activity.id).length;
+        final countToday = day.activities
+            .where((a) => a.activity.id == activity.id)
+            .length;
         expect(countToday, lessThanOrEqualTo(1));
       }
     }
   });
 
-  test(
-      'noConsecutiveDays does not prevent a must-include activity from '
+  test('noConsecutiveDays does not prevent a must-include activity from '
       'reaching its count when enough allowed days exist', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5405,8 +5525,7 @@ void main() {
     expect(occurrences, 6);
   });
 
-  test(
-      'Planner diagnostics flag a must-include activity that cannot reach '
+  test('Planner diagnostics flag a must-include activity that cannot reach '
       'its max per week', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5429,31 +5548,30 @@ void main() {
     expect(result.mustIncludeShortfallCount, 3);
   });
 
-  test(
-      'Audit reproduction: a 6-day-per-week must-include activity does not '
+  test('Audit reproduction: a 6-day-per-week must-include activity does not '
       'leave most must-claimed days baseline-only when flexible activities '
       'are available', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     Activity must() => Activity(
-          id: 'must-eat-together',
-          title: 'Eat Together',
-          category: 'Couple time',
-          durationMinutes: 30,
-          maxPerWeek: 6,
-          allowedWeekdays: [1, 2, 3, 4, 5, 6],
-          mustIncludeInPlans: true,
-        );
+      id: 'must-eat-together',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+    );
     List<Activity> flexiblePool() => List.generate(
-          6,
-          (i) => Activity(
-            id: 'flex-$i',
-            title: 'Flexible $i',
-            category: 'Outside',
-            durationMinutes: 30,
-            maxPerWeek: 7,
-            allowedWeekdays: Activity.allWeekdays,
-          ),
-        );
+      6,
+      (i) => Activity(
+        id: 'flex-$i',
+        title: 'Flexible $i',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      ),
+    );
 
     for (final style in PlanStyle.values) {
       var mustOnlyDays = 0;
@@ -5466,12 +5584,14 @@ void main() {
           planStyle: style,
         );
         for (final day in plan) {
-          final hasMust =
-              day.activities.any((a) => a.activity.id == 'must-eat-together');
+          final hasMust = day.activities.any(
+            (a) => a.activity.id == 'must-eat-together',
+          );
           if (!hasMust) continue;
           totalDaysWithMust++;
-          final hasFlex =
-              day.activities.any((a) => a.activity.id.startsWith('flex-'));
+          final hasFlex = day.activities.any(
+            (a) => a.activity.id.startsWith('flex-'),
+          );
           if (!hasFlex) mustOnlyDays++;
         }
       }
@@ -5485,8 +5605,7 @@ void main() {
     }
   });
 
-  test(
-      'A must-claimed zero-target rest day still gets at least one '
+  test('A must-claimed zero-target rest day still gets at least one '
       'flexible activity when one is available', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final must = Activity(
@@ -5523,14 +5642,14 @@ void main() {
       expect(
         hasFlex,
         isTrue,
-        reason: 'day ${day.date} has a must-include item but no flexible '
+        reason:
+            'day ${day.date} has a must-include item but no flexible '
             'activity even though one was available',
       );
     }
   });
 
-  test(
-      'Plan-style target activity counts remain unchanged when no '
+  test('Plan-style target activity counts remain unchanged when no '
       'must-include activity is present', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     // Two interchangeable flexible activities so push style's two-per-day
@@ -5538,16 +5657,16 @@ void main() {
     // activity can never fill both slots on the same day - that's the
     // existing same-day dedup rule, unrelated to this fix).
     List<Activity> flexiblePool() => List.generate(
-          2,
-          (i) => Activity(
-            id: 'flex-only-$i',
-            title: 'Flexible pick $i',
-            category: 'Outside',
-            durationMinutes: 30,
-            maxPerWeek: 7,
-            allowedWeekdays: Activity.allWeekdays,
-          ),
-        );
+      2,
+      (i) => Activity(
+        id: 'flex-only-$i',
+        title: 'Flexible pick $i',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      ),
+    );
 
     final expectedTotals = {
       PlanStyle.gentle: 3,
@@ -5567,30 +5686,29 @@ void main() {
     }
   });
 
-  test(
-      'Must-claimed zero-target rest-day flexible fill is deterministic for '
+  test('Must-claimed zero-target rest-day flexible fill is deterministic for '
       'the same seed', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     Activity must() => Activity(
-          id: 'must-deterministic',
-          title: 'Eat Together',
-          category: 'Couple time',
-          durationMinutes: 30,
-          maxPerWeek: 6,
-          allowedWeekdays: [1, 2, 3, 4, 5, 6],
-          mustIncludeInPlans: true,
-        );
+      id: 'must-deterministic',
+      title: 'Eat Together',
+      category: 'Couple time',
+      durationMinutes: 30,
+      maxPerWeek: 6,
+      allowedWeekdays: [1, 2, 3, 4, 5, 6],
+      mustIncludeInPlans: true,
+    );
     List<Activity> flexiblePool() => List.generate(
-          6,
-          (i) => Activity(
-            id: 'flex-$i',
-            title: 'Flexible $i',
-            category: 'Outside',
-            durationMinutes: 30,
-            maxPerWeek: 7,
-            allowedWeekdays: Activity.allWeekdays,
-          ),
-        );
+      6,
+      (i) => Activity(
+        id: 'flex-$i',
+        title: 'Flexible $i',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      ),
+    );
 
     final run1 = PlannerService.generate(
       weekStart: weekStart,
@@ -5608,8 +5726,7 @@ void main() {
     expect(_dayPlanSignature(run1), _dayPlanSignature(run2));
   });
 
-  test(
-      'RangePlannerService week output matches PlannerService for the same '
+  test('RangePlannerService week output matches PlannerService for the same '
       'inputs', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final pool = [
@@ -5637,7 +5754,9 @@ void main() {
 
     expect(viaRange.range.type, RangeType.week);
     expect(
-        _dayPlanSignature(viaRange.range.days), _dayPlanSignature(direct.plan));
+      _dayPlanSignature(viaRange.range.days),
+      _dayPlanSignature(direct.plan),
+    );
     expect(viaRange.targetActivityCount, direct.targetActivityCount);
     expect(viaRange.scheduledActivityCount, direct.scheduledActivityCount);
     expect(viaRange.enabledActivityCount, direct.enabledActivityCount);
@@ -5645,8 +5764,7 @@ void main() {
     expect(viaRange.hasBlockedActivitySlots, direct.hasBlockedActivitySlots);
   });
 
-  test(
-      'RangePlannerService generates a month horizon starting at start, '
+  test('RangePlannerService generates a month horizon starting at start, '
       'not the literal calendar month containing it', () {
     final start = DateTime(2026, 6, 15); // mid-month, not the 1st
     final result = RangePlannerService.generateWithDiagnostics(
@@ -5668,8 +5786,7 @@ void main() {
     }
   });
 
-  test(
-      'RangePlannerService never generates a day before start for any '
+  test('RangePlannerService never generates a day before start for any '
       'preset', () {
     for (final type in RangeType.values) {
       final start = DateTime(2026, 6, 18); // a Thursday, not Monday
@@ -5688,8 +5805,7 @@ void main() {
     }
   });
 
-  test(
-      'RangePlannerService resets max-per-week separately for each week '
+  test('RangePlannerService resets max-per-week separately for each week '
       'in a month range', () {
     final anchor = DateTime(2026, 6, 1); // Monday, start of the month
     final activity = Activity(
@@ -5718,8 +5834,7 @@ void main() {
     expect(occurrenceCount, greaterThan(1));
   });
 
-  test(
-      'RangePlannerService prevents no-consecutive-days across week '
+  test('RangePlannerService prevents no-consecutive-days across week '
       'boundaries within a month range', () {
     final anchor = DateTime(2026, 6, 1); // Monday, start of the month
     final activity = Activity(
@@ -5744,24 +5859,27 @@ void main() {
         pool: [activity],
         seed: seed,
       );
-      final sundayHasActivity =
-          range.days[6].activities.any((a) => a.activity.id == activity.id);
+      final sundayHasActivity = range.days[6].activities.any(
+        (a) => a.activity.id == activity.id,
+      );
       if (sundayHasActivity) {
         workingDays = range.days;
         break;
       }
     }
-    expect(workingDays, isNotNull,
-        reason: 'no seed under 50 placed the activity on week 1 Sunday');
+    expect(
+      workingDays,
+      isNotNull,
+      reason: 'no seed under 50 placed the activity on week 1 Sunday',
+    );
 
     final mondayHasActivity = workingDays![7].activities.any(
-          (a) => a.activity.id == activity.id,
-        );
+      (a) => a.activity.id == activity.id,
+    );
     expect(mondayHasActivity, isFalse);
   });
 
-  test(
-      'RangePlannerService generates 14 days spanning two Monday-aligned '
+  test('RangePlannerService generates 14 days spanning two Monday-aligned '
       'weeks for twoWeek', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final result = RangePlannerService.generateWithDiagnostics(
@@ -5781,8 +5899,7 @@ void main() {
     expect(result.range.days[7].date, weekStart.add(const Duration(days: 7)));
   });
 
-  test(
-      'RangePlannerService resets max-per-week separately for each week '
+  test('RangePlannerService resets max-per-week separately for each week '
       'in a twoWeek range', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5818,8 +5935,7 @@ void main() {
     expect(week2Count, 1);
   });
 
-  test(
-      'RangePlannerService applies must-include scheduling within each '
+  test('RangePlannerService applies must-include scheduling within each '
       'weekly chunk of a twoWeek range', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5856,8 +5972,7 @@ void main() {
     expect(week2MustCount, 6);
   });
 
-  test(
-      'RangePlannerService still fills the normal flexible quota per week '
+  test('RangePlannerService still fills the normal flexible quota per week '
       'when a must-include activity is present in a twoWeek range', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final must = Activity(
@@ -5907,8 +6022,7 @@ void main() {
     expect(week2FlexCount, 7);
   });
 
-  test(
-      'PlannerService scheduledContext boundary day blocks '
+  test('PlannerService scheduledContext boundary day blocks '
       'no-consecutive-days on the next chunk\'s day 0', () {
     final weekStart = DateTime(2026, 6, 22); // Monday
     final activity = Activity(
@@ -5941,8 +6055,11 @@ void main() {
         break;
       }
     }
-    expect(workingSeed, isNotNull,
-        reason: 'no seed under 50 placed the activity on day 0');
+    expect(
+      workingSeed,
+      isNotNull,
+      reason: 'no seed under 50 placed the activity on day 0',
+    );
 
     final withBoundary = PlannerService.generate(
       weekStart: weekStart,
@@ -5959,8 +6076,7 @@ void main() {
     );
   });
 
-  test(
-      'RangePlannerService prevents no-consecutive-days across the '
+  test('RangePlannerService prevents no-consecutive-days across the '
       'Sunday-to-Monday week boundary', () {
     final weekStart = DateTime(2026, 6, 15); // Monday
     final activity = Activity(
@@ -5984,19 +6100,23 @@ void main() {
         pool: [activity],
         seed: seed,
       );
-      final sundayHasActivity =
-          range.days[6].activities.any((a) => a.activity.id == activity.id);
+      final sundayHasActivity = range.days[6].activities.any(
+        (a) => a.activity.id == activity.id,
+      );
       if (sundayHasActivity) {
         workingDays = range.days;
         break;
       }
     }
-    expect(workingDays, isNotNull,
-        reason: 'no seed under 50 placed the activity on week 1 Sunday');
+    expect(
+      workingDays,
+      isNotNull,
+      reason: 'no seed under 50 placed the activity on week 1 Sunday',
+    );
 
     final mondayHasActivity = workingDays![7].activities.any(
-          (a) => a.activity.id == activity.id,
-        );
+      (a) => a.activity.id == activity.id,
+    );
     expect(mondayHasActivity, isFalse);
   });
 
@@ -6098,31 +6218,36 @@ void main() {
     expect(regeneratedLockedItem.locked, isTrue);
   });
 
-  test('Difficulty-aware impossible cases do not crash and show conflict',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(
-      activities: [
-        Activity(
-          id: 'hard-impossible',
-          title: 'Very hard Monday task',
-          category: 'Chores / life admin',
-          durationMinutes: 120,
-          difficulty: 5,
-          maxPerWeek: 1,
-          allowedWeekdays: [DateTime.monday],
-          noConsecutiveDays: true,
-        ),
-      ],
-    );
-    appState.setDifficultyEnabled(true);
+  test(
+    'Difficulty-aware impossible cases do not crash and show conflict',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(
+        activities: [
+          Activity(
+            id: 'hard-impossible',
+            title: 'Very hard Monday task',
+            category: 'Chores / life admin',
+            durationMinutes: 120,
+            difficulty: 5,
+            maxPerWeek: 1,
+            allowedWeekdays: [DateTime.monday],
+            noConsecutiveDays: true,
+          ),
+        ],
+      );
+      appState.setDifficultyEnabled(true);
 
-    expect(appState.regenerate, returnsNormally);
-    expect(appState.weekPlan, hasLength(7));
-    expect(appState.plannerConflictMessage, isNotNull);
-    expect(appState.plannerConflictMessage, contains('lighter than expected'));
-  });
+      expect(appState.regenerate, returnsNormally);
+      expect(appState.weekPlan, hasLength(7));
+      expect(appState.plannerConflictMessage, isNotNull);
+      expect(
+        appState.plannerConflictMessage,
+        contains('lighter than expected'),
+      );
+    },
+  );
 
   test('AppState exposes planner conflict message with simple fixes', () async {
     SharedPreferences.setMockInitialValues({});
@@ -6151,41 +6276,49 @@ void main() {
     expect(message, contains('choosing a lighter plan style'));
   });
 
-  test('AppState adds starter activities once and persists their rules',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: const []);
-    final starter = StarterActivityLibrary.groups
-        .firstWhere((group) => group.category == 'Outside')
-        .activities
-        .firstWhere((activity) => activity.title == 'Walk waterfront');
+  test(
+    'AppState adds starter activities once and persists their rules',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: const []);
+      final starter = StarterActivityLibrary.groups
+          .firstWhere((group) => group.category == 'Outside')
+          .activities
+          .firstWhere((activity) => activity.title == 'Walk waterfront');
 
-    expect(appState.addStarterActivity(starter), isTrue);
-    expect(appState.addStarterActivity(starter), isFalse);
-    expect(appState.activities, hasLength(1));
-    expect(appState.activities.single.title, starter.title);
-    expect(appState.activities.single.category, starter.category);
-    expect(appState.activities.single.durationMinutes, starter.durationMinutes);
-    expect(appState.activities.single.preferredTime, starter.preferredTime);
-    expect(appState.activities.single.maxPerWeek, starter.maxPerWeek);
-    expect(appState.activities.single.allowedWeekdays, starter.allowedWeekdays);
-    expect(
-      appState.activities.single.noConsecutiveDays,
-      starter.noConsecutiveDays,
-    );
+      expect(appState.addStarterActivity(starter), isTrue);
+      expect(appState.addStarterActivity(starter), isFalse);
+      expect(appState.activities, hasLength(1));
+      expect(appState.activities.single.title, starter.title);
+      expect(appState.activities.single.category, starter.category);
+      expect(
+        appState.activities.single.durationMinutes,
+        starter.durationMinutes,
+      );
+      expect(appState.activities.single.preferredTime, starter.preferredTime);
+      expect(appState.activities.single.maxPerWeek, starter.maxPerWeek);
+      expect(
+        appState.activities.single.allowedWeekdays,
+        starter.allowedWeekdays,
+      );
+      expect(
+        appState.activities.single.noConsecutiveDays,
+        starter.noConsecutiveDays,
+      );
 
-    appState.regenerate();
-    expect(
-      appState.weekPlan.expand((day) => day.activities),
-      anyElement((planned) => planned.activity.title == starter.title),
-    );
+      appState.regenerate();
+      expect(
+        appState.weekPlan.expand((day) => day.activities),
+        anyElement((planned) => planned.activity.title == starter.title),
+      );
 
-    final saved = PersistenceService.load(const []);
-    expect(saved.activities, hasLength(1));
-    expect(saved.activities.single.title, starter.title);
-    expect(saved.activities.single.maxPerWeek, starter.maxPerWeek);
-  });
+      final saved = PersistenceService.load(const []);
+      expect(saved.activities, hasLength(1));
+      expect(saved.activities.single.title, starter.title);
+      expect(saved.activities.single.maxPerWeek, starter.maxPerWeek);
+    },
+  );
 
   test('Regenerate stores previous plan and undo restores it', () async {
     SharedPreferences.setMockInitialValues({});
@@ -6274,60 +6407,67 @@ void main() {
     expect(saved.rangeType, RangeType.week);
   });
 
-  test('Legacy activity-id-keyed check-ins still apply to the current week',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final discovery = AppState(activities: PlannerService.defaultActivities);
-    final targetId = discovery.weekPlan
-        .firstWhere((day) => day.activities.isNotEmpty)
-        .activities
-        .first
-        .activity
-        .id;
+  test(
+    'Legacy activity-id-keyed check-ins still apply to the current week',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final discovery = AppState(activities: PlannerService.defaultActivities);
+      final targetId = discovery.weekPlan
+          .firstWhere((day) => day.activities.isNotEmpty)
+          .activities
+          .first
+          .activity
+          .id;
 
-    SharedPreferences.setMockInitialValues({
-      'ls_ci_$targetId': CheckStatus.done.index,
-    });
-    await PersistenceService.init();
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.checkinMap[targetId], CheckStatus.done.index);
+      SharedPreferences.setMockInitialValues({
+        'ls_ci_$targetId': CheckStatus.done.index,
+      });
+      await PersistenceService.init();
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.checkinMap[targetId], CheckStatus.done.index);
 
-    final restored = AppState(activities: saved.activities, savedState: saved);
-    final restoredItem = restored.weekPlan
-        .expand((day) => day.activities)
-        .firstWhere((a) => a.activity.id == targetId);
-    expect(restoredItem.status, CheckStatus.done);
-  });
-
-  test('Legacy activity-id-keyed locks still apply to the current week',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final discovery = AppState(activities: PlannerService.defaultActivities);
-    final targetId = discovery.weekPlan
-        .firstWhere((day) => day.activities.isNotEmpty)
-        .activities
-        .first
-        .activity
-        .id;
-
-    SharedPreferences.setMockInitialValues({
-      'ls_lk_$targetId': true,
-    });
-    await PersistenceService.init();
-    final saved = PersistenceService.load(PlannerService.defaultActivities);
-    expect(saved.lockedMap[targetId], isTrue);
-
-    final restored = AppState(activities: saved.activities, savedState: saved);
-    final restoredItem = restored.weekPlan
-        .expand((day) => day.activities)
-        .firstWhere((a) => a.activity.id == targetId);
-    expect(restoredItem.locked, isTrue);
-  });
+      final restored = AppState(
+        activities: saved.activities,
+        savedState: saved,
+      );
+      final restoredItem = restored.weekPlan
+          .expand((day) => day.activities)
+          .firstWhere((a) => a.activity.id == targetId);
+      expect(restoredItem.status, CheckStatus.done);
+    },
+  );
 
   test(
-      'Saving rewrites legacy check-in and lock overlays using occurrence '
+    'Legacy activity-id-keyed locks still apply to the current week',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final discovery = AppState(activities: PlannerService.defaultActivities);
+      final targetId = discovery.weekPlan
+          .firstWhere((day) => day.activities.isNotEmpty)
+          .activities
+          .first
+          .activity
+          .id;
+
+      SharedPreferences.setMockInitialValues({'ls_lk_$targetId': true});
+      await PersistenceService.init();
+      final saved = PersistenceService.load(PlannerService.defaultActivities);
+      expect(saved.lockedMap[targetId], isTrue);
+
+      final restored = AppState(
+        activities: saved.activities,
+        savedState: saved,
+      );
+      final restoredItem = restored.weekPlan
+          .expand((day) => day.activities)
+          .firstWhere((a) => a.activity.id == targetId);
+      expect(restoredItem.locked, isTrue);
+    },
+  );
+
+  test('Saving rewrites legacy check-in and lock overlays using occurrence '
       'keys', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6343,8 +6483,9 @@ void main() {
       'ls_lk_$targetId': true,
     });
     await PersistenceService.init();
-    final legacySaved =
-        PersistenceService.load(PlannerService.defaultActivities);
+    final legacySaved = PersistenceService.load(
+      PlannerService.defaultActivities,
+    );
     final restored = AppState(
       activities: legacySaved.activities,
       savedState: legacySaved,
@@ -6359,16 +6500,16 @@ void main() {
     // exercises the same _persist() path a real check-in/lock action takes.
     restored.notifyCheckIn(restoredItem);
 
-    final migratedSaved =
-        PersistenceService.load(PlannerService.defaultActivities);
+    final migratedSaved = PersistenceService.load(
+      PlannerService.defaultActivities,
+    );
     expect(migratedSaved.checkinMap[occurrenceKey], CheckStatus.done.index);
     expect(migratedSaved.lockedMap[occurrenceKey], isTrue);
     expect(migratedSaved.checkinMap.containsKey(targetId), isFalse);
     expect(migratedSaved.lockedMap.containsKey(targetId), isFalse);
   });
 
-  test(
-      'Same activity on two different dates can have different check-in '
+  test('Same activity on two different dates can have different check-in '
       'statuses', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6381,8 +6522,9 @@ void main() {
       allowedWeekdays: Activity.allWeekdays,
     );
     final appState = AppState(activities: [recurring]);
-    final occurrences =
-        appState.weekPlan.where((day) => day.activities.isNotEmpty).toList();
+    final occurrences = appState.weekPlan
+        .where((day) => day.activities.isNotEmpty)
+        .toList();
     expect(occurrences.length, 2);
 
     final firstItem = occurrences[0].activities.first;
@@ -6402,8 +6544,7 @@ void main() {
     expect(saved.checkinMap[secondKey], CheckStatus.skipped.index);
   });
 
-  test(
-      'Same activity on two different dates can have different locked '
+  test('Same activity on two different dates can have different locked '
       'states', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6416,8 +6557,9 @@ void main() {
       allowedWeekdays: Activity.allWeekdays,
     );
     final appState = AppState(activities: [recurring]);
-    final occurrences =
-        appState.weekPlan.where((day) => day.activities.isNotEmpty).toList();
+    final occurrences = appState.weekPlan
+        .where((day) => day.activities.isNotEmpty)
+        .toList();
     expect(occurrences.length, 2);
 
     final firstItem = occurrences[0].activities.first;
@@ -6434,44 +6576,47 @@ void main() {
     expect(saved.lockedMap[secondKey], isFalse);
   });
 
-  test('generateRange(twoWeek) builds 14 days and switches the view to it',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
+  test(
+    'generateRange(twoWeek) builds 14 days and switches the view to it',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
 
-    appState.generateRange(RangeType.twoWeek);
+      appState.generateRange(RangeType.twoWeek);
 
-    expect(appState.rangeType, RangeType.twoWeek);
-    expect(appState.viewMode, RangeType.twoWeek);
-    expect(appState.selectedRangeWeekIndex, 0);
-    expect(appState.generatedRange.days.length, 14);
-    expect(appState.weekPlan.length, 7);
-    expect(
-      appState.weekPlan.map((d) => d.date),
-      appState.generatedRange.days.sublist(0, 7).map((d) => d.date),
-    );
-  });
-
-  test('Navigating to week 2 changes the visible week without regenerating',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.twoWeek);
-    final fullRangeBefore = appState.generatedRange.days;
-
-    appState.selectRangeWeekIndex(1);
-
-    expect(appState.selectedRangeWeekIndex, 1);
-    expect(appState.weekPlan.length, 7);
-    expect(appState.weekPlan.first.date, fullRangeBefore[7].date);
-    // Same list instance: switching the visible week did not regenerate.
-    expect(appState.generatedRange.days, same(fullRangeBefore));
-  });
+      expect(appState.rangeType, RangeType.twoWeek);
+      expect(appState.viewMode, RangeType.twoWeek);
+      expect(appState.selectedRangeWeekIndex, 0);
+      expect(appState.generatedRange.days.length, 14);
+      expect(appState.weekPlan.length, 7);
+      expect(
+        appState.weekPlan.map((d) => d.date),
+        appState.generatedRange.days.sublist(0, 7).map((d) => d.date),
+      );
+    },
+  );
 
   test(
-      'Switching the view back to 1 week does not discard or regenerate '
+    'Navigating to week 2 changes the visible week without regenerating',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.twoWeek);
+      final fullRangeBefore = appState.generatedRange.days;
+
+      appState.selectRangeWeekIndex(1);
+
+      expect(appState.selectedRangeWeekIndex, 1);
+      expect(appState.weekPlan.length, 7);
+      expect(appState.weekPlan.first.date, fullRangeBefore[7].date);
+      // Same list instance: switching the visible week did not regenerate.
+      expect(appState.generatedRange.days, same(fullRangeBefore));
+    },
+  );
+
+  test('Switching the view back to 1 week does not discard or regenerate '
       'the existing twoWeek range', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6489,8 +6634,7 @@ void main() {
     expect(appState.weekPlan.first.date, fullRangeBefore.first.date);
   });
 
-  test(
-      'Returning to Month view after it was already generated shows it '
+  test('Returning to Month view after it was already generated shows it '
       'again without regenerating', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6509,21 +6653,23 @@ void main() {
     expect(appState.generatedRange.days, same(monthRangeBefore));
   });
 
-  test('setViewMode never regenerates, even when the view needs more days',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final daysBefore = appState.generatedRange.days;
+  test(
+    'setViewMode never regenerates, even when the view needs more days',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final daysBefore = appState.generatedRange.days;
 
-    appState.setViewMode(RangeType.month);
+      appState.setViewMode(RangeType.month);
 
-    expect(appState.viewMode, RangeType.month);
-    expect(appState.hasSufficientRangeForView, isFalse);
-    // Nothing regenerated: still week, same day list instance.
-    expect(appState.rangeType, RangeType.week);
-    expect(appState.generatedRange.days, same(daysBefore));
-  });
+      expect(appState.viewMode, RangeType.month);
+      expect(appState.hasSufficientRangeForView, isFalse);
+      // Nothing regenerated: still week, same day list instance.
+      expect(appState.rangeType, RangeType.week);
+      expect(appState.generatedRange.days, same(daysBefore));
+    },
+  );
 
   test('generateRange(month) builds a today-anchored month horizon', () async {
     SharedPreferences.setMockInitialValues({});
@@ -6542,45 +6688,51 @@ void main() {
     );
     expect(appState.generatedRange.days.first.date, todayDateOnly);
     expect(
-      appState.generatedRange.days
-          .every((d) => !d.date.isBefore(todayDateOnly)),
+      appState.generatedRange.days.every(
+        (d) => !d.date.isBefore(todayDateOnly),
+      ),
       isTrue,
     );
   });
 
-  test('weekPlan during month view shows the 7-day window starting today',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
+  test(
+    'weekPlan during month view shows the 7-day window starting today',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
 
-    final today = DateTime.now();
-    final todayDateOnly = DateTime(today.year, today.month, today.day);
-    expect(appState.weekPlan.length, 7);
-    expect(appState.weekPlan.first.date, todayDateOnly);
-    expect(
-      appState.weekPlan.last.date,
-      todayDateOnly.add(const Duration(days: 6)),
-    );
-  });
+      final today = DateTime.now();
+      final todayDateOnly = DateTime(today.year, today.month, today.day);
+      expect(appState.weekPlan.length, 7);
+      expect(appState.weekPlan.first.date, todayDateOnly);
+      expect(
+        appState.weekPlan.last.date,
+        todayDateOnly.add(const Duration(days: 6)),
+      );
+    },
+  );
 
-  test('A freshly generated 1-week range starts today and has no past days',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final todayDateOnly = _today();
+  test(
+    'A freshly generated 1-week range starts today and has no past days',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final todayDateOnly = _today();
 
-    expect(appState.rangeType, RangeType.week);
-    expect(appState.generatedRange.days.length, 7);
-    expect(appState.generatedRange.days.first.date, todayDateOnly);
-    expect(
-      appState.generatedRange.days
-          .every((d) => !d.date.isBefore(todayDateOnly)),
-      isTrue,
-    );
-  });
+      expect(appState.rangeType, RangeType.week);
+      expect(appState.generatedRange.days.length, 7);
+      expect(appState.generatedRange.days.first.date, todayDateOnly);
+      expect(
+        appState.generatedRange.days.every(
+          (d) => !d.date.isBefore(todayDateOnly),
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('generateRange(twoWeek) starts today and has no past days', () async {
     SharedPreferences.setMockInitialValues({});
@@ -6593,32 +6745,34 @@ void main() {
     expect(appState.generatedRange.days.length, 14);
     expect(appState.generatedRange.days.first.date, todayDateOnly);
     expect(
-      appState.generatedRange.days
-          .every((d) => !d.date.isBefore(todayDateOnly)),
+      appState.generatedRange.days.every(
+        (d) => !d.date.isBefore(todayDateOnly),
+      ),
       isTrue,
     );
   });
 
-  test('regenerate() reshuffles the same window without moving rangeStart',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final datesBefore =
-        appState.generatedRange.days.map((d) => d.date).toList();
-
-    appState.regenerate();
-
-    expect(
-      appState.generatedRange.days.map((d) => d.date).toList(),
-      datesBefore,
-    );
-  });
-
   test(
-      'regenerate() advances a stale rangeStart to today instead of '
-      'reusing a past generation start date (midnight rollover)',
-      () async {
+    'regenerate() reshuffles the same window without moving rangeStart',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final datesBefore = appState.generatedRange.days
+          .map((d) => d.date)
+          .toList();
+
+      appState.regenerate();
+
+      expect(
+        appState.generatedRange.days.map((d) => d.date).toList(),
+        datesBefore,
+      );
+    },
+  );
+
+  test('regenerate() advances a stale rangeStart to today instead of '
+      'reusing a past generation start date (midnight rollover)', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final today = _today();
@@ -6650,8 +6804,7 @@ void main() {
     );
   });
 
-  test(
-      'setPlanStyle() advances a stale rangeStart to today instead of '
+  test('setPlanStyle() advances a stale rangeStart to today instead of '
       'reusing a past generation start date', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6681,15 +6834,15 @@ void main() {
     );
   });
 
-  test(
-      'Reloading saved state reconstructs the same range instead of '
+  test('Reloading saved state reconstructs the same range instead of '
       're-anchoring to a new today', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.generateRange(RangeType.month);
-    final datesBefore =
-        appState.generatedRange.days.map((d) => d.date).toList();
+    final datesBefore = appState.generatedRange.days
+        .map((d) => d.date)
+        .toList();
 
     final saved = PersistenceService.load(PlannerService.defaultActivities);
     final restored = AppState(activities: saved.activities, savedState: saved);
@@ -6701,8 +6854,7 @@ void main() {
     );
   });
 
-  test(
-      'Switching views back and forth preserves check-in/lock state for '
+  test('Switching views back and forth preserves check-in/lock state for '
       'dates still in the generated range', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -6827,10 +6979,12 @@ void main() {
     appState.generateRange(RangeType.twoWeek);
 
     final allDays = appState.generatedRange.days;
-    final week1Day =
-        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
-    final week2Day =
-        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Day = allDays
+        .sublist(0, 7)
+        .firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day = allDays
+        .sublist(7, 14)
+        .firstWhere((day) => day.activities.isNotEmpty);
     final week1Item = week1Day.activities.first;
     final week2Item = week2Day.activities.first;
 
@@ -6864,10 +7018,12 @@ void main() {
     appState.generateRange(RangeType.twoWeek);
 
     final allDays = appState.generatedRange.days;
-    final week1Day =
-        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
-    final week2Day =
-        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Day = allDays
+        .sublist(0, 7)
+        .firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day = allDays
+        .sublist(7, 14)
+        .firstWhere((day) => day.activities.isNotEmpty);
     final week1Item = week1Day.activities.first;
     final week2Item = week2Day.activities.first;
 
@@ -6883,8 +7039,9 @@ void main() {
     expect(saved.lockedMap[week2Key], isFalse);
   });
 
-  testWidgets('Plan day card opens a day check-in sheet',
-      (WidgetTester tester) async {
+  testWidgets('Plan day card opens a day check-in sheet', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -6906,8 +7063,9 @@ void main() {
       findsOneWidget,
     );
 
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
@@ -6920,227 +7078,242 @@ void main() {
   });
 
   testWidgets(
-      'Plan day sheet shows Edit this plan item, Remove from this plan, '
-      'and Edit activity template actions', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
+    'Plan day sheet shows Edit this plan item, Remove from this plan, '
+    'and Edit activity template actions',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
-    );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
-    await tester.pumpAndSettle();
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-      findsOneWidget,
-    );
-    expect(find.text('Edit this plan item'), findsOneWidget);
-    expect(
-      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
-      findsOneWidget,
-    );
-    expect(find.text('Edit activity template'), findsOneWidget);
-  });
-
-  testWidgets(
-      "'Edit this plan item' opens a focused occurrence editor, not the "
-      'full activity template form', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final activity = Activity(
-      id: 'occurrence-editor-open',
-      title: 'Cook together',
-      category: 'Couple time',
-      durationMinutes: 60,
-      preferredTime: 'evening',
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-      noConsecutiveDays: true,
-    );
-    final appState = AppState(activities: [activity]);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
-
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
-    );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey('plan-item-editor-sheet')),
-      findsOneWidget,
-    );
-    // "Edit this plan item" is both the day sheet's action label and the
-    // focused editor's own header, so both are on screen at once.
-    expect(find.text('Edit this plan item'), findsWidgets);
-    expect(
-      find.byKey(const ValueKey('plan-item-editor-scope-note')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('plan-item-editor-time-field')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('plan-item-editor-category-field')),
-      findsOneWidget,
-    );
-    expect(find.text('Cook together'), findsWidgets);
-
-    // The time field is a tap-to-pick control, not free-text entry: it
-    // shows the current time as plain text and opens the real
-    // showTimePicker dialog on tap, rather than a TextFormField the user
-    // has to type into.
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('plan-item-editor-time-field')),
-        matching: find.byType(TextFormField),
-      ),
-      findsNothing,
-    );
-    expect(find.text(planned.timeSlot), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('plan-item-editor-time-field')));
-    await tester.pumpAndSettle();
-    expect(find.byType(TimePickerDialog), findsOneWidget);
-    await tester.tap(
-      find.descendant(
-        of: find.byType(TimePickerDialog),
-        matching: find.text('Cancel'),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // Source-template/global-rule fields must not appear in the default
-    // occurrence editor - those stay behind the secondary template action.
-    expect(find.text('Preferred time'), findsNothing);
-    expect(find.text('Max per week'), findsNothing);
-    expect(find.text('Allowed days'), findsNothing);
-    expect(find.text('Avoid back-to-back days'), findsNothing);
-    expect(find.text('Use in future plans'), findsNothing);
-  });
+      expect(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+        findsOneWidget,
+      );
+      expect(find.text('Edit this plan item'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
+        findsOneWidget,
+      );
+      expect(find.text('Edit activity template'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'Plan item editor shows planning dimension fields only when enabled '
-      'in settings', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final activity = Activity(
-      id: 'occurrence-editor-dimensions',
-      title: 'Evening run',
-      category: 'Outside',
-      durationMinutes: 30,
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-      difficulty: 3,
-      energy: 'medium',
-      social: 'solo',
-    );
-    final appState = AppState(activities: [activity]);
-    appState.setDifficultyEnabled(true);
-    appState.setEnergyEnabled(true);
-    appState.setSocialEnabled(true);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
+    "'Edit this plan item' opens a focused occurrence editor, not the "
+    'full activity template form',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final activity = Activity(
+        id: 'occurrence-editor-open',
+        title: 'Cook together',
+        category: 'Couple time',
+        durationMinutes: 60,
+        preferredTime: 'evening',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: true,
+      );
+      final appState = AppState(activities: [activity]);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
-    );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-    );
-    await tester.pumpAndSettle();
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Difficulty'), findsOneWidget);
-    expect(find.text('Energy'), findsOneWidget);
-    expect(find.text('Social'), findsOneWidget);
-    expect(find.text('3/5'), findsOneWidget);
-    expect(find.text('Medium'), findsOneWidget);
-    expect(find.text('Solo'), findsOneWidget);
-  });
+      await tester.tap(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('plan-item-editor-sheet')),
+        findsOneWidget,
+      );
+      // "Edit this plan item" is both the day sheet's action label and the
+      // focused editor's own header, so both are on screen at once.
+      expect(find.text('Edit this plan item'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('plan-item-editor-scope-note')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('plan-item-editor-time-field')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('plan-item-editor-category-field')),
+        findsOneWidget,
+      );
+      expect(find.text('Cook together'), findsWidgets);
+
+      // The time field is a tap-to-pick control, not free-text entry: it
+      // shows the current time as plain text and opens the real
+      // showTimePicker dialog on tap, rather than a TextFormField the user
+      // has to type into.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('plan-item-editor-time-field')),
+          matching: find.byType(TextFormField),
+        ),
+        findsNothing,
+      );
+      expect(find.text(planned.timeSlot), findsWidgets);
+      await tester.tap(
+        find.byKey(const ValueKey('plan-item-editor-time-field')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(TimePickerDialog),
+          matching: find.text('Cancel'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Source-template/global-rule fields must not appear in the default
+      // occurrence editor - those stay behind the secondary template action.
+      expect(find.text('Preferred time'), findsNothing);
+      expect(find.text('Max per week'), findsNothing);
+      expect(find.text('Allowed days'), findsNothing);
+      expect(find.text('Avoid back-to-back days'), findsNothing);
+      expect(find.text('Use in future plans'), findsNothing);
+    },
+  );
 
   testWidgets(
-      'Plan item editor Save updates only the occurrence time, leaving the '
-      'source activity untouched', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final activity = Activity(
-      id: 'occurrence-editor-save-time',
-      title: 'Cook together',
-      category: 'Couple time',
-      durationMinutes: 60,
-      preferredTime: 'evening',
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-    );
-    final appState = AppState(activities: [activity]);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
+    'Plan item editor shows planning dimension fields only when enabled '
+    'in settings',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final activity = Activity(
+        id: 'occurrence-editor-dimensions',
+        title: 'Evening run',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        difficulty: 3,
+        energy: 'medium',
+        social: 'solo',
+      );
+      final appState = AppState(activities: [activity]);
+      appState.setDifficultyEnabled(true);
+      appState.setEnergyEnabled(true);
+      appState.setSocialEnabled(true);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
-    );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-    );
-    await tester.pumpAndSettle();
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      );
+      await tester.pumpAndSettle();
 
-    // "Cook together" + evening + Couple time generates "8:00 PM" - pick a
-    // new time through the real showTimePicker control rather than typing,
-    // switching to its built-in text-input entry mode only because
-    // computing dial-drag geometry would be far more brittle than driving
-    // the picker's own keyboard-input toggle.
-    expect(find.text('8:00 PM'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('plan-item-editor-time-field')));
-    await tester.pumpAndSettle();
-    expect(find.byType(TimePickerDialog), findsOneWidget);
+      expect(find.text('Difficulty'), findsOneWidget);
+      expect(find.text('Energy'), findsOneWidget);
+      expect(find.text('Social'), findsOneWidget);
+      expect(find.text('3/5'), findsOneWidget);
+      expect(find.text('Medium'), findsOneWidget);
+      expect(find.text('Solo'), findsOneWidget);
+    },
+  );
 
-    await tester.tap(find.byTooltip('Switch to text input mode'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '7');
-    await tester.enterText(find.byType(TextField).at(1), '30');
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Plan item editor Save updates only the occurrence time, leaving the '
+    'source activity untouched',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final activity = Activity(
+        id: 'occurrence-editor-save-time',
+        title: 'Cook together',
+        category: 'Couple time',
+        durationMinutes: 60,
+        preferredTime: 'evening',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      );
+      final appState = AppState(activities: [activity]);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    expect(find.text('7:30 PM'), findsWidgets);
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Save'));
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
+      // "Cook together" + evening + Couple time generates "8:00 PM" - pick a
+      // new time through the real showTimePicker control rather than typing,
+      // switching to its built-in text-input entry mode only because
+      // computing dial-drag geometry would be far more brittle than driving
+      // the picker's own keyboard-input toggle.
+      expect(find.text('8:00 PM'), findsWidgets);
+      await tester.tap(
+        find.byKey(const ValueKey('plan-item-editor-time-field')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsOneWidget);
 
-    expect(planned.timeSlot, '7:30 PM');
-    expect(activity.preferredTime, 'evening');
-    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
-    expect(find.text('7:30 PM'), findsWidgets);
-  });
+      await tester.tap(find.byTooltip('Switch to text input mode'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '7');
+      await tester.enterText(find.byType(TextField).at(1), '30');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
 
-  test(
-      'editPlannedOccurrence updates only that occurrence and leaves the '
+      expect(find.text('7:30 PM'), findsWidgets);
+
+      await tester.ensureVisible(find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(planned.timeSlot, '7:30 PM');
+      expect(activity.preferredTime, 'evening');
+      expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+      expect(find.text('7:30 PM'), findsWidgets);
+    },
+  );
+
+  test('editPlannedOccurrence updates only that occurrence and leaves the '
       'source activity unchanged', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7163,10 +7336,12 @@ void main() {
     appState.generateRange(RangeType.twoWeek);
 
     final allDays = appState.generatedRange.days;
-    final week1Day =
-        allDays.sublist(0, 7).firstWhere((day) => day.activities.isNotEmpty);
-    final week2Day =
-        allDays.sublist(7, 14).firstWhere((day) => day.activities.isNotEmpty);
+    final week1Day = allDays
+        .sublist(0, 7)
+        .firstWhere((day) => day.activities.isNotEmpty);
+    final week2Day = allDays
+        .sublist(7, 14)
+        .firstWhere((day) => day.activities.isNotEmpty);
     final week1Item = week1Day.activities.first;
     final week2Item = week2Day.activities.first;
 
@@ -7238,8 +7413,7 @@ void main() {
     );
   });
 
-  test(
-      'Occurrence override survives reload through SavedState while the '
+  test('Occurrence override survives reload through SavedState while the '
       'source activity stays unchanged', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7361,10 +7535,10 @@ void main() {
     expect(saved.occurrenceOverrides, isEmpty);
   });
 
-  testWidgets(
-      "'Edit activity template' on the day sheet still opens the full "
-      'activity editor and saving updates the source activity',
-      (WidgetTester tester) async {
+  testWidgets("'Edit activity template' on the day sheet still opens the full "
+      'activity editor and saving updates the source activity', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final activity = Activity(
@@ -7383,8 +7557,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -7409,121 +7584,128 @@ void main() {
   });
 
   testWidgets(
-      'Plan day sheet keeps Edit this plan item, Edit activity template, '
-      'and Remove from this plan available for a future day while '
-      'check-in stays blocked', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final tomorrowDate = appState.weekPlan[1].date;
-    final tomorrow = _dayWithActivities(
-      appState,
-      (d) => d.date == tomorrowDate,
-    );
-    final planned = tomorrow.activities.first;
+    'Plan day sheet keeps Edit this plan item, Edit activity template, '
+    'and Remove from this plan available for a future day while '
+    'check-in stays blocked',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final tomorrowDate = appState.weekPlan[1].date;
+      final tomorrow = _dayWithActivities(
+        appState,
+        (d) => d.date == tomorrowDate,
+      );
+      final planned = tomorrow.activities.first;
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
-    );
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
+      );
 
-    // The future day card itself does not invite check-in...
-    final cardFinder =
-        find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}'));
-    expect(
-      find.descendant(of: cardFinder, matching: find.text('Check in')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: cardFinder, matching: find.text('Upcoming')),
-      findsOneWidget,
-    );
+      // The future day card itself does not invite check-in...
+      final cardFinder = find.byKey(
+        ValueKey('plan-day-card-${_dateKey(tomorrow.date)}'),
+      );
+      expect(
+        find.descendant(of: cardFinder, matching: find.text('Check in')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: cardFinder, matching: find.text('Upcoming')),
+        findsOneWidget,
+      );
 
-    // ...but tapping it still opens the sheet so edit/remove stay reachable.
-    await tester.tap(cardFinder);
-    await tester.pumpAndSettle();
+      // ...but tapping it still opens the sheet so edit/remove stay reachable.
+      await tester.tap(cardFinder);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Done'), findsNothing);
-    expect(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
-      findsOneWidget,
-    );
+      expect(find.text('Done'), findsNothing);
+      expect(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+        findsOneWidget,
+      );
 
-    await tester.tap(
-      find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('plan-item-editor-sheet')),
-      findsOneWidget,
-    );
-  });
+      expect(
+        find.byKey(const ValueKey('plan-item-editor-sheet')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
-      'Remove from this plan removes only that occurrence and keeps the '
-      'activity in the library', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final activity = Activity(
-      id: 'remove-from-plan',
-      title: 'Evening run',
-      category: 'Outside',
-      durationMinutes: 30,
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-    );
-    final appState = AppState(activities: [activity]);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
+    'Remove from this plan removes only that occurrence and keeps the '
+    'activity in the library',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final activity = Activity(
+        id: 'remove-from-plan',
+        title: 'Evening run',
+        category: 'Outside',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      );
+      final appState = AppState(activities: [activity]);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.ensureVisible(
-      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
-    );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
-    await tester.pumpAndSettle();
+      await _pumpPlanScreen(tester, appState);
+      await tester.ensureVisible(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.tap(
+        find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('remove-from-plan-dialog')),
-      findsOneWidget,
-    );
-    expect(
-      find.text(
-        'This only removes it from this generated plan. The activity '
-        'stays in your library.',
-      ),
-      findsOneWidget,
-    );
+      expect(
+        find.byKey(const ValueKey('remove-from-plan-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'This only removes it from this generated plan. The activity '
+          'stays in your library.',
+        ),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.byKey(const ValueKey('remove-from-plan-confirm')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('remove-from-plan-confirm')));
+      await tester.pumpAndSettle();
 
-    expect(day.activities, isEmpty);
-    expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
-    expect(find.text('Nothing planned for this day'), findsOneWidget);
+      expect(day.activities, isEmpty);
+      expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
+      expect(find.text('Nothing planned for this day'), findsOneWidget);
 
-    expect(appState.activities, hasLength(1));
-    expect(appState.activities.single.id, 'remove-from-plan');
-    expect(appState.activities.single.enabled, isTrue);
-  });
+      expect(appState.activities, hasLength(1));
+      expect(appState.activities.single.id, 'remove-from-plan');
+      expect(appState.activities.single.enabled, isTrue);
+    },
+  );
 
-  testWidgets('Remove from this plan Cancel keeps the occurrence',
-      (WidgetTester tester) async {
+  testWidgets('Remove from this plan Cancel keeps the occurrence', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final activity = Activity(
@@ -7542,8 +7724,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -7557,8 +7740,9 @@ void main() {
     expect(find.text(planned.title), findsWidgets);
   });
 
-  testWidgets('Removed occurrence stays removed after switching plan views',
-      (WidgetTester tester) async {
+  testWidgets('Removed occurrence stays removed after switching plan views', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     // maxPerWeek/allowedWeekdays are wide open so this activity recurs on
@@ -7603,15 +7787,15 @@ void main() {
     // The now-empty day shows no planned items and, per the rest-day rule,
     // is no longer tappable to open a check-in sheet.
     expect(find.text('No planned items.'), findsWidgets);
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
-  test(
-      'Remove from this plan survives reload while the source activity '
+  test('Remove from this plan survives reload while the source activity '
       'stays enabled', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7666,8 +7850,9 @@ void main() {
     expect(saved.removedMap, isEmpty);
   });
 
-  testWidgets('Plan Review week button opens the week review screen',
-      (WidgetTester tester) async {
+  testWidgets('Plan Review week button opens the week review screen', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -7682,8 +7867,7 @@ void main() {
     expect(find.byType(WeekReviewScreen), findsOneWidget);
   });
 
-  testWidgets(
-      'Plan range control switches to 2 weeks view; an expansion CTA '
+  testWidgets('Plan range control switches to 2 weeks view; an expansion CTA '
       'generates the range before week nav works', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7735,8 +7919,7 @@ void main() {
     expect(find.byKey(const ValueKey('plan-week-nav-0')), findsNothing);
   });
 
-  testWidgets(
-      'Plan range control switches to Month view; an expansion CTA '
+  testWidgets('Plan range control switches to Month view; an expansion CTA '
       'generates the month grid', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7776,8 +7959,7 @@ void main() {
     );
   });
 
-  testWidgets(
-      'Plan range control lays out without overflow at narrow mobile '
+  testWidgets('Plan range control lays out without overflow at narrow mobile '
       'widths and still switches views', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7801,10 +7983,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byKey(const ValueKey('plan-range-control')), findsOneWidget);
       expect(find.byKey(const ValueKey('plan-range-week')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('plan-range-twoWeek')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('plan-range-twoWeek')), findsOneWidget);
       expect(find.byKey(const ValueKey('plan-range-month')), findsOneWidget);
     }
 
@@ -7816,42 +7995,44 @@ void main() {
   });
 
   testWidgets(
-      'Plan day-list activity row (_PlanRow) lays out without overflow at '
-      'narrow mobile widths with a long category name',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    addTearDown(tester.view.reset);
-    final activity = Activity(
-      id: 'long-category-row',
-      title: 'Tidy the hallway closet',
-      category: 'Chores / life admin',
-      durationMinutes: 30,
-      maxPerWeek: 7,
-      allowedWeekdays: Activity.allWeekdays,
-    );
-    final appState = AppState(activities: [activity]);
-    final day = _todayWithActivities(appState);
-    final planned = day.activities.first;
+    'Plan day-list activity row (_PlanRow) lays out without overflow at '
+    'narrow mobile widths with a long category name',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      addTearDown(tester.view.reset);
+      final activity = Activity(
+        id: 'long-category-row',
+        title: 'Tidy the hallway closet',
+        category: 'Chores / life admin',
+        durationMinutes: 30,
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+      );
+      final appState = AppState(activities: [activity]);
+      final day = _todayWithActivities(appState);
+      final planned = day.activities.first;
 
-    for (final width in [320.0, 375.0, 414.0]) {
-      tester.view.physicalSize = Size(width, 800);
-      tester.view.devicePixelRatio = 1.0;
+      for (final width in [320.0, 375.0, 414.0]) {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1.0;
 
-      await _pumpPlanScreen(tester, appState);
-      await tester.pumpAndSettle();
+        await _pumpPlanScreen(tester, appState);
+        await tester.pumpAndSettle();
 
-      // The chip is `Flexible` and ellipsizes internally, so a long
-      // category name shrinks to fit instead of forcing the row (and the
-      // whole `Row` it lives in) wider than the screen.
-      expect(tester.takeException(), isNull);
-      expect(find.text(planned.timeSlot), findsWidgets);
-      expect(find.textContaining('Chores'), findsWidgets);
-    }
-  });
+        // The chip is `Flexible` and ellipsizes internally, so a long
+        // category name shrinks to fit instead of forcing the row (and the
+        // whole `Row` it lives in) wider than the screen.
+        expect(tester.takeException(), isNull);
+        expect(find.text(planned.timeSlot), findsWidgets);
+        expect(find.textContaining('Chores'), findsWidgets);
+      }
+    },
+  );
 
-  testWidgets('Tapping an in-range grid cell opens the day check-in sheet',
-      (WidgetTester tester) async {
+  testWidgets('Tapping an in-range grid cell opens the day check-in sheet', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -7861,8 +8042,9 @@ void main() {
     );
 
     await _pumpPlanScreen(tester, appState);
-    final cellFinder =
-        find.byKey(ValueKey('month-grid-day-${_dateKey(day.date)}'));
+    final cellFinder = find.byKey(
+      ValueKey('month-grid-day-${_dateKey(day.date)}'),
+    );
     await tester.ensureVisible(cellFinder);
     await tester.tap(cellFinder);
     await tester.pumpAndSettle();
@@ -7871,8 +8053,9 @@ void main() {
     expect(find.text(day.fullLabel), findsWidgets);
   });
 
-  testWidgets('Tapping an out-of-range grid cell does nothing',
-      (WidgetTester tester) async {
+  testWidgets('Tapping an out-of-range grid cell does nothing', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -7897,8 +8080,7 @@ void main() {
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
-  testWidgets(
-      'Tapping an empty in-range month grid cell does not open a '
+  testWidgets('Tapping an empty in-range month grid cell does not open a '
       'check-in sheet', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7909,8 +8091,9 @@ void main() {
     );
 
     await _pumpPlanScreen(tester, appState);
-    final cellFinder =
-        find.byKey(ValueKey('month-grid-day-${_dateKey(emptyDay.date)}'));
+    final cellFinder = find.byKey(
+      ValueKey('month-grid-day-${_dateKey(emptyDay.date)}'),
+    );
     await tester.ensureVisible(cellFinder);
     await tester.tap(cellFinder);
     await tester.pumpAndSettle();
@@ -7918,8 +8101,7 @@ void main() {
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
-  testWidgets(
-      'Month grid does not dim in-range days that spill into the next '
+  testWidgets('Month grid does not dim in-range days that spill into the next '
       'calendar month', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -7943,10 +8125,10 @@ void main() {
     );
   });
 
-  testWidgets(
-      'Month grid shows a month label on the first generated date even '
-      "when it isn't the 1st, and keeps the day number visible",
-      (WidgetTester tester) async {
+  testWidgets('Month grid shows a month label on the first generated date even '
+      "when it isn't the 1st, and keeps the day number visible", (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final rangeStart = DateTime(2026, 6, 20);
@@ -7978,10 +8160,10 @@ void main() {
     expect(tester.widget<Text>(dayNumberFinder).data, '20');
   });
 
-  testWidgets(
-      'Month grid shows a month label on the 1st of a new month inside '
-      'the range, and keeps the day number visible',
-      (WidgetTester tester) async {
+  testWidgets('Month grid shows a month label on the 1st of a new month inside '
+      'the range, and keeps the day number visible', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final rangeStart = DateTime(2026, 6, 20);
@@ -8017,9 +8199,7 @@ void main() {
     // A day that's neither the range start nor the 1st of a month shows no
     // label, but its day number stays visible.
     expect(
-      find.byKey(
-        ValueKey('month-grid-month-label-${_dateKey(midRangeDate)}'),
-      ),
+      find.byKey(ValueKey('month-grid-month-label-${_dateKey(midRangeDate)}')),
       findsNothing,
     );
     expect(
@@ -8035,53 +8215,53 @@ void main() {
   });
 
   testWidgets(
-      'Month grid highlights today with a terracotta border and a TODAY '
-      'label, leaving other days unchanged',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    appState.generateRange(RangeType.month);
-    final today = appState.generatedRange.days.first.date;
-    final todayKey = _dateKey(today);
-    final otherDay = appState.generatedRange.days[5];
-    final otherKey = _dateKey(otherDay.date);
+    'Month grid highlights today with a terracotta border and a TODAY '
+    'label, leaving other days unchanged',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      appState.generateRange(RangeType.month);
+      final today = appState.generatedRange.days.first.date;
+      final todayKey = _dateKey(today);
+      final otherDay = appState.generatedRange.days[5];
+      final otherKey = _dateKey(otherDay.date);
 
-    await _pumpPlanScreen(tester, appState);
-    await tester.pumpAndSettle();
+      await _pumpPlanScreen(tester, appState);
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(ValueKey('month-grid-today-label-$todayKey')),
-      findsOneWidget,
-    );
-    expect(find.text('TODAY'), findsOneWidget);
-    expect(
-      find.byKey(ValueKey('month-grid-month-label-$todayKey')),
-      findsNothing,
-    );
+      expect(
+        find.byKey(ValueKey('month-grid-today-label-$todayKey')),
+        findsOneWidget,
+      );
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('month-grid-month-label-$todayKey')),
+        findsNothing,
+      );
 
-    final todayCell = tester.widget<Container>(
-      find.byKey(ValueKey('month-grid-day-cell-$todayKey')),
-    );
-    final todayBorder =
-        (todayCell.decoration as BoxDecoration).border! as Border;
-    expect(todayBorder.top.color, primaryTerracotta);
+      final todayCell = tester.widget<Container>(
+        find.byKey(ValueKey('month-grid-day-cell-$todayKey')),
+      );
+      final todayBorder =
+          (todayCell.decoration as BoxDecoration).border! as Border;
+      expect(todayBorder.top.color, primaryTerracotta);
 
-    // A non-today in-range day keeps the plain border and shows no label.
-    expect(
-      find.byKey(ValueKey('month-grid-today-label-$otherKey')),
-      findsNothing,
-    );
-    final otherCell = tester.widget<Container>(
-      find.byKey(ValueKey('month-grid-day-cell-$otherKey')),
-    );
-    final otherBorder =
-        (otherCell.decoration as BoxDecoration).border! as Border;
-    expect(otherBorder.top.color, borderWarm);
-  });
+      // A non-today in-range day keeps the plain border and shows no label.
+      expect(
+        find.byKey(ValueKey('month-grid-today-label-$otherKey')),
+        findsNothing,
+      );
+      final otherCell = tester.widget<Container>(
+        find.byKey(ValueKey('month-grid-day-cell-$otherKey')),
+      );
+      final otherBorder =
+          (otherCell.decoration as BoxDecoration).border! as Border;
+      expect(otherBorder.top.color, borderWarm);
+    },
+  );
 
-  testWidgets(
-      'Month grid cell shows a compact item-count summary instead of '
+  testWidgets('Month grid cell shows a compact item-count summary instead of '
       'full activity chips, and renders without overflow at a narrow '
       'mobile width', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -8112,14 +8292,12 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text(busyDay.title), findsNothing);
     final count = day.activities.length;
-    expect(
-      find.text(count == 1 ? '1 item' : '$count items'),
-      findsWidgets,
-    );
+    expect(find.text(count == 1 ? '1 item' : '$count items'), findsWidgets);
   });
 
-  testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked',
-      (WidgetTester tester) async {
+  testWidgets('Plan day sheet changes Done Partly Skipped and Unchecked', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8130,8 +8308,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -8159,8 +8338,9 @@ void main() {
     expect(planned.status, CheckStatus.none);
   });
 
-  testWidgets('Plan day sheet check-in persists through SavedState',
-      (WidgetTester tester) async {
+  testWidgets('Plan day sheet check-in persists through SavedState', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8171,8 +8351,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(day.date)}')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(ValueKey('day-sheet-status-${planned.id}-partly')),
@@ -8185,18 +8366,16 @@ void main() {
       CheckStatus.partly.index,
     );
 
-    final restored = AppState(
-      activities: saved.activities,
-      savedState: saved,
-    );
+    final restored = AppState(activities: saved.activities, savedState: saved);
     final restoredPlanned = restored.weekPlan
         .expand((candidate) => candidate.activities)
         .firstWhere((candidate) => candidate.id == planned.id);
     expect(restoredPlanned.status, CheckStatus.partly);
   });
 
-  testWidgets('Plan day sheet blocks check-in for a future day',
-      (WidgetTester tester) async {
+  testWidgets('Plan day sheet blocks check-in for a future day', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8210,8 +8389,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(tomorrow.date)}')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
@@ -8222,8 +8402,7 @@ void main() {
     expect(find.text('Unchecked'), findsNothing);
   });
 
-  testWidgets(
-      'Plan day sheet allows check-in for a past day once today has '
+  testWidgets('Plan day sheet allows check-in for a past day once today has '
       'moved past the generated start', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -8264,8 +8443,9 @@ void main() {
     await tester.ensureVisible(
       find.byKey(ValueKey('plan-day-card-${_dateKey(pastDay.date)}')),
     );
-    await tester
-        .tap(find.byKey(ValueKey('plan-day-card-${_dateKey(pastDay.date)}')));
+    await tester.tap(
+      find.byKey(ValueKey('plan-day-card-${_dateKey(pastDay.date)}')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Done'), findsOneWidget);
@@ -8286,10 +8466,7 @@ void main() {
     final plans = [
       _summaryDay(DateTime(2026, 6, 15), [CheckStatus.none, CheckStatus.done]),
       _summaryDay(DateTime(2026, 6, 16), [CheckStatus.partly]),
-      _summaryDay(
-        DateTime(2026, 6, 17),
-        [CheckStatus.none, CheckStatus.none],
-      ),
+      _summaryDay(DateTime(2026, 6, 17), [CheckStatus.none, CheckStatus.none]),
       _summaryDay(DateTime(2026, 6, 18), [CheckStatus.none]),
       _summaryDay(DateTime(2026, 6, 19), [CheckStatus.none]),
     ];
@@ -8304,36 +8481,38 @@ void main() {
   });
 
   testWidgets(
-      'Today screen shows the check-in prompt and opens one-by-one review',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final now = appState.weekPlan.last.date.add(const Duration(days: 1));
-    expect(appState.hasPastUnchecked(now: now), isTrue);
+    'Today screen shows the check-in prompt and opens one-by-one review',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final now = appState.weekPlan.last.date.add(const Duration(days: 1));
+      expect(appState.hasPastUnchecked(now: now), isTrue);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: Scaffold(body: TodayScreen(now: now)),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: Scaffold(body: TodayScreen(now: now)),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(
-      find.text('Past activities need a quick check-in'),
-      findsOneWidget,
-    );
+      expect(
+        find.text('Past activities need a quick check-in'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.text('Check in'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Check in'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(CheckInOneByOneScreen), findsOneWidget);
-  });
+      expect(find.byType(CheckInOneByOneScreen), findsOneWidget);
+    },
+  );
 
-  testWidgets('Today quick action Add activity opens the activity form sheet',
-      (WidgetTester tester) async {
+  testWidgets('Today quick action Add activity opens the activity form sheet', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -8355,8 +8534,9 @@ void main() {
     expect(find.text('Max per week'), findsOneWidget);
   });
 
-  testWidgets('Today quick action Generate week calls AppState.regenerate',
-      (WidgetTester tester) async {
+  testWidgets('Today quick action Generate week calls AppState.regenerate', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8379,101 +8559,108 @@ void main() {
   });
 
   testWidgets(
-      'Today quick actions View plan and View progress request the right '
-      'bottom nav tab', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    int? requestedTab;
+    'Today quick actions View plan and View progress request the right '
+    'bottom nav tab',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      int? requestedTab;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(
-          state: appState,
-          child: BottomNavScope(
-            onNavigate: (index) => requestedTab = index,
-            child: const TodayScreen(),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(
+            state: appState,
+            child: BottomNavScope(
+              onNavigate: (index) => requestedTab = index,
+              child: const TodayScreen(),
+            ),
           ),
         ),
-      ),
-    );
-
-    await tester.tap(
-      find.byKey(const ValueKey('today-quick-action-view-plan')),
-    );
-    await tester.pump();
-    expect(requestedTab, BottomNavTab.plan);
-
-    await tester.tap(
-      find.byKey(const ValueKey('today-quick-action-view-progress')),
-    );
-    await tester.pump();
-    expect(requestedTab, BottomNavTab.progress);
-  });
-
-  testWidgets(
-      'Today quick actions View plan and View progress are inert without '
-      'a BottomNavScope ancestor', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppStateScope(state: appState, child: const TodayScreen()),
-      ),
-    );
-
-    // No BottomNavScope ancestor (e.g. TodayScreen tested in isolation):
-    // tapping must not throw.
-    await tester.tap(
-      find.byKey(const ValueKey('today-quick-action-view-plan')),
-    );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('today-quick-action-view-progress')),
-    );
-    await tester.pump();
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      'One-by-one review advances after marking items and shows completion',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
-    final now = appState.weekPlan.last.date.add(const Duration(days: 1));
-    final flat = <PlannedActivity>[
-      for (final (_, items) in appState.pastUncheckedByDay(now: now)) ...items,
-    ];
-    expect(flat, isNotEmpty);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CheckInOneByOneScreen(appState: appState, now: now),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    for (var remaining = flat.length; remaining > 0; remaining--) {
-      expect(
-        find.text(
-          '$remaining ${remaining == 1 ? "item" : "items"} to review',
-        ),
-        findsOneWidget,
       );
-      await tester.tap(find.text('Done'));
+
+      await tester.tap(
+        find.byKey(const ValueKey('today-quick-action-view-plan')),
+      );
+      await tester.pump();
+      expect(requestedTab, BottomNavTab.plan);
+
+      await tester.tap(
+        find.byKey(const ValueKey('today-quick-action-view-progress')),
+      );
+      await tester.pump();
+      expect(requestedTab, BottomNavTab.progress);
+    },
+  );
+
+  testWidgets(
+    'Today quick actions View plan and View progress are inert without '
+    'a BottomNavScope ancestor',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppStateScope(state: appState, child: const TodayScreen()),
+        ),
+      );
+
+      // No BottomNavScope ancestor (e.g. TodayScreen tested in isolation):
+      // tapping must not throw.
+      await tester.tap(
+        find.byKey(const ValueKey('today-quick-action-view-plan')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('today-quick-action-view-progress')),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'One-by-one review advances after marking items and shows completion',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final now = appState.weekPlan.last.date.add(const Duration(days: 1));
+      final flat = <PlannedActivity>[
+        for (final (_, items) in appState.pastUncheckedByDay(now: now))
+          ...items,
+      ];
+      expect(flat, isNotEmpty);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CheckInOneByOneScreen(appState: appState, now: now),
+        ),
+      );
       await tester.pumpAndSettle();
-    }
 
-    expect(find.text('All caught up'), findsOneWidget);
-    expect(flat.every((a) => a.status == CheckStatus.done), isTrue);
-  });
+      for (var remaining = flat.length; remaining > 0; remaining--) {
+        expect(
+          find.text(
+            '$remaining ${remaining == 1 ? "item" : "items"} to review',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Done'));
+        await tester.pumpAndSettle();
+      }
 
-  testWidgets('One-by-one review "View as list" switches to catch-up',
-      (WidgetTester tester) async {
+      expect(find.text('All caught up'), findsOneWidget);
+      expect(flat.every((a) => a.status == CheckStatus.done), isTrue);
+    },
+  );
+
+  testWidgets('One-by-one review "View as list" switches to catch-up', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8494,8 +8681,9 @@ void main() {
     expect(find.byType(CheckInOneByOneScreen), findsNothing);
   });
 
-  testWidgets('Week review groups items by day and updates statuses',
-      (WidgetTester tester) async {
+  testWidgets('Week review groups items by day and updates statuses', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8541,8 +8729,7 @@ void main() {
     );
   });
 
-  testWidgets(
-      'Plan empty day does not show Check in and does not open a '
+  testWidgets('Plan empty day does not show Check in and does not open a '
       'check-in sheet', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -8553,8 +8740,9 @@ void main() {
 
     await _pumpPlanScreen(tester, appState);
 
-    final cardFinder =
-        find.byKey(ValueKey('plan-day-card-${_dateKey(emptyDay.date)}'));
+    final cardFinder = find.byKey(
+      ValueKey('plan-day-card-${_dateKey(emptyDay.date)}'),
+    );
     expect(
       find.descendant(of: cardFinder, matching: find.text('Check in')),
       findsNothing,
@@ -8575,8 +8763,7 @@ void main() {
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
   });
 
-  test(
-      'Manual plan items survive regeneration alongside a must-include '
+  test('Manual plan items survive regeneration alongside a must-include '
       'activity', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -8625,36 +8812,38 @@ void main() {
   });
 
   group('Manual add-to-plan', () {
-    test('AppState addManualPlanItem pins a manual item and persists it',
-        () async {
-      SharedPreferences.setMockInitialValues({});
-      await PersistenceService.init();
-      final appState = AppState(activities: PlannerService.defaultActivities);
-      final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
-      final dateKey = _dateKey(day.date);
+    test(
+      'AppState addManualPlanItem pins a manual item and persists it',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final appState = AppState(activities: PlannerService.defaultActivities);
+        final day = appState.weekPlan.firstWhere((d) => d.activities.isEmpty);
+        final dateKey = _dateKey(day.date);
 
-      appState.addManualPlanItem(
-        ManualPlanItem(
-          id: 'manual_test_1',
-          dateKey: dateKey,
-          title: 'Extra walk',
-          timeSlot: '6:30 PM',
-          category: 'Outside',
-          durationMinutes: 30,
-        ),
-      );
+        appState.addManualPlanItem(
+          ManualPlanItem(
+            id: 'manual_test_1',
+            dateKey: dateKey,
+            title: 'Extra walk',
+            timeSlot: '6:30 PM',
+            category: 'Outside',
+            durationMinutes: 30,
+          ),
+        );
 
-      final plannedDay = appState.weekPlan.firstWhere(
-        (d) => _dateKey(d.date) == dateKey,
-      );
-      expect(plannedDay.activities, hasLength(1));
-      expect(plannedDay.activities.first.title, 'Extra walk');
-      expect(plannedDay.activities.first.isManual, isTrue);
+        final plannedDay = appState.weekPlan.firstWhere(
+          (d) => _dateKey(d.date) == dateKey,
+        );
+        expect(plannedDay.activities, hasLength(1));
+        expect(plannedDay.activities.first.title, 'Extra walk');
+        expect(plannedDay.activities.first.isManual, isTrue);
 
-      final saved = PersistenceService.load(PlannerService.defaultActivities);
-      expect(saved.manualPlanItems, contains('manual_test_1'));
-      expect(saved.manualPlanItems['manual_test_1']!.title, 'Extra walk');
-    });
+        final saved = PersistenceService.load(PlannerService.defaultActivities);
+        expect(saved.manualPlanItems, contains('manual_test_1'));
+        expect(saved.manualPlanItems['manual_test_1']!.title, 'Extra walk');
+      },
+    );
 
     test('Manual plan item survives regenerate()', () async {
       SharedPreferences.setMockInitialValues({});
@@ -8680,10 +8869,7 @@ void main() {
         (d) => _dateKey(d.date) == dateKey,
       );
       expect(appState.manualPlanItems, hasLength(before));
-      expect(
-        plannedDay.activities.map((a) => a.title),
-        contains('Yoga'),
-      );
+      expect(plannedDay.activities.map((a) => a.title), contains('Yoga'));
     });
 
     test('Manual plan item survives generateRange(twoWeek)', () async {
@@ -8708,10 +8894,7 @@ void main() {
       final plannedDay = appState.generatedRange.days.firstWhere(
         (d) => _dateKey(d.date) == dateKey,
       );
-      expect(
-        plannedDay.activities.map((a) => a.title),
-        contains('Call mom'),
-      );
+      expect(plannedDay.activities.map((a) => a.title), contains('Call mom'));
     });
 
     test('Manual plan item survives setPlanStyle', () async {
@@ -8739,14 +8922,10 @@ void main() {
       final plannedDay = appState.weekPlan.firstWhere(
         (d) => _dateKey(d.date) == dateKey,
       );
-      expect(
-        plannedDay.activities.map((a) => a.title),
-        contains('Journal'),
-      );
+      expect(plannedDay.activities.map((a) => a.title), contains('Journal'));
     });
 
-    test(
-        'Manual plan item from existing activity copies source '
+    test('Manual plan item from existing activity copies source '
         'without mutating it', () async {
       SharedPreferences.setMockInitialValues({});
       await PersistenceService.init();
@@ -8813,8 +8992,9 @@ void main() {
 
       expect(appState.activities, hasLength(beforeCount + 1));
       expect(
-        appState.activities
-            .any((a) => a.id == libraryId && a.title == 'Custom hobby'),
+        appState.activities.any(
+          (a) => a.id == libraryId && a.title == 'Custom hobby',
+        ),
         isTrue,
       );
       final saved = PersistenceService.load(PlannerService.defaultActivities);
@@ -8860,8 +9040,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets(
-        'Plan day card add item button opens the add sheet and saves '
+    testWidgets('Plan day card add item button opens the add sheet and saves '
         'a one-off item', (WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
       await PersistenceService.init();
@@ -8874,16 +9053,11 @@ void main() {
       await scrollAddButtonIntoView(tester, emptyDay.date);
 
       await tester.tap(
-        find.byKey(
-          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
-        ),
+        find.byKey(ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}')),
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey('add-plan-item-sheet')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('add-plan-item-sheet')), findsOneWidget);
 
       await tester.enterText(
         find.byKey(const ValueKey('add-plan-item-title-field')),
@@ -8893,30 +9067,20 @@ void main() {
         find.byKey(const ValueKey('add-plan-item-duration-field')),
         '30',
       );
-      await tester.tap(
-        find.byKey(const ValueKey('add-plan-item-save-button')),
-      );
+      await tester.tap(find.byKey(const ValueKey('add-plan-item-save-button')));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey('add-plan-item-sheet')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('add-plan-item-sheet')), findsNothing);
       final plannedDay = appState.weekPlan.firstWhere(
         (d) => _dateKey(d.date) == _dateKey(emptyDay.date),
       );
-      expect(
-        plannedDay.activities.map((a) => a.title),
-        contains('Read book'),
-      );
-      expect(
-        appState.activities.any((a) => a.title == 'Read book'),
-        isFalse,
-      );
+      expect(plannedDay.activities.map((a) => a.title), contains('Read book'));
+      expect(appState.activities.any((a) => a.title == 'Read book'), isFalse);
     });
 
-    testWidgets('Add plan item sheet can add from existing activity library',
-        (WidgetTester tester) async {
+    testWidgets('Add plan item sheet can add from existing activity library', (
+      WidgetTester tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       await PersistenceService.init();
       final appState = AppState(activities: PlannerService.defaultActivities);
@@ -8939,9 +9103,7 @@ void main() {
       await scrollAddButtonIntoView(tester, emptyDay.date);
 
       await tester.tap(
-        find.byKey(
-          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
-        ),
+        find.byKey(ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}')),
       );
       await tester.pumpAndSettle();
 
@@ -8957,22 +9119,16 @@ void main() {
       );
       expect(titleField.enabled, isFalse);
 
-      await tester.tap(
-        find.byKey(const ValueKey('add-plan-item-save-button')),
-      );
+      await tester.tap(find.byKey(const ValueKey('add-plan-item-save-button')));
       await tester.pumpAndSettle();
 
       final plannedDay = appState.weekPlan.firstWhere(
         (d) => _dateKey(d.date) == _dateKey(emptyDay.date),
       );
-      expect(
-        plannedDay.activities.map((a) => a.title),
-        contains(source.title),
-      );
+      expect(plannedDay.activities.map((a) => a.title), contains(source.title));
     });
 
-    testWidgets(
-        'Add plan item sheet save-to-library checkbox adds one-off to '
+    testWidgets('Add plan item sheet save-to-library checkbox adds one-off to '
         'activity library', (WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
       await PersistenceService.init();
@@ -8985,9 +9141,7 @@ void main() {
       await scrollAddButtonIntoView(tester, emptyDay.date);
 
       await tester.tap(
-        find.byKey(
-          ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}'),
-        ),
+        find.byKey(ValueKey('plan-day-card-add-${_dateKey(emptyDay.date)}')),
       );
       await tester.pumpAndSettle();
 
@@ -8996,24 +9150,16 @@ void main() {
         'New hobby',
       );
       await tester.tap(
-        find.byKey(
-          const ValueKey('add-plan-item-save-to-library-field'),
-        ),
+        find.byKey(const ValueKey('add-plan-item-save-to-library-field')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('add-plan-item-save-button')),
-      );
+      await tester.tap(find.byKey(const ValueKey('add-plan-item-save-button')));
       await tester.pumpAndSettle();
 
-      expect(
-        appState.activities.any((a) => a.title == 'New hobby'),
-        isTrue,
-      );
+      expect(appState.activities.any((a) => a.title == 'New hobby'), isTrue);
     });
 
-    testWidgets(
-        'Month grid add item icon opens add sheet and cell body tap '
+    testWidgets('Month grid add item icon opens add sheet and cell body tap '
         'stays inactive', (WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
       await PersistenceService.init();
@@ -9037,20 +9183,14 @@ void main() {
         find.byKey(ValueKey('month-grid-day-${_dateKey(emptyDay.date)}')),
       );
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('day-checkin-sheet')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('day-checkin-sheet')), findsNothing);
 
       await tester.tap(
         find.byKey(ValueKey('month-grid-add-${_dateKey(emptyDay.date)}')),
         warnIfMissed: false,
       );
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('add-plan-item-sheet')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('add-plan-item-sheet')), findsOneWidget);
     });
   });
 
@@ -9061,22 +9201,12 @@ void main() {
         CheckStatus.done,
         CheckStatus.partly,
       ]),
-      _summaryDay(DateTime(2026, 6, 11), [
-        CheckStatus.skipped,
-      ]),
-      _summaryDay(DateTime(2026, 6, 18), [
-        CheckStatus.none,
-      ]),
-      _summaryDay(DateTime(2026, 6, 19), [
-        CheckStatus.done,
-      ]),
+      _summaryDay(DateTime(2026, 6, 11), [CheckStatus.skipped]),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.none]),
+      _summaryDay(DateTime(2026, 6, 19), [CheckStatus.done]),
     ];
 
-    final summary = ProgressSummaryCalculator.recent(
-      plans,
-      days: 7,
-      now: now,
-    );
+    final summary = ProgressSummaryCalculator.recent(plans, days: 7, now: now);
 
     expect(summary.planned, 3);
     expect(summary.done, 1);
@@ -9089,26 +9219,13 @@ void main() {
   test('Progress summary counts past 30 days including older history', () {
     final now = DateTime(2026, 6, 18, 14);
     final plans = [
-      _summaryDay(DateTime(2026, 5, 20), [
-        CheckStatus.skipped,
-      ]),
-      _summaryDay(DateTime(2026, 5, 19), [
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 1), [
-        CheckStatus.done,
-        CheckStatus.none,
-      ]),
-      _summaryDay(DateTime(2026, 6, 18), [
-        CheckStatus.partly,
-      ]),
+      _summaryDay(DateTime(2026, 5, 20), [CheckStatus.skipped]),
+      _summaryDay(DateTime(2026, 5, 19), [CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 1), [CheckStatus.done, CheckStatus.none]),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.partly]),
     ];
 
-    final summary = ProgressSummaryCalculator.recent(
-      plans,
-      days: 30,
-      now: now,
-    );
+    final summary = ProgressSummaryCalculator.recent(plans, days: 30, now: now);
 
     expect(summary.planned, 4);
     expect(summary.done, 1);
@@ -9123,27 +9240,11 @@ void main() {
     final plans = [
       _summaryDay(
         DateTime(2026, 6, 12),
-        [
-          CheckStatus.done,
-          CheckStatus.partly,
-          CheckStatus.skipped,
-        ],
+        [CheckStatus.done, CheckStatus.partly, CheckStatus.skipped],
         difficulties: [5, 4, 3],
       ),
-      _summaryDay(
-        DateTime(2026, 6, 18),
-        [
-          CheckStatus.none,
-        ],
-        difficulties: [5],
-      ),
-      _summaryDay(
-        DateTime(2026, 6, 19),
-        [
-          CheckStatus.done,
-        ],
-        difficulties: [5],
-      ),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.none], difficulties: [5]),
+      _summaryDay(DateTime(2026, 6, 19), [CheckStatus.done], difficulties: [5]),
     ];
 
     final summary = ProgressSummaryCalculator.recentHard(
@@ -9162,30 +9263,14 @@ void main() {
   test('Progress rhythm summary calculates streak and comparison', () {
     final now = DateTime(2026, 6, 18, 14);
     final plans = [
-      _summaryDay(DateTime(2026, 6, 18), [
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 17), [
-        CheckStatus.partly,
-      ]),
-      _summaryDay(DateTime(2026, 6, 16), [
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 15), [
-        CheckStatus.skipped,
-      ]),
-      _summaryDay(DateTime(2026, 6, 11), [
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 5), [
-        CheckStatus.partly,
-      ]),
-      _summaryDay(DateTime(2026, 6, 4), [
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 19), [
-        CheckStatus.done,
-      ]),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 17), [CheckStatus.partly]),
+      _summaryDay(DateTime(2026, 6, 16), [CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 15), [CheckStatus.skipped]),
+      _summaryDay(DateTime(2026, 6, 11), [CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 5), [CheckStatus.partly]),
+      _summaryDay(DateTime(2026, 6, 4), [CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 19), [CheckStatus.done]),
     ];
 
     final rhythm = ProgressSummaryCalculator.rhythm(plans, now: now);
@@ -9214,25 +9299,13 @@ void main() {
   test('Looking ahead summary counts upcoming next 7 days only', () {
     final now = DateTime(2026, 6, 18, 14);
     final plans = [
-      _summaryDay(DateTime(2026, 6, 17), [
-        CheckStatus.none,
-      ]),
-      _summaryDay(DateTime(2026, 6, 18), [
-        CheckStatus.none,
-        CheckStatus.done,
-      ]),
-      _summaryDay(DateTime(2026, 6, 24), [
-        CheckStatus.partly,
-      ]),
-      _summaryDay(DateTime(2026, 6, 25), [
-        CheckStatus.none,
-      ]),
+      _summaryDay(DateTime(2026, 6, 17), [CheckStatus.none]),
+      _summaryDay(DateTime(2026, 6, 18), [CheckStatus.none, CheckStatus.done]),
+      _summaryDay(DateTime(2026, 6, 24), [CheckStatus.partly]),
+      _summaryDay(DateTime(2026, 6, 25), [CheckStatus.none]),
     ];
 
-    final summary = ProgressSummaryCalculator.lookingAhead(
-      plans,
-      now: now,
-    );
+    final summary = ProgressSummaryCalculator.lookingAhead(plans, now: now);
 
     expect(summary.planned, 3);
     expect(summary.activities, hasLength(3));
@@ -9244,27 +9317,19 @@ void main() {
     final plans = [
       _summaryDay(
         DateTime(2026, 6, 19),
-        [
-          CheckStatus.none,
-        ],
+        [CheckStatus.none],
         titles: ['Tomorrow early'],
         timeSlots: ['8:00 AM'],
       ),
       _summaryDay(
         DateTime(2026, 6, 18),
-        [
-          CheckStatus.none,
-          CheckStatus.none,
-        ],
+        [CheckStatus.none, CheckStatus.none],
         titles: ['Lunch plan', 'Morning walk'],
         timeSlots: ['12:00 PM', '9:00 AM'],
       ),
     ];
 
-    final summary = ProgressSummaryCalculator.lookingAhead(
-      plans,
-      now: now,
-    );
+    final summary = ProgressSummaryCalculator.lookingAhead(plans, now: now);
 
     expect(summary.activities.map((activity) => activity.title), [
       'Morning walk',
@@ -9284,15 +9349,19 @@ void main() {
     expect(summary.hasUpcoming, isFalse);
   });
 
-  testWidgets('Progress displays past 7 and past 30 day summaries',
-      (WidgetTester tester) async {
+  testWidgets('Progress displays past 7 and past 30 day summaries', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     final recentItems = appState.weekPlan
         .where(
-          (day) => !DateTime(day.date.year, day.date.month, day.date.day)
-              .isAfter(_today()),
+          (day) => !DateTime(
+            day.date.year,
+            day.date.month,
+            day.date.day,
+          ).isAfter(_today()),
         )
         .expand((day) => day.activities)
         .take(4)
@@ -9335,8 +9404,9 @@ void main() {
     );
   });
 
-  testWidgets('Progress shows recent history empty state',
-      (WidgetTester tester) async {
+  testWidgets('Progress shows recent history empty state', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -9354,8 +9424,9 @@ void main() {
     );
   });
 
-  testWidgets('Progress displays recent rhythm section',
-      (WidgetTester tester) async {
+  testWidgets('Progress displays recent rhythm section', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -9363,9 +9434,7 @@ void main() {
     appState.weekPlan
       ..clear()
       ..addAll([
-        _summaryDay(today, [
-          CheckStatus.done,
-        ]),
+        _summaryDay(today, [CheckStatus.done]),
         _summaryDay(today.subtract(const Duration(days: 1)), [
           CheckStatus.partly,
         ]),
@@ -9378,7 +9447,9 @@ void main() {
     await _pumpProgressScreen(tester, appState);
 
     expect(
-        find.byKey(const ValueKey('progress-rhythm-summary')), findsOneWidget);
+      find.byKey(const ValueKey('progress-rhythm-summary')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('progress-rhythm-card')), findsOneWidget);
     expect(find.text('RECENT RHYTHM'), findsOneWidget);
     expect(find.text('A gentle pattern'), findsOneWidget);
@@ -9397,8 +9468,9 @@ void main() {
     );
   });
 
-  testWidgets('Progress shows recent rhythm empty state',
-      (WidgetTester tester) async {
+  testWidgets('Progress shows recent rhythm empty state', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -9413,8 +9485,9 @@ void main() {
     );
   });
 
-  testWidgets('Progress displays looking ahead section',
-      (WidgetTester tester) async {
+  testWidgets('Progress displays looking ahead section', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -9424,17 +9497,12 @@ void main() {
       ..addAll([
         _summaryDay(
           today.subtract(const Duration(days: 1)),
-          [
-            CheckStatus.none,
-          ],
+          [CheckStatus.none],
           titles: ['Past item'],
         ),
         _summaryDay(
           today,
-          [
-            CheckStatus.none,
-            CheckStatus.none,
-          ],
+          [CheckStatus.none, CheckStatus.none],
           titles: ['Morning walk', 'Cafe reading'],
           categories: ['Outside', 'Creative'],
           timeSlots: ['9:00 AM', '12:00 PM'],
@@ -9443,8 +9511,10 @@ void main() {
 
     await _pumpProgressScreen(tester, appState);
 
-    expect(find.byKey(const ValueKey('progress-looking-ahead-summary')),
-        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('progress-looking-ahead-summary')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('progress-looking-ahead-card')),
       findsOneWidget,
@@ -9456,8 +9526,9 @@ void main() {
     expect(find.text('Past item'), findsNothing);
   });
 
-  testWidgets('Progress shows looking ahead empty state',
-      (WidgetTester tester) async {
+  testWidgets('Progress shows looking ahead empty state', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: const []);
@@ -9470,15 +9541,14 @@ void main() {
     );
     expect(find.text('Nothing planned in the next 7 days'), findsOneWidget);
     expect(
-      find.text(
-        'Generate or adjust the plan when you want something on deck.',
-      ),
+      find.text('Generate or adjust the plan when you want something on deck.'),
       findsOneWidget,
     );
   });
 
-  testWidgets('Progress hides difficulty summary when Difficulty is disabled',
-      (WidgetTester tester) async {
+  testWidgets('Progress hides difficulty summary when Difficulty is disabled', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -9492,16 +9562,20 @@ void main() {
     expect(find.text('Higher effort activities'), findsNothing);
   });
 
-  testWidgets('Progress shows difficulty summary when Difficulty is enabled',
-      (WidgetTester tester) async {
+  testWidgets('Progress shows difficulty summary when Difficulty is enabled', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.setDifficultyEnabled(true);
     final recentItems = appState.weekPlan
         .where(
-          (day) => !DateTime(day.date.year, day.date.month, day.date.day)
-              .isAfter(_today()),
+          (day) => !DateTime(
+            day.date.year,
+            day.date.month,
+            day.date.day,
+          ).isAfter(_today()),
         )
         .expand((day) => day.activities)
         .take(3)
@@ -9539,8 +9613,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Higher effort activities'), findsOneWidget);
-    expect(find.text('Difficulty 4-5, spaced gently by the planner.'),
-        findsOneWidget);
+    expect(
+      find.text('Difficulty 4-5, spaced gently by the planner.'),
+      findsOneWidget,
+    );
     _expectDifficultyCardCounts(
       cardKey: const ValueKey('difficulty-summary-7'),
       summary: expected7,
@@ -9784,7 +9860,8 @@ DayPlan _dayWithActivities(
 DayPlan _todayWithActivities(AppState appState, {int maxAttempts = 50}) =>
     _dayWithActivities(appState, (d) => d.isToday, maxAttempts: maxAttempts);
 
-String _dateKey(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
+String _dateKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
 
@@ -9816,8 +9893,8 @@ List<int> _hardDayIndexes(List<DayPlan> plan) {
   final result = <int>[];
   for (var dayIndex = 0; dayIndex < plan.length; dayIndex++) {
     if (plan[dayIndex].activities.any(
-          (planned) => planned.activity.difficulty >= 4,
-        )) {
+      (planned) => planned.activity.difficulty >= 4,
+    )) {
       result.add(dayIndex);
     }
   }

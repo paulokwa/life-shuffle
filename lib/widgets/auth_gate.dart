@@ -29,8 +29,9 @@ class _AuthGateState extends State<AuthGate> {
   // (showing _SplashScreen) on every AppState change, not just real auth
   // changes -- that flash unmounts and remounts BottomNavShell, resetting
   // its selected tab back to Today.
-  final Stream<User?>? _authStateChanges =
-      AuthService.isReady ? FirebaseAuth.instance.authStateChanges() : null;
+  final Stream<User?>? _authStateChanges = AuthService.isReady
+      ? FirebaseAuth.instance.authStateChanges()
+      : null;
 
   @override
   void initState() {
@@ -74,34 +75,34 @@ class _AuthGateState extends State<AuthGate> {
       child: widget.appState.shouldWaitForInitialSync
           ? const _SplashScreen()
           : !widget.appState.displayNameConfirmed
-              ? DisplayNameScreen(
-                  initialName: _defaultDisplayName(user),
-                  onConfirm: (displayName) {
-                    final saved =
-                        widget.appState.confirmDisplayName(displayName);
-                    if (saved) {
-                      setState(() {});
-                    }
-                    return saved;
-                  },
-                )
-              : !widget.appState.calendarNameConfirmed
-                  ? CalendarNameScreen(
-                      initialName: _defaultCalendarName(),
-                      onConfirm: (calendarName) {
-                        final saved =
-                            widget.appState.confirmCalendarTitle(calendarName);
-                        if (saved) {
-                          setState(() {});
-                        }
-                        return saved;
-                      },
-                    )
-                  : widget.appState.introOnboardingCompleted
-                      ? const BottomNavShell()
-                      : OnboardingScreen(
-                          onComplete: widget.appState.completeIntroOnboarding,
-                        ),
+          ? DisplayNameScreen(
+              initialName: _defaultDisplayName(user),
+              onConfirm: (displayName) {
+                final saved = widget.appState.confirmDisplayName(displayName);
+                if (saved) {
+                  setState(() {});
+                }
+                return saved;
+              },
+            )
+          : !widget.appState.calendarNameConfirmed
+          ? CalendarNameScreen(
+              initialName: _defaultCalendarName(),
+              onConfirm: (calendarName) {
+                final saved = widget.appState.confirmCalendarTitle(
+                  calendarName,
+                );
+                if (saved) {
+                  setState(() {});
+                }
+                return saved;
+              },
+            )
+          : widget.appState.introOnboardingCompleted
+          ? const BottomNavShell()
+          : OnboardingScreen(
+              onComplete: widget.appState.completeIntroOnboarding,
+            ),
     );
   }
 

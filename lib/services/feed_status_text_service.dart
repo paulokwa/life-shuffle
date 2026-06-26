@@ -5,8 +5,10 @@
 class FeedStatusTextService {
   FeedStatusTextService._();
 
-  static String lastUpdatedLabel(int? cachedIcsUpdatedAtMillis,
-      {DateTime? now}) {
+  static String lastUpdatedLabel(
+    int? cachedIcsUpdatedAtMillis, {
+    DateTime? now,
+  }) {
     if (cachedIcsUpdatedAtMillis == null) return 'Feed not generated yet';
 
     final updated = DateTime.fromMillisecondsSinceEpoch(

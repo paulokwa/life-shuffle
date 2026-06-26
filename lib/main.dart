@@ -35,10 +35,7 @@ void main() async {
 
   final saved = PersistenceService.load(PlannerService.defaultActivities);
 
-  final appState = AppState(
-    activities: saved.activities,
-    savedState: saved,
-  );
+  final appState = AppState(activities: saved.activities, savedState: saved);
 
   runApp(LifeShuffleApp(appState: appState));
 }

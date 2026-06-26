@@ -118,10 +118,12 @@ class FirestoreSyncService {
           ? _db.collection('calendars').doc()
           : _getCalendarDoc(_normalizeCalendarId(calendarId)!);
       final now = DateTime.now().millisecondsSinceEpoch;
-      final state = initialState ??
+      final state =
+          initialState ??
           SavedState(
-            activities:
-                PlannerService.defaultActivities.map((a) => a.copy()).toList(),
+            activities: PlannerService.defaultActivities
+                .map((a) => a.copy())
+                .toList(),
             seed: 0,
             updatedAtMillis: now,
             calendarTitle: calendarTitle,
@@ -140,8 +142,9 @@ class FirestoreSyncService {
         'ownerUserId': userId,
         'memberUserIds': [userId],
         'createdAtMillis': now,
-        'updatedAtMillis':
-            state.updatedAtMillis == 0 ? now : state.updatedAtMillis,
+        'updatedAtMillis': state.updatedAtMillis == 0
+            ? now
+            : state.updatedAtMillis,
       };
 
       await calendarDoc.set(data);
@@ -183,27 +186,27 @@ class FirestoreSyncService {
           .collection('calendars')
           .where('memberUserIds', arrayContains: userId)
           .get();
-      final calendars = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return FirestoreCalendar(
-          state: SavedState.fromMap(
-            data,
-            fallbackActivities: PlannerService.defaultActivities,
-          ),
-          metadata: CalendarMetadata.fromMap(
-            data,
-            fallback: defaultMetadata(userId),
-          ),
-        );
-      }).toList()
-        ..sort((a, b) {
-          final defaultId = defaultCalendarId(userId);
-          if (a.metadata.calendarId == defaultId) return -1;
-          if (b.metadata.calendarId == defaultId) return 1;
-          return a.metadata.title
-              .toLowerCase()
-              .compareTo(b.metadata.title.toLowerCase());
-        });
+      final calendars =
+          snapshot.docs.map((doc) {
+            final data = doc.data();
+            return FirestoreCalendar(
+              state: SavedState.fromMap(
+                data,
+                fallbackActivities: PlannerService.defaultActivities,
+              ),
+              metadata: CalendarMetadata.fromMap(
+                data,
+                fallback: defaultMetadata(userId),
+              ),
+            );
+          }).toList()..sort((a, b) {
+            final defaultId = defaultCalendarId(userId);
+            if (a.metadata.calendarId == defaultId) return -1;
+            if (b.metadata.calendarId == defaultId) return 1;
+            return a.metadata.title.toLowerCase().compareTo(
+              b.metadata.title.toLowerCase(),
+            );
+          });
       return calendars;
     } on FirebaseException catch (e) {
       if (kDebugMode) {
@@ -254,16 +257,13 @@ class FirestoreSyncService {
       final emailLower = _normalizeEmail(email);
       final trimmedDisplayName = displayName?.trim();
       final now = DateTime.now().millisecondsSinceEpoch;
-      await _db.collection('userProfiles').doc(userId).set(
-        <String, dynamic>{
-          'uid': userId,
-          if (emailLower != null) 'emailLower': emailLower,
-          if (trimmedDisplayName != null && trimmedDisplayName.isNotEmpty)
-            'displayName': trimmedDisplayName,
-          'updatedAtMillis': now,
-        },
-        SetOptions(merge: true),
-      );
+      await _db.collection('userProfiles').doc(userId).set(<String, dynamic>{
+        'uid': userId,
+        if (emailLower != null) 'emailLower': emailLower,
+        if (trimmedDisplayName != null && trimmedDisplayName.isNotEmpty)
+          'displayName': trimmedDisplayName,
+        'updatedAtMillis': now,
+      }, SetOptions(merge: true));
       return FirestoreSyncResult.success();
     } on FirebaseException catch (e) {
       if (kDebugMode) {
@@ -311,8 +311,9 @@ class FirestoreSyncService {
     try {
       final profiles = <UserProfile>[];
       for (var start = 0; start < uniqueIds.length; start += 10) {
-        final end =
-            start + 10 > uniqueIds.length ? uniqueIds.length : start + 10;
+        final end = start + 10 > uniqueIds.length
+            ? uniqueIds.length
+            : start + 10;
         final chunk = uniqueIds.sublist(start, end);
         final snapshot = await _db
             .collection('userProfiles')
@@ -520,8 +521,9 @@ class AddCalendarMemberResult {
   }
 
   factory AddCalendarMemberResult.alreadyMember(UserProfile profile) {
-    final label =
-        profile.displayLabel.isEmpty ? 'That person' : profile.displayLabel;
+    final label = profile.displayLabel.isEmpty
+        ? 'That person'
+        : profile.displayLabel;
     return AddCalendarMemberResult._(
       succeeded: true,
       status: '$label is already a member.',
@@ -531,17 +533,11 @@ class AddCalendarMemberResult {
   }
 
   factory AddCalendarMemberResult.notFound(String safeMessage) {
-    return AddCalendarMemberResult._(
-      succeeded: false,
-      status: safeMessage,
-    );
+    return AddCalendarMemberResult._(succeeded: false, status: safeMessage);
   }
 
   factory AddCalendarMemberResult.failure(String safeMessage) {
-    return AddCalendarMemberResult._(
-      succeeded: false,
-      status: safeMessage,
-    );
+    return AddCalendarMemberResult._(succeeded: false, status: safeMessage);
   }
 
   final bool succeeded;
@@ -566,10 +562,7 @@ class CreateCalendarResult {
   }
 
   factory CreateCalendarResult.failure(String safeMessage) {
-    return CreateCalendarResult._(
-      succeeded: false,
-      status: safeMessage,
-    );
+    return CreateCalendarResult._(succeeded: false, status: safeMessage);
   }
 
   final bool succeeded;
@@ -578,10 +571,7 @@ class CreateCalendarResult {
 }
 
 class LeaveCalendarResult {
-  const LeaveCalendarResult._({
-    required this.succeeded,
-    required this.status,
-  });
+  const LeaveCalendarResult._({required this.succeeded, required this.status});
 
   factory LeaveCalendarResult.success() {
     return const LeaveCalendarResult._(
@@ -591,10 +581,7 @@ class LeaveCalendarResult {
   }
 
   factory LeaveCalendarResult.failure(String safeMessage) {
-    return LeaveCalendarResult._(
-      succeeded: false,
-      status: safeMessage,
-    );
+    return LeaveCalendarResult._(succeeded: false, status: safeMessage);
   }
 
   final bool succeeded;
@@ -602,10 +589,7 @@ class LeaveCalendarResult {
 }
 
 class DeleteCalendarResult {
-  const DeleteCalendarResult._({
-    required this.succeeded,
-    required this.status,
-  });
+  const DeleteCalendarResult._({required this.succeeded, required this.status});
 
   factory DeleteCalendarResult.success() {
     return const DeleteCalendarResult._(
@@ -615,10 +599,7 @@ class DeleteCalendarResult {
   }
 
   factory DeleteCalendarResult.failure(String safeMessage) {
-    return DeleteCalendarResult._(
-      succeeded: false,
-      status: safeMessage,
-    );
+    return DeleteCalendarResult._(succeeded: false, status: safeMessage);
   }
 
   final bool succeeded;
@@ -639,10 +620,7 @@ String _safeErrorMessage(FirebaseException error) {
 }
 
 class FirestoreCalendar {
-  const FirestoreCalendar({
-    required this.state,
-    required this.metadata,
-  });
+  const FirestoreCalendar({required this.state, required this.metadata});
 
   final SavedState state;
   final CalendarMetadata metadata;

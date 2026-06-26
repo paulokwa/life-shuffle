@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
+import 'outside_events_screen.dart';
 
 class ActivitiesScreen extends StatelessWidget {
   const ActivitiesScreen({super.key});
@@ -75,6 +76,62 @@ class ActivitiesScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  GestureDetector(
+                    key: const ValueKey('activities-outside-events-entry'),
+                    onTap: () => _openOutsideEvents(context, state),
+                    behavior: HitTestBehavior.opaque,
+                    child: LsCard(
+                      color: const Color(0xFFEEF6F2),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accentSage.withValues(alpha: 0.14),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.travel_explore_rounded,
+                              size: 17,
+                              color: accentSage,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Discover outside events',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Browse sourced local ideas and add one to '
+                                  'your plan',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: textMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   GestureDetector(
                     onTap: () => _showStarterPicker(context),
                     behavior: HitTestBehavior.opaque,
@@ -186,6 +243,15 @@ class ActivitiesScreen extends StatelessWidget {
     );
   }
 
+  void _openOutsideEvents(BuildContext context, AppState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            AppStateScope(state: state, child: const OutsideEventsScreen()),
+      ),
+    );
+  }
+
   void _showStarterPicker(BuildContext context) {
     final appState = AppStateScope.of(context);
 
@@ -217,54 +283,55 @@ Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
       return _ActivityFormSheet(
         appState: appState,
         activity: activity,
-        onSave: ({
-          required String title,
-          required String category,
-          required int durationMinutes,
-          required String preferredTime,
-          required int difficulty,
-          required String energy,
-          required String social,
-          required int maxPerWeek,
-          required List<int> allowedWeekdays,
-          required bool noConsecutiveDays,
-          required bool enabled,
-          required bool mustIncludeInPlans,
-        }) {
-          if (activity == null) {
-            appState.addActivity(
-              title: title,
-              category: category,
-              durationMinutes: durationMinutes,
-              preferredTime: preferredTime,
-              difficulty: difficulty,
-              energy: energy,
-              social: social,
-              maxPerWeek: maxPerWeek,
-              allowedWeekdays: allowedWeekdays,
-              noConsecutiveDays: noConsecutiveDays,
-              enabled: enabled,
-              mustIncludeInPlans: mustIncludeInPlans,
-            );
-          } else {
-            appState.updateActivity(
-              activity.id,
-              title: title,
-              category: category,
-              durationMinutes: durationMinutes,
-              preferredTime: preferredTime,
-              difficulty: difficulty,
-              energy: energy,
-              social: social,
-              maxPerWeek: maxPerWeek,
-              allowedWeekdays: allowedWeekdays,
-              noConsecutiveDays: noConsecutiveDays,
-              enabled: enabled,
-              mustIncludeInPlans: mustIncludeInPlans,
-            );
-          }
-          Navigator.of(sheetContext).pop();
-        },
+        onSave:
+            ({
+              required String title,
+              required String category,
+              required int durationMinutes,
+              required String preferredTime,
+              required int difficulty,
+              required String energy,
+              required String social,
+              required int maxPerWeek,
+              required List<int> allowedWeekdays,
+              required bool noConsecutiveDays,
+              required bool enabled,
+              required bool mustIncludeInPlans,
+            }) {
+              if (activity == null) {
+                appState.addActivity(
+                  title: title,
+                  category: category,
+                  durationMinutes: durationMinutes,
+                  preferredTime: preferredTime,
+                  difficulty: difficulty,
+                  energy: energy,
+                  social: social,
+                  maxPerWeek: maxPerWeek,
+                  allowedWeekdays: allowedWeekdays,
+                  noConsecutiveDays: noConsecutiveDays,
+                  enabled: enabled,
+                  mustIncludeInPlans: mustIncludeInPlans,
+                );
+              } else {
+                appState.updateActivity(
+                  activity.id,
+                  title: title,
+                  category: category,
+                  durationMinutes: durationMinutes,
+                  preferredTime: preferredTime,
+                  difficulty: difficulty,
+                  energy: energy,
+                  social: social,
+                  maxPerWeek: maxPerWeek,
+                  allowedWeekdays: allowedWeekdays,
+                  noConsecutiveDays: noConsecutiveDays,
+                  enabled: enabled,
+                  mustIncludeInPlans: mustIncludeInPlans,
+                );
+              }
+              Navigator.of(sheetContext).pop();
+            },
       );
     },
   );
@@ -323,10 +390,7 @@ class _StarterPickerSheetState extends State<_StarterPickerSheet> {
                 const SizedBox(height: 4),
                 Text(
                   'Add a few useful options now. You can edit every starter later.',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    color: textMuted,
-                  ),
+                  style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
                 ),
               ],
             ),
@@ -382,8 +446,9 @@ class _StarterCategorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleActivities =
-        expanded ? group.activities : group.activities.take(2).toList();
+    final visibleActivities = expanded
+        ? group.activities
+        : group.activities.take(2).toList();
     final hiddenCount = group.activities.length - visibleActivities.length;
 
     return LsCard(
@@ -423,10 +488,7 @@ class _StarterCategorySection extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '$hiddenCount more in ${group.category}',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: textMuted,
-              ),
+              style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
             ),
           ],
         ],
@@ -468,10 +530,7 @@ class _StarterActivityRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   '${activity.duration} / ${_preferredTimeLabel(activity.preferredTime)} / Max ${activity.maxPerWeek}/week',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: textMuted,
-                  ),
+                  style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                 ),
               ],
             ),
@@ -517,10 +576,7 @@ class _StarterActivityRow extends StatelessWidget {
 }
 
 class _ActivityCard extends StatelessWidget {
-  const _ActivityCard({
-    required this.activity,
-    required this.onEdit,
-  });
+  const _ActivityCard({required this.activity, required this.onEdit});
 
   final Activity activity;
   final VoidCallback onEdit;
@@ -614,11 +670,7 @@ class _ActivityCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              const Icon(
-                Icons.edit_rounded,
-                size: 16,
-                color: textMuted,
-              ),
+              const Icon(Icons.edit_rounded, size: 16, color: textMuted),
             ],
           ),
         ),
@@ -710,26 +762,17 @@ class DimensionFields extends StatelessWidget {
         children: [
           Text(
             'Planning dimensions',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: textMuted,
-            ),
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
           ),
           const SizedBox(height: 10),
           if (difficultyEnabled)
             DropdownButtonFormField<int>(
               initialValue: difficulty,
               decoration: inputDecoration('Difficulty'),
-              items: List.generate(
-                5,
-                (index) {
-                  final value = index + 1;
-                  return DropdownMenuItem(
-                    value: value,
-                    child: Text('$value/5'),
-                  );
-                },
-              ),
+              items: List.generate(5, (index) {
+                final value = index + 1;
+                return DropdownMenuItem(value: value, child: Text('$value/5'));
+              }),
               onChanged: (value) {
                 if (value != null) onDifficultyChanged(value);
               },
@@ -797,7 +840,8 @@ class _ActivityFormSheet extends StatefulWidget {
     required bool noConsecutiveDays,
     required bool enabled,
     required bool mustIncludeInPlans,
-  }) onSave;
+  })
+  onSave;
 
   @override
   State<_ActivityFormSheet> createState() => _ActivityFormSheetState();
@@ -1031,10 +1075,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                     subtitle: Text(
                       'The planner adds this first, then still fills the '
                       'rest of the plan with other activities.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
-                      ),
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                     ),
                     onChanged: (value) {
                       setState(() => _mustIncludeInPlans = value);
@@ -1066,10 +1107,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                     ),
                     subtitle: Text(
                       'The planner avoids adjacent days when it has another option.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
-                      ),
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                     ),
                     onChanged: (value) {
                       setState(() => _noConsecutiveDays = value);
@@ -1101,10 +1139,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                     ),
                     subtitle: Text(
                       'Disabled activities stay here but are skipped by regeneration.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
-                      ),
+                      style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
                     ),
                     onChanged: (value) => setState(() => _enabled = value),
                   ),
@@ -1184,8 +1219,11 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
     final duration = int.tryParse(_durationController.text.trim()) ?? 45;
     final allowedWeekdays = _allowedWeekdays.toList()..sort();
     final maxPerWeek = int.tryParse(_maxPerWeekController.text.trim()) ?? 1;
-    final clampedMaxPerWeek =
-        maxPerWeek.clamp(1, 7).toInt().clamp(1, allowedWeekdays.length).toInt();
+    final clampedMaxPerWeek = maxPerWeek
+        .clamp(1, 7)
+        .toInt()
+        .clamp(1, allowedWeekdays.length)
+        .toInt();
     widget.onSave(
       title: _titleController.text.trim(),
       category: _category,
@@ -1251,10 +1289,7 @@ class _WeekdaySelector extends StatelessWidget {
         children: [
           Text(
             'Allowed days',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: textMuted,
-            ),
+            style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
           ),
           const SizedBox(height: 10),
           Row(

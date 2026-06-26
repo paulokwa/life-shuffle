@@ -8,11 +8,17 @@ import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/generated_plan_range.dart';
 import '../models/manual_plan_item.dart';
+import '../models/event_suggestion.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
+import '../models/user_event_source.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
+import '../services/outside_event_adapters.dart';
+import '../services/outside_event_discovery_service.dart';
+import '../services/outside_event_organizer_service.dart';
+import '../services/outside_event_source_adapter.dart';
 import '../services/persistence_service.dart';
 import '../services/planner_service.dart' show PlannerService, PlanStyle;
 import '../services/range_planner_service.dart'
@@ -30,46 +36,48 @@ enum _SyncOperation { load, save, profile }
 /// case as success.
 enum FeedRefreshResult { unavailable, success, syncFailed }
 
-typedef LoadDefaultCalendar = Future<FirestoreCalendar?> Function(
-    String userId);
-typedef LoadAccessibleCalendars = Future<List<FirestoreCalendar>> Function(
-  String userId,
-);
-typedef SaveFirestoreState = Future<FirestoreSyncResult> Function(
-  String userId,
-  SavedState state,
-);
-typedef SaveSelectedFirestoreState = Future<FirestoreSyncResult> Function(
-  String userId,
-  String calendarId,
-  SavedState state,
-);
-typedef UpsertUserProfile = Future<FirestoreSyncResult> Function({
-  required String userId,
-  String? email,
-  String? displayName,
-});
-typedef AddCalendarMember = Future<AddCalendarMemberResult> Function({
-  required String calendarId,
-  required String email,
-});
-typedef CreateCalendar = Future<CreateCalendarResult> Function({
-  required String userId,
-  required String title,
-  SavedState? initialState,
-  String? calendarId,
-});
-typedef LeaveCalendar = Future<LeaveCalendarResult> Function({
-  required String calendarId,
-  required String userId,
-});
-typedef DeleteCalendar = Future<DeleteCalendarResult> Function({
-  required String calendarId,
-  required String currentUserId,
-});
-typedef LoadUserProfiles = Future<List<UserProfile>> Function(
-  List<String> userIds,
-);
+typedef LoadDefaultCalendar =
+    Future<FirestoreCalendar?> Function(String userId);
+typedef LoadAccessibleCalendars =
+    Future<List<FirestoreCalendar>> Function(String userId);
+typedef SaveFirestoreState =
+    Future<FirestoreSyncResult> Function(String userId, SavedState state);
+typedef SaveSelectedFirestoreState =
+    Future<FirestoreSyncResult> Function(
+      String userId,
+      String calendarId,
+      SavedState state,
+    );
+typedef UpsertUserProfile =
+    Future<FirestoreSyncResult> Function({
+      required String userId,
+      String? email,
+      String? displayName,
+    });
+typedef AddCalendarMember =
+    Future<AddCalendarMemberResult> Function({
+      required String calendarId,
+      required String email,
+    });
+typedef CreateCalendar =
+    Future<CreateCalendarResult> Function({
+      required String userId,
+      required String title,
+      SavedState? initialState,
+      String? calendarId,
+    });
+typedef LeaveCalendar =
+    Future<LeaveCalendarResult> Function({
+      required String calendarId,
+      required String userId,
+    });
+typedef DeleteCalendar =
+    Future<DeleteCalendarResult> Function({
+      required String calendarId,
+      required String currentUserId,
+    });
+typedef LoadUserProfiles =
+    Future<List<UserProfile>> Function(List<String> userIds);
 
 /// Holds all mutable in-session state: activity pool, current week plan.
 /// Persists changes to [PersistenceService] and [FirestoreSyncService] (if signed in) on every mutation.
@@ -122,6 +130,9 @@ class AppState extends ChangeNotifier {
   /// pinned user content, not generated-occurrence customizations. See
   /// [addManualPlanItem] and [removeManualPlanItem].
   Map<String, ManualPlanItem> _manualPlanItems = {};
+  List<UserEventSource> _outsideEventSources = const [];
+  List<EventSuggestion> _cachedOutsideEvents = const [];
+  int? _cachedOutsideEventsFetchedAtMillis;
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -180,42 +191,49 @@ class AppState extends ChangeNotifier {
     LeaveCalendar? leaveCalendar,
     DeleteCalendar? deleteCalendar,
     LoadUserProfiles? loadUserProfiles,
-  })  : activities = activities.map((activity) => activity.copy()).toList(),
-        _loadAccessibleCalendars = loadAccessibleCalendars ??
-            (loadDefaultCalendar == null
-                ? FirestoreSyncService.loadAccessibleCalendars
-                : ((userId) async {
-                    final calendar = await loadDefaultCalendar(userId);
-                    return calendar == null ? const [] : [calendar];
-                  })),
-        _saveSelectedFirestoreState = saveSelectedFirestoreState ??
-            ((userId, calendarId, state) {
-              if (saveFirestoreState != null) {
-                return saveFirestoreState(userId, state);
-              }
-              return FirestoreSyncService.saveState(
-                userId,
-                state,
-                calendarId: calendarId,
-              );
-            }),
-        _upsertUserProfile =
-            upsertUserProfile ?? FirestoreSyncService.upsertUserProfile,
-        _addCalendarMember =
-            addCalendarMember ?? FirestoreSyncService.addMemberByEmail,
-        _createCalendar = createCalendar ?? FirestoreSyncService.createCalendar,
-        _leaveCalendar = leaveCalendar ?? FirestoreSyncService.leaveCalendar,
-        _deleteCalendar = deleteCalendar ?? FirestoreSyncService.deleteCalendar,
-        _loadUserProfiles =
-            loadUserProfiles ?? FirestoreSyncService.loadUserProfilesByIds {
+  }) : activities = activities.map((activity) => activity.copy()).toList(),
+       _loadAccessibleCalendars =
+           loadAccessibleCalendars ??
+           (loadDefaultCalendar == null
+               ? FirestoreSyncService.loadAccessibleCalendars
+               : ((userId) async {
+                   final calendar = await loadDefaultCalendar(userId);
+                   return calendar == null ? const [] : [calendar];
+                 })),
+       _saveSelectedFirestoreState =
+           saveSelectedFirestoreState ??
+           ((userId, calendarId, state) {
+             if (saveFirestoreState != null) {
+               return saveFirestoreState(userId, state);
+             }
+             return FirestoreSyncService.saveState(
+               userId,
+               state,
+               calendarId: calendarId,
+             );
+           }),
+       _upsertUserProfile =
+           upsertUserProfile ?? FirestoreSyncService.upsertUserProfile,
+       _addCalendarMember =
+           addCalendarMember ?? FirestoreSyncService.addMemberByEmail,
+       _createCalendar = createCalendar ?? FirestoreSyncService.createCalendar,
+       _leaveCalendar = leaveCalendar ?? FirestoreSyncService.leaveCalendar,
+       _deleteCalendar = deleteCalendar ?? FirestoreSyncService.deleteCalendar,
+       _loadUserProfiles =
+           loadUserProfiles ?? FirestoreSyncService.loadUserProfilesByIds {
     if (savedState != null) {
-      _preferredCalendarId =
-          _normalizeNullableId(savedState.selectedCalendarId);
+      _preferredCalendarId = _normalizeNullableId(
+        savedState.selectedCalendarId,
+      );
       _applySavedState(savedState, persistLocal: false);
     } else {
       _rangeStart = _dateOnly(DateTime.now());
       _generatedDays = _buildPlan();
     }
+    _outsideEventSources = PersistenceService.loadOutsideEventSources();
+    _cachedOutsideEvents = PersistenceService.loadCachedOutsideEvents();
+    _cachedOutsideEventsFetchedAtMillis =
+        PersistenceService.loadCachedOutsideEventsFetchedAtMillis();
   }
 
   /// The 7-day slice of [generatedRange] that Today/Progress/print/ICS use,
@@ -316,12 +334,11 @@ class AppState extends ChangeNotifier {
   String? get calendarOwnerUserId => _calendarOwnerUserId;
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
-  List<String> get calendarMemberDisplayLabels => List.unmodifiable(
-        _calendarMemberUserIds.map(_memberDisplayLabel),
-      );
+  List<String> get calendarMemberDisplayLabels =>
+      List.unmodifiable(_calendarMemberUserIds.map(_memberDisplayLabel));
   List<CalendarMetadata> get accessibleCalendars => List.unmodifiable(
-        _accessibleCalendars.map((calendar) => calendar.metadata),
-      );
+    _accessibleCalendars.map((calendar) => calendar.metadata),
+  );
   bool get hasMultipleAccessibleCalendars => _accessibleCalendars.length > 1;
   bool get canCreateCalendars => _userId != null;
   bool get canAddCalendarMembers =>
@@ -363,6 +380,12 @@ class AppState extends ChangeNotifier {
   /// for tests; screens should read the merged [DayPlan.activities].
   List<ManualPlanItem> get manualPlanItems =>
       List.unmodifiable(_manualPlanItems.values);
+  List<UserEventSource> get outsideEventSources =>
+      List.unmodifiable(_outsideEventSources);
+  List<EventSuggestion> get cachedOutsideEvents =>
+      List.unmodifiable(_cachedOutsideEvents);
+  int? get cachedOutsideEventsFetchedAtMillis =>
+      _cachedOutsideEventsFetchedAtMillis;
 
   /// Calm, plain-language description of the current sync problem or
   /// notice, or `null` when sync is healthy. Never exposes raw Firebase
@@ -413,11 +436,7 @@ class AppState extends ChangeNotifier {
     final hasDisplayName = displayName?.trim().isNotEmpty == true;
     if (!hasEmail && !hasDisplayName) return;
     unawaited(
-      _upsertUserProfile(
-        userId: uid,
-        email: email,
-        displayName: displayName,
-      ),
+      _upsertUserProfile(userId: uid, email: email, displayName: displayName),
     );
   }
 
@@ -438,7 +457,8 @@ class AppState extends ChangeNotifier {
       if (_userId != uid) return;
 
       final local = _currentSavedState();
-      final localSelectedCalendarId = _preferredCalendarId ??
+      final localSelectedCalendarId =
+          _preferredCalendarId ??
           _normalizeNullableId(local.selectedCalendarId);
       var metadataChanged = false;
       final remote = _chooseCalendar(remoteCalendars, uid);
@@ -446,14 +466,14 @@ class AppState extends ChangeNotifier {
       if (remote != null) {
         final selectedCalendarIsStillAccessible =
             localSelectedCalendarId == null ||
-                remoteCalendars.any(
-                  (calendar) =>
-                      calendar.metadata.calendarId == localSelectedCalendarId,
-                );
+            remoteCalendars.any(
+              (calendar) =>
+                  calendar.metadata.calendarId == localSelectedCalendarId,
+            );
         final selectedCalendarChangedBecauseMissing =
             localSelectedCalendarId != null &&
-                remote.metadata.calendarId != localSelectedCalendarId &&
-                !selectedCalendarIsStillAccessible;
+            remote.metadata.calendarId != localSelectedCalendarId &&
+            !selectedCalendarIsStillAccessible;
         metadataChanged = _applyCalendarMetadata(
           remote.metadata,
           rememberSelection: true,
@@ -498,7 +518,8 @@ class AppState extends ChangeNotifier {
         }
       } else {
         final defaultCalendarId = FirestoreSyncService.defaultCalendarId(uid);
-        final useBlankDefault = localSelectedCalendarId != null &&
+        final useBlankDefault =
+            localSelectedCalendarId != null &&
             localSelectedCalendarId != defaultCalendarId;
         final stateToSave = useBlankDefault
             ? _newCalendarSavedState(
@@ -506,13 +527,14 @@ class AppState extends ChangeNotifier {
                 updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
               )
             : local.updatedAtMillis == 0
-                ? _currentSavedState(
-                    updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
-                  )
-                : local;
+            ? _currentSavedState(
+                updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+              )
+            : local;
         _applyCalendarMetadata(
           FirestoreSyncService.defaultMetadata(uid).copyWith(
-            title: stateToSave.calendarTitle ??
+            title:
+                stateToSave.calendarTitle ??
                 FirestoreSyncService.defaultCalendarTitle,
             updatedAtMillis: stateToSave.updatedAtMillis,
           ),
@@ -526,7 +548,10 @@ class AppState extends ChangeNotifier {
         }
         _persistLocal(_currentSavedState());
         await _saveStateToFirestore(
-            uid, defaultCalendarId, _currentSavedState());
+          uid,
+          defaultCalendarId,
+          _currentSavedState(),
+        );
       }
       if (profileWarning != null) {
         _applySyncResult(
@@ -608,16 +633,13 @@ class AppState extends ChangeNotifier {
     }
 
     _accessibleCalendars = List.unmodifiable(
-      _sortCalendars(
-        [
-          ..._accessibleCalendars.where(
-            (existing) =>
-                existing.metadata.calendarId != calendar.metadata.calendarId,
-          ),
-          calendar,
-        ],
-        uid,
-      ),
+      _sortCalendars([
+        ..._accessibleCalendars.where(
+          (existing) =>
+              existing.metadata.calendarId != calendar.metadata.calendarId,
+        ),
+        calendar,
+      ], uid),
     );
     _applyCalendarMetadata(calendar.metadata, rememberSelection: true);
     _applySavedState(calendar.state, persistLocal: false);
@@ -630,9 +652,7 @@ class AppState extends ChangeNotifier {
   Future<AddCalendarMemberResult> addMemberByEmail(String email) async {
     final calendarId = _calendarId;
     if (_userId == null || calendarId == null) {
-      return AddCalendarMemberResult.failure(
-        'Sign in before adding a member.',
-      );
+      return AddCalendarMemberResult.failure('Sign in before adding a member.');
     }
 
     final locallyKnownProfile = _memberProfileByEmail(email);
@@ -679,9 +699,7 @@ class AppState extends ChangeNotifier {
     final uid = _userId;
     final calendarId = _calendarId;
     if (uid == null || calendarId == null) {
-      return LeaveCalendarResult.failure(
-        'Sign in before leaving a calendar.',
-      );
+      return LeaveCalendarResult.failure('Sign in before leaving a calendar.');
     }
     if (_calendarOwnerUserId == uid) {
       return LeaveCalendarResult.failure(
@@ -690,15 +708,10 @@ class AppState extends ChangeNotifier {
     }
     if (!_calendarMemberUserIds.contains(uid) ||
         _calendarMemberUserIds.length <= 1) {
-      return LeaveCalendarResult.failure(
-        "You can't leave this calendar.",
-      );
+      return LeaveCalendarResult.failure("You can't leave this calendar.");
     }
 
-    final result = await _leaveCalendar(
-      calendarId: calendarId,
-      userId: uid,
-    );
+    final result = await _leaveCalendar(calendarId: calendarId, userId: uid);
     if (!result.succeeded) {
       return result;
     }
@@ -1202,8 +1215,10 @@ class AppState extends ChangeNotifier {
       activity.difficultyOverride = difficulty;
       activity.energyOverride = energy;
       activity.socialOverride = social;
-      _occurrenceOverrides[_occurrenceKey(day.date, activity.activity.id)] =
-          OccurrenceOverride(
+      _occurrenceOverrides[_occurrenceKey(
+        day.date,
+        activity.activity.id,
+      )] = OccurrenceOverride(
         timeSlot: timeSlot,
         category: category,
         difficulty: difficulty,
@@ -1212,8 +1227,9 @@ class AppState extends ChangeNotifier {
       );
     }
     day.activities.sort(
-      (a, b) => PlannerService.timeRank(a.timeSlot)
-          .compareTo(PlannerService.timeRank(b.timeSlot)),
+      (a, b) => PlannerService.timeRank(
+        a.timeSlot,
+      ).compareTo(PlannerService.timeRank(b.timeSlot)),
     );
     _persist();
     notifyListeners();
@@ -1242,6 +1258,167 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addOutsideEventSource({
+    required String displayName,
+    required String url,
+    required UserEventSourceKind kind,
+  }) {
+    final normalizedUrl = url.trim();
+    final normalizedName = displayName.trim().isEmpty
+        ? _sourceNameFromUrl(normalizedUrl)
+        : displayName.trim();
+    final source = UserEventSource(
+      id: 'user_src_${DateTime.now().microsecondsSinceEpoch}',
+      displayName: normalizedName,
+      url: normalizedUrl,
+      kind: kind,
+    );
+    _outsideEventSources = [..._outsideEventSources, source];
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void updateOutsideEventSource(UserEventSource source) {
+    var changed = false;
+    _outsideEventSources = _outsideEventSources.map((existing) {
+      if (existing.id != source.id) return existing;
+      changed = true;
+      return source;
+    }).toList();
+    if (!changed) return;
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void setOutsideEventSourceEnabled(String id, bool enabled) {
+    _outsideEventSources = _outsideEventSources.map((source) {
+      return source.id == id ? source.copyWith(enabled: enabled) : source;
+    }).toList();
+    _persistOutsideEventSources();
+    notifyListeners();
+  }
+
+  void deleteOutsideEventSource(String id) {
+    final filtered = _outsideEventSources
+        .where((source) => source.id != id)
+        .toList();
+    if (filtered.length == _outsideEventSources.length) return;
+    _outsideEventSources = filtered;
+    _cachedOutsideEvents = _cachedOutsideEvents
+        .where((event) => event.raw['userSourceId'] != id)
+        .toList();
+    _persistOutsideEventSources();
+    _persistCachedOutsideEvents();
+    notifyListeners();
+  }
+
+  Future<OutsideEventDiscoveryResult> refreshOutsideEventSources() async {
+    final days = generatedRange.days;
+    final start = days.isNotEmpty ? days.first.date : DateTime.now();
+    final end = days.isNotEmpty
+        ? days.last.date
+        : DateTime.now().add(const Duration(days: 6));
+    final adapters = <OutsideEventSourceAdapter>[
+      const MockOutsideEventAdapter(),
+      CuratedRssOutsideEventAdapter(),
+      ..._outsideEventSources.map(_adapterForSource),
+      TicketmasterOutsideEventAdapter(),
+      EventbriteOutsideEventAdapter(),
+      BandsintownOutsideEventAdapter(),
+    ];
+    final service = OutsideEventDiscoveryService(
+      adapters: adapters,
+      organizer: const OutsideEventOrganizerService(),
+    );
+    final result = await service.discover(
+      OutsideEventQuery(
+        start: DateTime(start.year, start.month, start.day),
+        end: DateTime(end.year, end.month, end.day, 23, 59),
+        city: 'Halifax',
+      ),
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _cachedOutsideEvents = result.events;
+    _cachedOutsideEventsFetchedAtMillis = now;
+    _outsideEventSources = _outsideEventSources.map((source) {
+      if (!result.attemptedSourceIds.contains(source.id)) return source;
+      final warning = _firstSourceWarning(result.warnings, source.id);
+      final eventCount = result.sourceEventCounts[source.id] ?? 0;
+      return source.copyWith(
+        lastFetchedAtMillis: now,
+        lastError: warning,
+        clearLastError: warning == null,
+        lastEventCount: eventCount,
+        lastSuccessAtMillis: warning == null ? now : source.lastSuccessAtMillis,
+      );
+    }).toList();
+    _persistOutsideEventSources();
+    _persistCachedOutsideEvents();
+    notifyListeners();
+    return result;
+  }
+
+  OutsideEventDiscoveryResult cachedOutsideEventDiscoveryResult() {
+    final adapters = <OutsideEventSourceAdapter>[
+      const MockOutsideEventAdapter(),
+      CuratedRssOutsideEventAdapter(),
+      ..._outsideEventSources.map(_adapterForSource),
+      TicketmasterOutsideEventAdapter(),
+      EventbriteOutsideEventAdapter(),
+      BandsintownOutsideEventAdapter(),
+    ];
+    return OutsideEventDiscoveryResult(
+      events: _cachedOutsideEvents,
+      sources: adapters.map((adapter) => adapter.config).toList(),
+      warnings: [
+        for (final source in _outsideEventSources)
+          if (source.lastError?.trim().isNotEmpty == true)
+            OutsideEventSourceWarning(
+              sourceId: source.id,
+              sourceName: source.displayName,
+              message: source.lastError!,
+            ),
+      ],
+      aiStatusMessage:
+          'Webpage AI organizer runs server-side when configured. Without '
+          'an AI key, webpage sources use deterministic date/title fallback.',
+    );
+  }
+
+  OutsideEventSourceAdapter _adapterForSource(UserEventSource source) {
+    return switch (source.kind) {
+      UserEventSourceKind.rssAtom => UserRssAtomOutsideEventAdapter(
+        source: source,
+      ),
+      UserEventSourceKind.webPage => WebPageEventSourceAdapter(source: source),
+      UserEventSourceKind.autoDetect =>
+        _looksLikeFeed(source.url)
+            ? UserRssAtomOutsideEventAdapter(source: source)
+            : WebPageEventSourceAdapter(source: source),
+    };
+  }
+
+  void _persistOutsideEventSources() {
+    PersistenceService.saveOutsideEventSources(_outsideEventSources);
+  }
+
+  void _persistCachedOutsideEvents() {
+    PersistenceService.saveCachedOutsideEvents(_cachedOutsideEvents);
+    PersistenceService.saveCachedOutsideEventsFetchedAtMillis(
+      _cachedOutsideEventsFetchedAtMillis,
+    );
+  }
+
+  static String? _firstSourceWarning(
+    List<OutsideEventSourceWarning> warnings,
+    String sourceId,
+  ) {
+    for (final warning in warnings) {
+      if (warning.sourceId == sourceId) return warning.message;
+    }
+    return null;
+  }
+
   static String _occurrenceKey(DateTime date, String activityId) =>
       '${DayPlan.dateKey(date)}:$activityId';
 
@@ -1257,8 +1434,9 @@ class AppState extends ChangeNotifier {
     final result = <(DayPlan, List<PlannedActivity>)>[];
     for (final day in plans) {
       if (!day.date.isBefore(today)) continue;
-      final unchecked =
-          day.activities.where((a) => a.status == CheckStatus.none).toList();
+      final unchecked = day.activities
+          .where((a) => a.status == CheckStatus.none)
+          .toList();
       if (unchecked.isNotEmpty) result.add((day, unchecked));
     }
     return result;
@@ -1324,15 +1502,19 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    final sharedCalendars = calendars
-        .where((calendar) => calendar.metadata.memberUserIds.length > 1)
-        .toList()
-      ..sort((a, b) {
-        final memberComparison = b.metadata.memberUserIds.length
-            .compareTo(a.metadata.memberUserIds.length);
-        if (memberComparison != 0) return memberComparison;
-        return b.metadata.updatedAtMillis.compareTo(a.metadata.updatedAtMillis);
-      });
+    final sharedCalendars =
+        calendars
+            .where((calendar) => calendar.metadata.memberUserIds.length > 1)
+            .toList()
+          ..sort((a, b) {
+            final memberComparison = b.metadata.memberUserIds.length.compareTo(
+              a.metadata.memberUserIds.length,
+            );
+            if (memberComparison != 0) return memberComparison;
+            return b.metadata.updatedAtMillis.compareTo(
+              a.metadata.updatedAtMillis,
+            );
+          });
     if (sharedCalendars.isNotEmpty) return sharedCalendars.first;
 
     for (final calendar in calendars) {
@@ -1353,9 +1535,9 @@ class AppState extends ChangeNotifier {
       final defaultId = FirestoreSyncService.defaultCalendarId(userId);
       if (a.metadata.calendarId == defaultId) return -1;
       if (b.metadata.calendarId == defaultId) return 1;
-      return a.metadata.title
-          .toLowerCase()
-          .compareTo(b.metadata.title.toLowerCase());
+      return a.metadata.title.toLowerCase().compareTo(
+        b.metadata.title.toLowerCase(),
+      );
     });
     return sorted;
   }
@@ -1393,9 +1575,7 @@ class AppState extends ChangeNotifier {
     final remoteCalendars = await _loadAccessibleCalendars(uid);
     if (_userId != uid) return;
     final remainingCalendars = remoteCalendars
-        .where(
-          (calendar) => calendar.metadata.calendarId != removedCalendarId,
-        )
+        .where((calendar) => calendar.metadata.calendarId != removedCalendarId)
         .toList();
     await _refreshMemberProfiles(remainingCalendars);
     if (_userId != uid) return;
@@ -1417,9 +1597,9 @@ class AppState extends ChangeNotifier {
       updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
     _applyCalendarMetadata(
-      FirestoreSyncService.defaultMetadata(uid).copyWith(
-        updatedAtMillis: fallbackState.updatedAtMillis,
-      ),
+      FirestoreSyncService.defaultMetadata(
+        uid,
+      ).copyWith(updatedAtMillis: fallbackState.updatedAtMillis),
       rememberSelection: true,
     );
     _applySavedState(fallbackState, persistLocal: false);
@@ -1470,7 +1650,8 @@ class AppState extends ChangeNotifier {
     if (savedCalendarTitle != null) {
       _calendarTitle = savedCalendarTitle;
     }
-    _calendarNameConfirmed = saved.calendarNameConfirmed &&
+    _calendarNameConfirmed =
+        saved.calendarNameConfirmed &&
         (savedCalendarTitle != null || _calendarTitle.trim().isNotEmpty);
     _introOnboardingCompleted = saved.introOnboardingCompleted;
     _difficultyEnabled = saved.difficultyEnabled;
@@ -1506,8 +1687,9 @@ class AppState extends ChangeNotifier {
     }
     _selectedRangeWeekIndex = 0;
     _removedOccurrences = Map<String, bool>.from(saved.removedMap);
-    _occurrenceOverrides =
-        Map<String, OccurrenceOverride>.from(saved.occurrenceOverrides);
+    _occurrenceOverrides = Map<String, OccurrenceOverride>.from(
+      saved.occurrenceOverrides,
+    );
     _manualPlanItems = Map<String, ManualPlanItem>.from(
       saved.manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
     );
@@ -1553,8 +1735,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _applySyncResult(FirestoreSyncResult result,
-      {_SyncOperation? operation}) {
+  void _applySyncResult(
+    FirestoreSyncResult result, {
+    _SyncOperation? operation,
+  }) {
     _lastSyncStatus = result.status;
     _lastSyncErrorMessage = result.errorMessage;
     _lastSyncOperation = result.errorMessage != null ? operation : null;
@@ -1579,7 +1763,8 @@ class AppState extends ChangeNotifier {
       return const SyncMessage(
         severity: SyncMessageSeverity.warning,
         title: "Can't access this calendar",
-        body: 'You may not have access to this calendar anymore. '
+        body:
+            'You may not have access to this calendar anymore. '
             'Ask the calendar owner to check sharing.',
       );
     }
@@ -1604,7 +1789,8 @@ class AppState extends ChangeNotifier {
         return const SyncMessage(
           severity: SyncMessageSeverity.warning,
           title: 'Sync issue',
-          body: "Couldn't load the latest shared calendar. "
+          body:
+              "Couldn't load the latest shared calendar. "
               'Check your connection and try again.',
           actionLabel: 'Retry',
         );
@@ -1631,7 +1817,8 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveRangeType(state.rangeType);
     PersistenceService.saveViewMode(state.viewMode);
     PersistenceService.saveRangeStartMillis(
-        state.rangeStart?.millisecondsSinceEpoch);
+      state.rangeStart?.millisecondsSinceEpoch,
+    );
     PersistenceService.saveDisplayName(state.displayName);
     PersistenceService.saveDisplayNameConfirmed(state.displayNameConfirmed);
     PersistenceService.saveCalendarTitle(state.calendarTitle);
@@ -1652,9 +1839,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveExportShowCheckInStatus(
       state.exportShowCheckInStatus,
     );
-    PersistenceService.saveExportShowLockedStatus(
-      state.exportShowLockedStatus,
-    );
+    PersistenceService.saveExportShowLockedStatus(state.exportShowLockedStatus);
     PersistenceService.saveExportShowEnabledDimensions(
       state.exportShowEnabledDimensions,
     );
@@ -1681,7 +1866,8 @@ class AppState extends ChangeNotifier {
     CalendarMetadata metadata, {
     bool rememberSelection = false,
   }) {
-    final changed = _calendarId != metadata.calendarId ||
+    final changed =
+        _calendarId != metadata.calendarId ||
         _calendarTitle != metadata.title ||
         _calendarOwnerUserId != metadata.ownerUserId ||
         _calendarMemberUserIds.join('|') != metadata.memberUserIds.join('|');
@@ -1784,8 +1970,9 @@ class AppState extends ChangeNotifier {
       checkinMap: checkinMap,
       lockedMap: lockedMap,
       removedMap: Map<String, bool>.from(_removedOccurrences),
-      occurrenceOverrides:
-          Map<String, OccurrenceOverride>.from(_occurrenceOverrides),
+      occurrenceOverrides: Map<String, OccurrenceOverride>.from(
+        _occurrenceOverrides,
+      ),
       manualPlanItems: Map<String, ManualPlanItem>.from(
         _manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
       ),
@@ -1809,8 +1996,9 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
-  List<DayPlan> _buildPlan(
-      {Map<DateTime, List<PlannedActivity>>? lockedItems}) {
+  List<DayPlan> _buildPlan({
+    Map<DateTime, List<PlannedActivity>>? lockedItems,
+  }) {
     final start = _rangeStart;
     final periodIndex = start.millisecondsSinceEpoch ~/ (1000 * 60 * 60 * 24);
     final seed = periodIndex + _seed * 1000;
@@ -1847,8 +2035,9 @@ class AppState extends ChangeNotifier {
         if (dayLocked.isNotEmpty) {
           day.activities.addAll(dayLocked);
           day.activities.sort(
-            (a, b) => PlannerService.timeRank(a.timeSlot)
-                .compareTo(PlannerService.timeRank(b.timeSlot)),
+            (a, b) => PlannerService.timeRank(
+              a.timeSlot,
+            ).compareTo(PlannerService.timeRank(b.timeSlot)),
           );
         }
       }
@@ -1948,8 +2137,9 @@ class AppState extends ChangeNotifier {
       }
       if (changedTimes) {
         day.activities.sort(
-          (a, b) => PlannerService.timeRank(a.timeSlot)
-              .compareTo(PlannerService.timeRank(b.timeSlot)),
+          (a, b) => PlannerService.timeRank(
+            a.timeSlot,
+          ).compareTo(PlannerService.timeRank(b.timeSlot)),
         );
       }
     }
@@ -1967,8 +2157,9 @@ class AppState extends ChangeNotifier {
     for (final item in _manualPlanItems.values) {
       final day = dayByKey[item.dateKey];
       if (day == null) continue;
-      final existingIndex =
-          day.activities.indexWhere((pa) => pa.manualItemId == item.id);
+      final existingIndex = day.activities.indexWhere(
+        (pa) => pa.manualItemId == item.id,
+      );
       if (existingIndex >= 0) {
         // Refresh the backing synthetic activity in case the manual item
         // was edited while another view held the old PlannedActivity.
@@ -1984,8 +2175,9 @@ class AppState extends ChangeNotifier {
     if (changedTimes) {
       for (final day in _generatedDays) {
         day.activities.sort(
-          (a, b) => PlannerService.timeRank(a.timeSlot)
-              .compareTo(PlannerService.timeRank(b.timeSlot)),
+          (a, b) => PlannerService.timeRank(
+            a.timeSlot,
+          ).compareTo(PlannerService.timeRank(b.timeSlot)),
         );
       }
     }
@@ -1993,6 +2185,23 @@ class AppState extends ChangeNotifier {
 
   static String _normalizeActivityTitle(String title) {
     return title.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  static bool _looksLikeFeed(String url) {
+    final lower = url.trim().toLowerCase();
+    return lower.endsWith('.rss') ||
+        lower.endsWith('.xml') ||
+        lower.endsWith('/feed') ||
+        lower.endsWith('/feed/') ||
+        lower.contains('rss') ||
+        lower.contains('atom');
+  }
+
+  static String _sourceNameFromUrl(String url) {
+    final parsed = Uri.tryParse(url);
+    final host = parsed?.host;
+    if (host == null || host.isEmpty) return 'Event source';
+    return host.replaceFirst(RegExp(r'^www\.'), '');
   }
 
   void _enableFeed() {
@@ -2031,6 +2240,7 @@ class AppState extends ChangeNotifier {
       calendarId: _calendarId ?? _feedToken ?? 'local-calendar',
       calendarTitle: _calendarTitle,
       plan: weekPlan,
+      manualPlanItemsById: _manualPlanItems,
     );
     _cachedIcsUpdatedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }

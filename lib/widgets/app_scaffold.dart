@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class AppScaffold extends StatelessWidget {
-  const AppScaffold({
-    super.key,
-    required this.body,
-    this.bottomNav,
-  });
+  const AppScaffold({super.key, required this.body, this.bottomNav});
 
   final Widget body;
   final Widget? bottomNav;

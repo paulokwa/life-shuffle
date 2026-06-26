@@ -37,10 +37,7 @@ class CheckInCircle extends StatelessWidget {
           border: Border.all(color: borderWarm, width: 2),
         );
       case CheckStatus.done:
-        return const BoxDecoration(
-          shape: BoxShape.circle,
-          color: accentSage,
-        );
+        return const BoxDecoration(shape: BoxShape.circle, color: accentSage);
       case CheckStatus.partly:
         return BoxDecoration(
           shape: BoxShape.circle,

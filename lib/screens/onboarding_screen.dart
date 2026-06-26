@@ -217,10 +217,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 onTap: widget.onComplete,
                 child: Text(
                   'Skip',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    color: textMuted,
-                  ),
+                  style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                 ),
               ),
             ],

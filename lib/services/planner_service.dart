@@ -189,8 +189,9 @@ class PlannerService {
       // days untouched. This doesn't change targetActivityCount: it's an
       // opportunistic top-up on top of the plan style's ask, not a new
       // formal target diagnostics should flag as blocked if unfilled.
-      final flexibleAttempts =
-          targetCount == 0 && mustItemsForDay.isNotEmpty ? 1 : targetCount;
+      final flexibleAttempts = targetCount == 0 && mustItemsForDay.isNotEmpty
+          ? 1
+          : targetCount;
       for (var j = 0; j < flexibleAttempts; j++) {
         final act = _pickActivity(
           pool: activitiesPool,
@@ -266,9 +267,9 @@ class PlannerService {
 
       final chosenDayIndices = allowedDayIndices.length <= activity.maxPerWeek
           ? allowedDayIndices
-          : (List<int>.from(allowedDayIndices)..shuffle(rng))
-              .take(activity.maxPerWeek)
-              .toList();
+          : (List<int>.from(
+              allowedDayIndices,
+            )..shuffle(rng)).take(activity.maxPerWeek).toList();
 
       for (final dayIndex in chosenDayIndices) {
         byDay.putIfAbsent(dayIndex, () => <Activity>[]).add(activity);
@@ -363,9 +364,8 @@ class PlannerService {
   ) {
     final shuffled = List<Activity>.from(candidates)..shuffle(rng);
     shuffled.sort(
-      (a, b) => (scheduledCounts[a.id] ?? 0).compareTo(
-        scheduledCounts[b.id] ?? 0,
-      ),
+      (a, b) =>
+          (scheduledCounts[a.id] ?? 0).compareTo(scheduledCounts[b.id] ?? 0),
     );
     return shuffled.first;
   }
@@ -392,9 +392,11 @@ class PlannerService {
         scheduledCounts[b.id] ?? 0,
       );
       if (usedCompare != 0) return usedCompare;
-      return _difficultyPlacementScore(a, hardDayCounts, dayIndex).compareTo(
-        _difficultyPlacementScore(b, hardDayCounts, dayIndex),
-      );
+      return _difficultyPlacementScore(
+        a,
+        hardDayCounts,
+        dayIndex,
+      ).compareTo(_difficultyPlacementScore(b, hardDayCounts, dayIndex));
     });
     return shuffled.first;
   }
@@ -421,8 +423,9 @@ class PlannerService {
   ) {
     final result = <int, int>{};
     for (final entry in scheduledContext.entries) {
-      final hardCount =
-          entry.value.where((item) => _isHard(item.activity)).length;
+      final hardCount = entry.value
+          .where((item) => _isHard(item.activity))
+          .length;
       if (hardCount > 0) result[entry.key] = hardCount;
     }
     return result;
@@ -444,8 +447,9 @@ class PlannerService {
     if (!_isHard(activity)) return 0;
     final hardDays = hardDayCounts.keys.toList();
     if (hardDays.isEmpty) return 1;
-    final nearestDistance =
-        hardDays.map((hardDay) => (hardDay - dayIndex).abs()).reduce(min);
+    final nearestDistance = hardDays
+        .map((hardDay) => (hardDay - dayIndex).abs())
+        .reduce(min);
     return 10 - nearestDistance.clamp(0, 7).toInt();
   }
 

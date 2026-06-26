@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
+import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/services/ics_calendar_service.dart';
 
@@ -55,15 +56,13 @@ void main() {
     );
 
     expect(feed, contains(r'X-WR-CALNAME:Kwame\, Laura\; and \\ Life'));
-    expect(
-      feed,
-      contains(r'SUMMARY:Walk\, waterfront\; then \\ home\nsoon'),
-    );
+    expect(feed, contains(r'SUMMARY:Walk\, waterfront\; then \\ home\nsoon'));
     expect(feed, contains(r'CATEGORIES:Outside\, water\; calm'));
     expect(
       feed,
       contains(
-          r'DESCRIPTION:Duration: 45 min\nCategory: Outside\, water\; calm'),
+        r'DESCRIPTION:Duration: 45 min\nCategory: Outside\, water\; calm',
+      ),
     );
   });
 
@@ -94,6 +93,49 @@ void main() {
     expect(feed, contains('X-WR-CALNAME:Empty plan\r\n'));
     expect(feed, contains('END:VCALENDAR\r\n'));
     expect(feed, isNot(contains('BEGIN:VEVENT')));
+  });
+
+  test('includes outside event metadata in the description when supplied', () {
+    final manualItem = ManualPlanItem(
+      id: 'outside-1',
+      dateKey: '2026-06-18',
+      title: 'Garden concert',
+      timeSlot: '6:30 PM',
+      category: 'Outside',
+      durationMinutes: 45,
+      outsideEventId: 'evt-1',
+      outsideEventSourceName: 'Venue page',
+      outsideEventVenueName: 'Victoria Park',
+    );
+    final plan = [
+      DayPlan(
+        date: DateTime(2026, 6, 18),
+        activities: [
+          PlannedActivity(
+            activity: Activity(
+              id: 'manual_outside-1',
+              title: 'Garden concert',
+              category: 'Outside',
+              durationMinutes: 45,
+            ),
+            timeSlot: '6:30 PM',
+            manualItemId: 'outside-1',
+          ),
+        ],
+      ),
+    ];
+
+    final feed = IcsCalendarService.generate(
+      calendarId: 'cal-1',
+      calendarTitle: 'Kwame and Laura',
+      plan: plan,
+      generatedAt: DateTime.utc(2026, 6, 18, 12),
+      manualPlanItemsById: {'outside-1': manualItem},
+    );
+
+    final unfolded = feed.replaceAll('\r\n ', '');
+    expect(unfolded, contains(r'Venue: Victoria Park'));
+    expect(unfolded, contains(r'Source: Venue page'));
   });
 }
 

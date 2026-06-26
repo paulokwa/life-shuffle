@@ -5,11 +5,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 
 class LifeShuffleHeader extends StatelessWidget {
-  const LifeShuffleHeader({
-    super.key,
-    this.calendarName,
-    this.profileInitial,
-  });
+  const LifeShuffleHeader({super.key, this.calendarName, this.profileInitial});
 
   final String? calendarName;
   final String? profileInitial;
@@ -18,10 +14,12 @@ class LifeShuffleHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppStateScope>();
     final state = scope?.notifier;
-    final resolvedCalendarName = _nonEmpty(calendarName) ??
+    final resolvedCalendarName =
+        _nonEmpty(calendarName) ??
         _nonEmpty(state?.calendarTitle) ??
         FirestoreSyncService.defaultCalendarTitle;
-    final resolvedProfileInitial = _nonEmpty(profileInitial) ??
+    final resolvedProfileInitial =
+        _nonEmpty(profileInitial) ??
         _initialFrom(_nonEmpty(state?.displayName)) ??
         'K';
     final calendars = state?.accessibleCalendars ?? const <CalendarMetadata>[];
@@ -70,8 +68,9 @@ class LifeShuffleHeader extends StatelessWidget {
           children: calendars
               .map(
                 (calendar) => ListTile(
-                  key:
-                      ValueKey('header-calendar-option-${calendar.calendarId}'),
+                  key: ValueKey(
+                    'header-calendar-option-${calendar.calendarId}',
+                  ),
                   contentPadding: EdgeInsets.zero,
                   title: Text(calendar.title),
                   subtitle: Text('${calendar.memberUserIds.length} members'),
@@ -149,10 +148,7 @@ class _ProfileCircle extends StatelessWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: const BoxDecoration(
-        color: warmBeige,
-        shape: BoxShape.circle,
-      ),
+      decoration: const BoxDecoration(color: warmBeige, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Text(
         initial,

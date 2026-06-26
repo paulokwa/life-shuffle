@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/export_print_options.dart';
+import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/range_type.dart';
 import 'package:life_shuffle/services/text_week_export_service.dart';
@@ -142,42 +143,44 @@ void main() {
     expect(defaults.showEnabledDimensions, isTrue);
   });
 
-  test('hides duration, category, check-in, and locked status when disabled',
-      () {
-    final export = TextWeekExportService.generate(
-      calendarTitle: 'Kwame and Laura',
-      plan: [
-        DayPlan(
-          date: DateTime(2026, 6, 17),
-          activities: [
-            PlannedActivity(
-              activity: Activity(
-                id: 'cook',
-                title: 'Cook together',
-                category: 'Food',
-                durationMinutes: 90,
+  test(
+    'hides duration, category, check-in, and locked status when disabled',
+    () {
+      final export = TextWeekExportService.generate(
+        calendarTitle: 'Kwame and Laura',
+        plan: [
+          DayPlan(
+            date: DateTime(2026, 6, 17),
+            activities: [
+              PlannedActivity(
+                activity: Activity(
+                  id: 'cook',
+                  title: 'Cook together',
+                  category: 'Food',
+                  durationMinutes: 90,
+                ),
+                timeSlot: '8:00 PM',
+                status: CheckStatus.partly,
+                locked: true,
               ),
-              timeSlot: '8:00 PM',
-              status: CheckStatus.partly,
-              locked: true,
-            ),
-          ],
+            ],
+          ),
+        ],
+        options: const ExportPrintOptions(
+          showDuration: false,
+          showCategory: false,
+          showCheckInStatus: false,
+          showLockedStatus: false,
         ),
-      ],
-      options: const ExportPrintOptions(
-        showDuration: false,
-        showCategory: false,
-        showCheckInStatus: false,
-        showLockedStatus: false,
-      ),
-    );
+      );
 
-    expect(export, contains('- 8:00 PM, Cook together'));
-    expect(export, isNot(contains('(')));
-    expect(export, isNot(contains('Category:')));
-    expect(export, isNot(contains('Check-in:')));
-    expect(export, isNot(contains('Locked:')));
-  });
+      expect(export, contains('- 8:00 PM, Cook together'));
+      expect(export, isNot(contains('(')));
+      expect(export, isNot(contains('Category:')));
+      expect(export, isNot(contains('Check-in:')));
+      expect(export, isNot(contains('Locked:')));
+    },
+  );
 
   test('hides time when showTime is disabled', () {
     final export = TextWeekExportService.generate(
@@ -308,14 +311,10 @@ void main() {
     );
 
     expect(export, startsWith('Kwame and Laura 2 weeks'));
-    expect(
-      export,
-      contains('No planned activities in this 2-week range.'),
-    );
+    expect(export, contains('No planned activities in this 2-week range.'));
   });
 
-  test(
-      'uses the month horizon label, empty message, and groups the full '
+  test('uses the month horizon label, empty message, and groups the full '
       'range by date for month', () {
     final export = TextWeekExportService.generate(
       calendarTitle: 'Kwame and Laura',
@@ -417,5 +416,87 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  test('includes outside event metadata when a manual item is supplied', () {
+    final manualItem = ManualPlanItem(
+      id: 'outside-1',
+      dateKey: '2026-06-17',
+      title: 'Garden concert',
+      timeSlot: '8:00 PM',
+      category: 'Outside',
+      durationMinutes: 90,
+      outsideEventId: 'evt-1',
+      outsideEventSourceName: 'Venue page',
+      outsideEventSourceUrl: 'https://example.com/events',
+      outsideEventTicketUrl: 'https://example.com/tickets',
+      outsideEventVenueName: 'Victoria Park',
+      outsideEventConfidence: 0.8,
+      outsideEventUncertainFields: const ['price'],
+    );
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [
+        DayPlan(
+          date: DateTime(2026, 6, 17),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'manual_outside-1',
+                title: 'Garden concert',
+                category: 'Outside',
+                durationMinutes: 90,
+              ),
+              timeSlot: '8:00 PM',
+              manualItemId: 'outside-1',
+            ),
+          ],
+        ),
+      ],
+      manualPlanItemsById: {'outside-1': manualItem},
+    );
+
+    expect(export, contains('Venue: Victoria Park'));
+    expect(export, contains('Source: Venue page'));
+    expect(export, contains('Tickets: https://example.com/tickets'));
+    expect(export, contains('Confidence: 80%'));
+    expect(export, contains('Uncertain: price'));
+  });
+
+  test('hides outside event metadata when the toggle is off', () {
+    final manualItem = ManualPlanItem(
+      id: 'outside-1',
+      dateKey: '2026-06-17',
+      title: 'Garden concert',
+      timeSlot: '8:00 PM',
+      category: 'Outside',
+      durationMinutes: 90,
+      outsideEventId: 'evt-1',
+      outsideEventSourceName: 'Venue page',
+    );
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [
+        DayPlan(
+          date: DateTime(2026, 6, 17),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'manual_outside-1',
+                title: 'Garden concert',
+                category: 'Outside',
+                durationMinutes: 90,
+              ),
+              timeSlot: '8:00 PM',
+              manualItemId: 'outside-1',
+            ),
+          ],
+        ),
+      ],
+      manualPlanItemsById: {'outside-1': manualItem},
+      options: const ExportPrintOptions(showOutsideEventDetails: false),
+    );
+
+    expect(export, isNot(contains('Source: Venue page')));
   });
 }

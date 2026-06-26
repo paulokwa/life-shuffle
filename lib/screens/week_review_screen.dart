@@ -110,9 +110,7 @@ class _WeekReviewView extends StatelessWidget {
                               else
                                 ...day.activities.map(
                                   (a) => Padding(
-                                    padding: const EdgeInsets.only(
-                                      bottom: 10,
-                                    ),
+                                    padding: const EdgeInsets.only(bottom: 10),
                                     child: _WeekReviewItemCard(
                                       activity: a,
                                       canCheckIn: AppState.canCheckIn(day.date),
@@ -140,14 +138,14 @@ class _WeekReviewItemCard extends StatelessWidget {
   final bool canCheckIn;
 
   IconData get _icon => switch (activity.category) {
-        'Creative' => Icons.menu_book_rounded,
-        'Outside' => Icons.waves_rounded,
-        'Couple time' => Icons.restaurant_rounded,
-        'Social' => Icons.people_rounded,
-        'At home' => Icons.home_rounded,
-        'Rest' => Icons.self_improvement_rounded,
-        _ => Icons.star_rounded,
-      };
+    'Creative' => Icons.menu_book_rounded,
+    'Outside' => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Social' => Icons.people_rounded,
+    'At home' => Icons.home_rounded,
+    'Rest' => Icons.self_improvement_rounded,
+    _ => Icons.star_rounded,
+  };
 
   void _setStatus(BuildContext context, CheckStatus status) {
     activity.status = status;

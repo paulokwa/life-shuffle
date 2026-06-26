@@ -9,7 +9,7 @@ class Activity {
   String social;
   int maxPerWeek;
   List<int>
-      allowedWeekdays; // DateTime.weekday values: Monday 1 through Sunday 7
+  allowedWeekdays; // DateTime.weekday values: Monday 1 through Sunday 7
   bool noConsecutiveDays;
   bool enabled;
 
@@ -33,25 +33,11 @@ class Activity {
     'Low-energy ideas',
   ];
 
-  static const preferredTimes = [
-    'anytime',
-    'morning',
-    'afternoon',
-    'evening',
-  ];
+  static const preferredTimes = ['anytime', 'morning', 'afternoon', 'evening'];
 
-  static const energyLevels = [
-    'low',
-    'medium',
-    'high',
-  ];
+  static const energyLevels = ['low', 'medium', 'high'];
 
-  static const socialLevels = [
-    'solo',
-    'together',
-    'group',
-    'either',
-  ];
+  static const socialLevels = ['solo', 'together', 'group', 'either'];
 
   static const allWeekdays = [1, 2, 3, 4, 5, 6, 7];
 
@@ -69,19 +55,19 @@ class Activity {
     this.noConsecutiveDays = false,
     this.enabled = true,
     this.mustIncludeInPlans = false,
-  })  : difficulty = _normalizeDifficulty(difficulty),
-        energy = _normalizeOption(
-          energy,
-          fallback: 'medium',
-          allowed: energyLevels,
-        ),
-        social = _normalizeOption(
-          social,
-          fallback: 'either',
-          allowed: socialLevels,
-        ),
-        maxPerWeek = _normalizeMaxPerWeek(maxPerWeek),
-        allowedWeekdays = _normalizeAllowedWeekdays(allowedWeekdays);
+  }) : difficulty = _normalizeDifficulty(difficulty),
+       energy = _normalizeOption(
+         energy,
+         fallback: 'medium',
+         allowed: energyLevels,
+       ),
+       social = _normalizeOption(
+         social,
+         fallback: 'either',
+         allowed: socialLevels,
+       ),
+       maxPerWeek = _normalizeMaxPerWeek(maxPerWeek),
+       allowedWeekdays = _normalizeAllowedWeekdays(allowedWeekdays);
 
   String get duration {
     if (durationMinutes < 60) return '$durationMinutes min';
@@ -225,7 +211,8 @@ class Activity {
   static List<int> _readAllowedWeekdays(Object? value) {
     if (value is Iterable) {
       return _normalizeAllowedWeekdays(
-          value.whereType<num>().map((v) => v.toInt()));
+        value.whereType<num>().map((v) => v.toInt()),
+      );
     }
     return List<int>.from(allWeekdays);
   }
@@ -236,11 +223,12 @@ class Activity {
   }
 
   static List<int> _normalizeAllowedWeekdays(Iterable<int>? value) {
-    final weekdays = (value ?? allWeekdays)
-        .where((day) => day >= 1 && day <= 7)
-        .toSet()
-        .toList()
-      ..sort();
+    final weekdays =
+        (value ?? allWeekdays)
+            .where((day) => day >= 1 && day <= 7)
+            .toSet()
+            .toList()
+          ..sort();
     return weekdays.isEmpty ? List<int>.from(allWeekdays) : weekdays;
   }
 

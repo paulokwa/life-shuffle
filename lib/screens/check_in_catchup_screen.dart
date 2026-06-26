@@ -24,7 +24,10 @@ class CheckInCatchupScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppStateScope(state: appState, child: _CatchupView(now: now));
+    return AppStateScope(
+      state: appState,
+      child: _CatchupView(now: now),
+    );
   }
 }
 
@@ -37,8 +40,10 @@ class _CatchupView extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final dayGroups = state.pastUncheckedByDay(now: now);
-    final totalRemaining =
-        dayGroups.fold<int>(0, (sum, g) => sum + g.$2.length);
+    final totalRemaining = dayGroups.fold<int>(
+      0,
+      (sum, g) => sum + g.$2.length,
+    );
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -135,14 +140,14 @@ class _CatchupItemCard extends StatelessWidget {
   final PlannedActivity activity;
 
   IconData get _icon => switch (activity.category) {
-        'Creative' => Icons.menu_book_rounded,
-        'Outside' => Icons.waves_rounded,
-        'Couple time' => Icons.restaurant_rounded,
-        'Social' => Icons.people_rounded,
-        'At home' => Icons.home_rounded,
-        'Rest' => Icons.self_improvement_rounded,
-        _ => Icons.star_rounded,
-      };
+    'Creative' => Icons.menu_book_rounded,
+    'Outside' => Icons.waves_rounded,
+    'Couple time' => Icons.restaurant_rounded,
+    'Social' => Icons.people_rounded,
+    'At home' => Icons.home_rounded,
+    'Rest' => Icons.self_improvement_rounded,
+    _ => Icons.star_rounded,
+  };
 
   void _setStatus(BuildContext context, CheckStatus status) {
     activity.status = status;
@@ -198,7 +203,9 @@ class _CatchupItemCard extends StatelessWidget {
                         Text(
                           activity.time,
                           style: GoogleFonts.dmSans(
-                              fontSize: 12, color: textMuted),
+                            fontSize: 12,
+                            color: textMuted,
+                          ),
                         ),
                         CategoryChip(category: activity.category),
                       ],

@@ -4,8 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
 import '../models/day_plan.dart' show OccurrenceOverride;
+import '../models/event_suggestion.dart';
 import '../models/manual_plan_item.dart';
 import '../models/range_type.dart';
+import '../models/user_event_source.dart';
 
 /// Lightweight local storage for in-session state.
 /// Wraps SharedPreferences (localStorage on web).
@@ -58,10 +60,18 @@ class PersistenceService {
   static const _keyRemovedMap = 'ls_removed_map';
   static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
   static const _keyManualPlanItems = 'ls_manual_plan_items';
+  static const _keyOutsideEventSources = 'ls_outside_event_sources';
+  static const _keyCachedOutsideEvents = 'ls_cached_outside_events';
+  static const _keyCachedOutsideEventsFetchedAtMillis =
+      'ls_cached_outside_events_fetched_at_millis';
+  static bool _initialized = false;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    _initialized = true;
   }
+
+  static bool get isInitialized => _initialized;
 
   static SavedState load(List<Activity> defaultActivities) {
     final activities = _loadActivities(defaultActivities);
@@ -88,8 +98,9 @@ class PersistenceService {
     final feedUpdatedAtMillis = _prefs.getInt(_keyFeedUpdatedAtMillis);
     final feedRevokedAtMillis = _prefs.getInt(_keyFeedRevokedAtMillis);
     final cachedIcsText = _prefs.getString(_keyCachedIcsText);
-    final cachedIcsUpdatedAtMillis =
-        _prefs.getInt(_keyCachedIcsUpdatedAtMillis);
+    final cachedIcsUpdatedAtMillis = _prefs.getInt(
+      _keyCachedIcsUpdatedAtMillis,
+    );
     final exportShowTime = _prefs.getBool(_keyExportShowTime) ?? true;
     final exportShowDuration = _prefs.getBool(_keyExportShowDuration) ?? true;
     final exportShowCategory = _prefs.getBool(_keyExportShowCategory) ?? true;
@@ -124,7 +135,8 @@ class PersistenceService {
     final checkinMap = _loadCheckinMapBlob() ?? legacyCheckinMap;
     final lockedMap = _loadLockedMapBlob() ?? legacyLockedMap;
     final removedMap = _loadRemovedMapBlob() ?? const <String, bool>{};
-    final occurrenceOverrides = _loadOccurrenceOverridesMapBlob() ??
+    final occurrenceOverrides =
+        _loadOccurrenceOverridesMapBlob() ??
         const <String, OccurrenceOverride>{};
     final manualPlanItems =
         _loadManualPlanItemsBlob() ?? const <String, ManualPlanItem>{};
@@ -180,9 +192,9 @@ class PersistenceService {
   }
 
   static void saveActivities(List<Activity> activities) => _prefs.setString(
-        _keyActivities,
-        jsonEncode(activities.map((activity) => activity.toMap()).toList()),
-      );
+    _keyActivities,
+    jsonEncode(activities.map((activity) => activity.toMap()).toList()),
+  );
 
   static void saveSeed(int seed) => _prefs.setInt(_keySeed, seed);
 
@@ -315,17 +327,83 @@ class PersistenceService {
 
   static void saveOccurrenceOverridesMap(
     Map<String, OccurrenceOverride> value,
-  ) =>
-      _prefs.setString(
-        _keyOccurrenceOverridesMap,
-        jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
-      );
+  ) => _prefs.setString(
+    _keyOccurrenceOverridesMap,
+    jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
+  );
 
   static void saveManualPlanItems(Map<String, ManualPlanItem> value) =>
       _prefs.setString(
         _keyManualPlanItems,
         jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
       );
+
+  static List<UserEventSource> loadOutsideEventSources() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyOutsideEventSources);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map(
+              (map) => UserEventSource.fromMap(Map<String, dynamic>.from(map)),
+            )
+            .where((source) => source.url.trim().isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      // A malformed local-only source list should not break app startup.
+    }
+    return const [];
+  }
+
+  static void saveOutsideEventSources(List<UserEventSource> sources) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyOutsideEventSources,
+      jsonEncode(sources.map((source) => source.toMap()).toList()),
+    );
+  }
+
+  static List<EventSuggestion> loadCachedOutsideEvents() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyCachedOutsideEvents);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map(
+              (map) => EventSuggestion.fromMap(Map<String, dynamic>.from(map)),
+            )
+            .toList();
+      }
+    } catch (_) {
+      // Ignore malformed cache; refresh can rebuild it.
+    }
+    return const [];
+  }
+
+  static void saveCachedOutsideEvents(List<EventSuggestion> events) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyCachedOutsideEvents,
+      jsonEncode(events.map((event) => event.toMap()).toList()),
+    );
+  }
+
+  static int? loadCachedOutsideEventsFetchedAtMillis() {
+    if (!_initialized) return null;
+    return _prefs.getInt(_keyCachedOutsideEventsFetchedAtMillis);
+  }
+
+  static void saveCachedOutsideEventsFetchedAtMillis(int? value) {
+    if (!_initialized) return;
+    _saveNullableInt(_keyCachedOutsideEventsFetchedAtMillis, value);
+  }
 
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);
@@ -591,10 +669,12 @@ class SavedState {
       'checkinMap': checkinMap,
       'lockedMap': lockedMap,
       'removedMap': removedMap,
-      'occurrenceOverrides':
-          occurrenceOverrides.map((key, value) => MapEntry(key, value.toMap())),
-      'manualPlanItems':
-          manualPlanItems.map((key, value) => MapEntry(key, value.toMap())),
+      'occurrenceOverrides': occurrenceOverrides.map(
+        (key, value) => MapEntry(key, value.toMap()),
+      ),
+      'manualPlanItems': manualPlanItems.map(
+        (key, value) => MapEntry(key, value.toMap()),
+      ),
     };
   }
 
@@ -641,24 +721,29 @@ class SavedState {
       feedUpdatedAtMillis: _readNullableInt(map['feedUpdatedAtMillis']),
       feedRevokedAtMillis: _readNullableInt(map['feedRevokedAtMillis']),
       cachedIcsText: _readRawNullableString(map['cachedIcsText']),
-      cachedIcsUpdatedAtMillis:
-          _readNullableInt(map['cachedIcsUpdatedAtMillis']),
+      cachedIcsUpdatedAtMillis: _readNullableInt(
+        map['cachedIcsUpdatedAtMillis'],
+      ),
       exportShowTime: _readBoolOrDefault(map['exportShowTime'], true),
       exportShowDuration: _readBoolOrDefault(map['exportShowDuration'], true),
       exportShowCategory: _readBoolOrDefault(map['exportShowCategory'], true),
-      exportShowCheckInStatus:
-          _readBoolOrDefault(map['exportShowCheckInStatus'], true),
-      exportShowLockedStatus:
-          _readBoolOrDefault(map['exportShowLockedStatus'], true),
-      exportShowEnabledDimensions:
-          _readBoolOrDefault(map['exportShowEnabledDimensions'], true),
+      exportShowCheckInStatus: _readBoolOrDefault(
+        map['exportShowCheckInStatus'],
+        true,
+      ),
+      exportShowLockedStatus: _readBoolOrDefault(
+        map['exportShowLockedStatus'],
+        true,
+      ),
+      exportShowEnabledDimensions: _readBoolOrDefault(
+        map['exportShowEnabledDimensions'],
+        true,
+      ),
       enabledMap: Map<String, bool>.from(map['enabledMap'] ?? {}),
       checkinMap: Map<String, int>.from(map['checkinMap'] ?? {}),
       lockedMap: Map<String, bool>.from(map['lockedMap'] ?? {}),
       removedMap: Map<String, bool>.from(map['removedMap'] ?? {}),
-      occurrenceOverrides: _readOccurrenceOverrides(
-        map['occurrenceOverrides'],
-      ),
+      occurrenceOverrides: _readOccurrenceOverrides(map['occurrenceOverrides']),
       manualPlanItems: _readManualPlanItems(map['manualPlanItems']),
     );
   }

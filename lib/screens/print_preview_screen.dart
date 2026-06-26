@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/generated_plan_range.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../services/browser_print.dart';
@@ -12,10 +13,10 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 
 String _viewModeLabel(RangeType mode) => switch (mode) {
-      RangeType.week => 'Week view',
-      RangeType.twoWeek => '2-week view',
-      RangeType.month => 'Month view',
-    };
+  RangeType.week => 'Week view',
+  RangeType.twoWeek => '2-week view',
+  RangeType.month => 'Month view',
+};
 
 /// Max content width for the printable plan, by whether it's a month grid
 /// (wider) or a week/2-week day list. Shared by the on-screen preview and
@@ -72,7 +73,8 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-            'Use your browser or device print option to print this page.'),
+          'Use your browser or device print option to print this page.',
+        ),
       ),
     );
   }
@@ -181,13 +183,14 @@ class _PrintableContent extends StatelessWidget {
 
     final sortedWeekPlan = List<DayPlan>.from(state.weekPlan)
       ..sort((a, b) => a.date.compareTo(b.date));
-    final hasAnyPlanned =
-        sortedWeekPlan.any((day) => day.activities.isNotEmpty);
+    final hasAnyPlanned = sortedWeekPlan.any(
+      (day) => day.activities.isNotEmpty,
+    );
 
     final rangeLabel = isMonthView
         ? (monthRangeReady
-            ? TextWeekExportService.weekRangeLabel(state.generatedRange.days)
-            : null)
+              ? TextWeekExportService.weekRangeLabel(state.generatedRange.days)
+              : null)
         : TextWeekExportService.weekRangeLabel(sortedWeekPlan);
 
     return Column(
@@ -297,8 +300,9 @@ class _PrintDaySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final activities = List<PlannedActivity>.from(day.activities)
       ..sort(
-        (a, b) => PlannerService.timeRank(a.timeSlot)
-            .compareTo(PlannerService.timeRank(b.timeSlot)),
+        (a, b) => PlannerService.timeRank(
+          a.timeSlot,
+        ).compareTo(PlannerService.timeRank(b.timeSlot)),
       );
 
     return Column(
@@ -369,6 +373,16 @@ class _PrintActivityRow extends StatelessWidget {
             socialEnabled: state.socialEnabled,
           )
         : const <String>[];
+    final manualItem = state.manualPlanItems.cast<ManualPlanItem?>().firstWhere(
+      (item) => item?.id == activity.manualItemId,
+      orElse: () => null,
+    );
+    final outsideEventLines =
+        options.showOutsideEventDetails &&
+            manualItem != null &&
+            manualItem.isOutsideEvent
+        ? TextWeekExportService.outsideEventDetailLines(manualItem)
+        : const <String>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,6 +434,14 @@ class _PrintActivityRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               dimensionLabels.join(' · '),
+              style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
+            ),
+          ),
+        if (outsideEventLines.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              outsideEventLines.join(' · '),
               style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
             ),
           ),
@@ -552,7 +574,12 @@ class _PrintMonthGrid extends StatelessWidget {
             children: [
               for (var col = 0; col < 7; col++)
                 _dayCell(
-                    gridStart, week * 7 + col, rangeStart, rangeEnd, dayByKey),
+                  gridStart,
+                  week * 7 + col,
+                  rangeStart,
+                  rangeEnd,
+                  dayByKey,
+                ),
             ],
           ),
       ],

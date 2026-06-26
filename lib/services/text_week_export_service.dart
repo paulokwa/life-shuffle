@@ -1,6 +1,7 @@
 import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import 'planner_service.dart';
@@ -18,11 +19,13 @@ class TextWeekExportService {
     bool socialEnabled = false,
     Map<String, String> privateNotesByActivityId = const {},
     bool includePrivateNotes = false,
+    Map<String, ManualPlanItem> manualPlanItemsById = const {},
   }) {
     final sortedPlan = List<DayPlan>.from(plan)
       ..sort((a, b) => a.date.compareTo(b.date));
-    final plannedDays =
-        sortedPlan.where((day) => day.activities.isNotEmpty).toList();
+    final plannedDays = sortedPlan
+        .where((day) => day.activities.isNotEmpty)
+        .toList();
     final buffer = StringBuffer()
       ..writeln('$calendarTitle ${_horizonLabel(rangeType)}')
       ..writeln(weekRangeLabel(sortedPlan))
@@ -37,8 +40,9 @@ class TextWeekExportService {
       final day = plannedDays[dayIndex];
       final activities = List<PlannedActivity>.from(day.activities)
         ..sort(
-          (a, b) => PlannerService.timeRank(a.timeSlot)
-              .compareTo(PlannerService.timeRank(b.timeSlot)),
+          (a, b) => PlannerService.timeRank(
+            a.timeSlot,
+          ).compareTo(PlannerService.timeRank(b.timeSlot)),
         );
 
       buffer.writeln(_dateLabel(day.date));
@@ -77,11 +81,55 @@ class TextWeekExportService {
         if (includePrivateNotes && note != null && note.isNotEmpty) {
           buffer.writeln('  Notes: $note');
         }
+
+        if (options.showOutsideEventDetails) {
+          final manualItem = manualPlanItemsById[planned.manualItemId];
+          if (manualItem != null && manualItem.isOutsideEvent) {
+            for (final line in outsideEventDetailLines(manualItem)) {
+              buffer.writeln('  $line');
+            }
+          }
+        }
       }
       if (dayIndex != plannedDays.length - 1) buffer.writeln();
     }
 
     return buffer.toString().trimRight();
+  }
+
+  /// Plain-text lines describing an outside event's sourced metadata -
+  /// venue/address/price, source, tickets, and confidence - for whichever
+  /// surface is rendering [item] (text export, print, ICS description).
+  /// Returns nothing the source didn't actually provide.
+  static List<String> outsideEventDetailLines(ManualPlanItem item) {
+    final lines = <String>[];
+    final details = [
+      if (item.outsideEventVenueName?.trim().isNotEmpty == true)
+        item.outsideEventVenueName!.trim(),
+      if (item.outsideEventAddress?.trim().isNotEmpty == true)
+        item.outsideEventAddress!.trim(),
+      if (item.outsideEventPriceLabel?.trim().isNotEmpty == true)
+        item.outsideEventPriceLabel!.trim(),
+    ];
+    if (details.isNotEmpty) lines.add('Venue: ${details.join(' / ')}');
+    if (item.outsideEventSourceName?.trim().isNotEmpty == true) {
+      lines.add('Source: ${item.outsideEventSourceName!.trim()}');
+    }
+    if (item.outsideEventSourceUrl?.trim().isNotEmpty == true) {
+      lines.add('Link: ${item.outsideEventSourceUrl!.trim()}');
+    }
+    final ticketUrl = item.outsideEventTicketUrl?.trim();
+    if (ticketUrl?.isNotEmpty == true &&
+        ticketUrl != item.outsideEventSourceUrl?.trim()) {
+      lines.add('Tickets: $ticketUrl');
+    }
+    if (item.outsideEventConfidence != null) {
+      lines.add('Confidence: ${(item.outsideEventConfidence! * 100).round()}%');
+    }
+    if (item.outsideEventUncertainFields.isNotEmpty) {
+      lines.add('Uncertain: ${item.outsideEventUncertainFields.join(', ')}');
+    }
+    return lines;
   }
 
   /// Compact labels for enabled planning dimensions, e.g. `Difficulty 3/5`.
@@ -152,17 +200,16 @@ class TextWeekExportService {
   /// Word following the calendar title in the export header, e.g.
   /// `Kwame and Laura week` / `... 2 weeks` / `... month`.
   static String _horizonLabel(RangeType type) => switch (type) {
-        RangeType.week => 'week',
-        RangeType.twoWeek => '2 weeks',
-        RangeType.month => 'month',
-      };
+    RangeType.week => 'week',
+    RangeType.twoWeek => '2 weeks',
+    RangeType.month => 'month',
+  };
 
   static String _emptyMessage(RangeType type) => switch (type) {
-        RangeType.week => 'No planned activities this week.',
-        RangeType.twoWeek => 'No planned activities in this 2-week range.',
-        RangeType.month =>
-          'No planned activities in the generated month range.',
-      };
+    RangeType.week => 'No planned activities this week.',
+    RangeType.twoWeek => 'No planned activities in this 2-week range.',
+    RangeType.month => 'No planned activities in the generated month range.',
+  };
 
   static String _checkStatusLabel(CheckStatus status) {
     return switch (status) {

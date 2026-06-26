@@ -74,10 +74,7 @@ class ProgressScreen extends StatelessWidget {
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 20),
-                  _RecentSummarySection(
-                    past7: past7,
-                    past30: past30,
-                  ),
+                  _RecentSummarySection(past7: past7, past30: past30),
                   const SizedBox(height: 20),
                   if (state.difficultyEnabled) ...[
                     _DifficultySummarySection(
@@ -197,10 +194,7 @@ class _WeekStats {
 }
 
 class _RecentSummarySection extends StatelessWidget {
-  const _RecentSummarySection({
-    required this.past7,
-    required this.past30,
-  });
+  const _RecentSummarySection({required this.past7, required this.past30});
 
   final ProgressSummary past7;
   final ProgressSummary past30;
@@ -342,11 +336,7 @@ class _RecentSummaryCard extends StatelessWidget {
                 label: 'Done',
                 color: accentSage,
               ),
-              _RecentCount(
-                value: summary.partly,
-                label: 'Partly',
-                color: sand,
-              ),
+              _RecentCount(value: summary.partly, label: 'Partly', color: sand),
               _RecentCount(
                 value: summary.skipped,
                 label: 'Skipped',
@@ -412,10 +402,7 @@ class _RecentCount extends StatelessWidget {
 }
 
 class _DifficultySummarySection extends StatelessWidget {
-  const _DifficultySummarySection({
-    required this.past7,
-    required this.past30,
-  });
+  const _DifficultySummarySection({required this.past7, required this.past30});
 
   final DifficultyProgressSummary past7;
   final DifficultyProgressSummary past30;
@@ -551,16 +538,8 @@ class _DifficultyWindowRow extends StatelessWidget {
               label: 'Planned',
               color: textPrimary,
             ),
-            _RecentCount(
-              value: summary.done,
-              label: 'Done',
-              color: accentSage,
-            ),
-            _RecentCount(
-              value: summary.partly,
-              label: 'Partly',
-              color: sand,
-            ),
+            _RecentCount(value: summary.done, label: 'Done', color: accentSage),
+            _RecentCount(value: summary.partly, label: 'Partly', color: sand),
             _RecentCount(
               value: summary.skipped,
               label: 'Skipped',
@@ -792,7 +771,7 @@ class _LookingAheadSection extends StatelessWidget {
                           summary.hasUpcoming
                               ? 'A quick peek at what future-you already has.'
                               : 'Generate or adjust the plan when you want '
-                                  'something on deck.',
+                                    'something on deck.',
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             color: textMuted,
@@ -824,10 +803,7 @@ class _LookingAheadSection extends StatelessWidget {
 }
 
 class _UpcomingActivityRow extends StatelessWidget {
-  const _UpcomingActivityRow({
-    super.key,
-    required this.activity,
-  });
+  const _UpcomingActivityRow({super.key, required this.activity});
 
   final UpcomingActivitySummary activity;
 
@@ -844,11 +820,7 @@ class _UpcomingActivityRow extends StatelessWidget {
             shape: BoxShape.circle,
             color: categoryChipBg(activity.category),
           ),
-          child: Icon(
-            Icons.event_note_rounded,
-            size: 16,
-            color: categoryColor,
-          ),
+          child: Icon(Icons.event_note_rounded, size: 16, color: categoryColor),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -878,8 +850,10 @@ class _UpcomingActivityRow extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: categoryChipBg(activity.category),
                       borderRadius: BorderRadius.circular(999),
