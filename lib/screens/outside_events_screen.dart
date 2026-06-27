@@ -44,143 +44,133 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const LifeShuffleHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 128),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        behavior: HitTestBehavior.opaque,
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            size: 18,
-                            color: textMuted,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'Outside events',
-                          style: GoogleFonts.lora(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w500,
-                            color: textPrimary,
-                            height: 1.2,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        key: const ValueKey('outside-events-refresh'),
-                        onPressed: _refresh,
-                        icon: const Icon(
-                          Icons.refresh_rounded,
-                          color: primaryTerracotta,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Browse sourced events for the current plan range, then '
-                    'add the ones you actually want.',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      color: textMuted,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FutureBuilder<OutsideEventDiscoveryResult>(
-                    future: _future,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const _LoadingList();
-                      }
-                      if (snapshot.hasError) {
-                        return const _MessageCard(
-                          icon: Icons.error_outline_rounded,
-                          title: 'Events could not load',
-                          body: 'Try refresh. The rest of the planner is '
-                              'unchanged.',
-                          color: Color(0xFFFFF3EC),
-                        );
-                      }
-                      final result = snapshot.data!;
-                      final events = _filteredEvents(result.events);
-                      final allTags = _allTags(result.events);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SourceStatusCard(result: result),
-                          if (AppStateScope.of(context)
-                                  .cachedOutsideEventsFetchedAtMillis !=
-                              null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Last fetched: ${_shortTimestamp(AppStateScope.of(context).cachedOutsideEventsFetchedAtMillis!)}',
-                              key: const ValueKey(
-                                'outside-events-last-fetched',
-                              ),
-                              style: GoogleFonts.dmSans(
-                                fontSize: 12,
-                                color: textMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
+    return Scaffold(
+      backgroundColor: backgroundCream,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const LifeShuffleHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 128),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          behavior: HitTestBehavior.opaque,
+                          child: const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 18,
+                              color: textMuted,
                             ),
-                          ],
-                          const SizedBox(height: 12),
-                          _FilterSection(
-                            sources: result.sources,
-                            selectedSources: _selectedSources,
-                            onToggleSource: _toggleSource,
-                            allTags: allTags,
-                            selectedTags: _selectedTags,
-                            onToggleTag: _toggleTag,
                           ),
-                          const SizedBox(height: 14),
-                          if (result.warnings.isNotEmpty) ...[
-                            _WarningsCard(warnings: result.warnings),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Outside events',
+                            style: GoogleFonts.lora(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const ValueKey('outside-events-refresh'),
+                          onPressed: _refresh,
+                          icon: const Icon(
+                            Icons.refresh_rounded,
+                            color: primaryTerracotta,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Browse sourced events and add the ones you actually want.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        color: textMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FutureBuilder<OutsideEventDiscoveryResult>(
+                      future: _future,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const _LoadingList();
+                        }
+                        if (snapshot.hasError) {
+                          return const _MessageCard(
+                            icon: Icons.error_outline_rounded,
+                            title: 'Events could not load',
+                            body: 'Try refresh. The rest of the planner is '
+                                'unchanged.',
+                            color: Color(0xFFFFF3EC),
+                          );
+                        }
+                        final result = snapshot.data!;
+                        final events = _filteredEvents(result.events);
+                        final allTags = _allTags(result.events);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FilterSection(
+                              sources: result.sources,
+                              events: result.events,
+                              selectedSources: _selectedSources,
+                              onToggleSource: _toggleSource,
+                              allTags: allTags,
+                              selectedTags: _selectedTags,
+                              onToggleTag: _toggleTag,
+                            ),
                             const SizedBox(height: 14),
-                          ],
-                          if (events.isEmpty)
-                            const _MessageCard(
-                              icon: Icons.search_off_rounded,
-                              title: 'No matching outside events',
-                              body: 'Try clearing filters or refresh later. '
-                                  'No event is added unless you tap Add.',
-                              color: surfaceWhite,
-                            )
-                          else
-                            ...events.map(
-                              (event) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _EventSuggestionCard(
-                                  event: event,
-                                  added: _isAdded(event),
-                                  onAdd: () => _addEvent(event),
+                            if (result.warnings.isNotEmpty ||
+                                result.aiStatusMessage.isNotEmpty) ...[
+                              _DiagnosticsSection(
+                                result: result,
+                                fetchedAtMillis: AppStateScope.of(context)
+                                    .cachedOutsideEventsFetchedAtMillis,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            if (events.isEmpty)
+                              const _MessageCard(
+                                icon: Icons.search_off_rounded,
+                                title: 'No matching outside events',
+                                body: 'Try clearing filters or refresh later. '
+                                    'No event is added unless you tap Add.',
+                                color: surfaceWhite,
+                              )
+                            else
+                              ...events.map(
+                                (event) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _EventSuggestionCard(
+                                    event: event,
+                                    added: _isAdded(event),
+                                    onAdd: () => _addEvent(event),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -294,67 +284,10 @@ class _LoadingList extends StatelessWidget {
   }
 }
 
-class _SourceStatusCard extends StatelessWidget {
-  const _SourceStatusCard({required this.result});
-
-  final OutsideEventDiscoveryResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final configured =
-        result.sources.where((source) => source.configured).length;
-    return LsCard(
-      color: const Color(0xFFEEF6F2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0x1A6A9E88),
-                ),
-                child: const Icon(
-                  Icons.travel_explore_rounded,
-                  size: 18,
-                  color: accentSage,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '${result.events.length} suggestions from $configured '
-                  'configured sources',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            result.aiStatusMessage,
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: textMuted,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _FilterSection extends StatelessWidget {
   const _FilterSection({
     required this.sources,
+    required this.events,
     required this.selectedSources,
     required this.onToggleSource,
     required this.allTags,
@@ -363,6 +296,7 @@ class _FilterSection extends StatelessWidget {
   });
 
   final List<OutsideEventSourceConfig> sources;
+  final List<EventSuggestion> events;
   final Set<OutsideEventSourceType> selectedSources;
   final ValueChanged<OutsideEventSourceType> onToggleSource;
   final List<String> allTags;
@@ -387,12 +321,13 @@ class _FilterSection extends StatelessWidget {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: sources.map((source) {
+          children: sources.where((source) => source.canFetch).map((source) {
             final selected = selectedSources.contains(source.type);
+            final count =
+                events.where((event) => event.sourceType == source.type).length;
             return _FilterChip(
-              label: source.displayName,
+              label: '${source.displayName} ($count)',
               selected: selected,
-              muted: !source.canFetch,
               onTap: () => onToggleSource(source.type),
             );
           }).toList(),
@@ -431,13 +366,11 @@ class _FilterChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.muted = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final bool muted;
 
   @override
   Widget build(BuildContext context) {
@@ -458,9 +391,7 @@ class _FilterChip extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: selected
-                ? Colors.white
-                : (muted ? textMuted.withValues(alpha: 0.7) : textPrimary),
+            color: selected ? Colors.white : textPrimary,
           ),
         ),
       ),
@@ -468,38 +399,76 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _WarningsCard extends StatelessWidget {
-  const _WarningsCard({required this.warnings});
+class _DiagnosticsSection extends StatelessWidget {
+  const _DiagnosticsSection({
+    required this.result,
+    required this.fetchedAtMillis,
+  });
 
-  final List<OutsideEventSourceWarning> warnings;
+  final OutsideEventDiscoveryResult result;
+  final int? fetchedAtMillis;
 
   @override
   Widget build(BuildContext context) {
     return LsCard(
       color: const Color(0xFFFFF7E8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Source notes',
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: textPrimary,
-            ),
+      padding: EdgeInsets.zero,
+      child: ExpansionTile(
+        key: const ValueKey('outside-events-diagnostics'),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        iconColor: textMuted,
+        collapsedIconColor: textMuted,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(
+          'Source status',
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
           ),
-          const SizedBox(height: 6),
-          ...warnings.map(
-            (warning) => Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: Text(
-                '${warning.sourceName}: ${warning.message}',
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  color: textMuted,
-                  height: 1.35,
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (fetchedAtMillis != null) ...[
+                  Text(
+                    'Last fetched: ${_OutsideEventsScreenState._shortTimestamp(fetchedAtMillis!)}',
+                    key: const ValueKey('outside-events-last-fetched'),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Text(
+                  result.aiStatusMessage,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: textMuted,
+                    height: 1.35,
+                  ),
                 ),
-              ),
+                ...result.warnings.map(
+                  (warning) => Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '${warning.sourceName}: ${warning.message}',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: textMuted,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -521,6 +490,17 @@ class _EventSuggestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleTags = event.tags.where((tag) {
+      final normalized = tag.trim().toLowerCase();
+      return normalized != event.sourceName.trim().toLowerCase() &&
+          normalized != event.sourceType.label.toLowerCase();
+    }).toList();
+    final visibleMissingFields = event.missingFields
+        .where((field) => field.trim().toLowerCase() != 'price')
+        .toList();
+    final sourceUrl = event.sourceUrl?.trim();
+    final ticketUrl = event.ticketUrl?.trim();
+
     return LsCard(
       key: ValueKey('outside-event-card-${event.id}'),
       child: Column(
@@ -577,10 +557,6 @@ class _EventSuggestionCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _MetaPill(
-                icon: Icons.source_rounded,
-                label: event.sourceType.label,
-              ),
-              _MetaPill(
                 icon: Icons.schedule_rounded,
                 label: _dateTimeLabel(event.startDateTime),
               ),
@@ -616,12 +592,12 @@ class _EventSuggestionCard extends StatelessWidget {
               ],
             ),
           ],
-          if (event.tags.isNotEmpty) ...[
+          if (visibleTags.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: event.tags.take(5).map((tag) {
+              children: visibleTags.take(5).map((tag) {
                 return Text(
                   '#$tag',
                   style: GoogleFonts.dmSans(
@@ -633,10 +609,10 @@ class _EventSuggestionCard extends StatelessWidget {
               }).toList(),
             ),
           ],
-          if (event.missingFields.isNotEmpty) ...[
+          if (visibleMissingFields.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              'Uncertain: ${event.missingFields.join(', ')}',
+              'Uncertain: ${visibleMissingFields.join(', ')}',
               key: ValueKey('outside-event-uncertain-${event.id}'),
               style: GoogleFonts.dmSans(
                 fontSize: 11,
@@ -646,62 +622,39 @@ class _EventSuggestionCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          Row(
+          Text(
+            event.displaySourceSummary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: textMuted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
             children: [
-              Expanded(
-                child: Text(
-                  event.displaySourceSummary,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: textMuted,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (event.sourceUrl?.trim().isNotEmpty == true) ...[
+              if (sourceUrl?.isNotEmpty == true && sourceUrl != ticketUrl)
                 _LinkButton(
-                  buttonKey: ValueKey('outside-event-source-${event.id}'),
+                  buttonKey: ValueKey('outside-event-details-${event.id}'),
                   label: 'Details',
-                  url: event.sourceUrl!.trim(),
+                  url: sourceUrl!,
                 ),
-                const SizedBox(width: 8),
-              ],
-              if (event.ticketUrl?.trim().isNotEmpty == true &&
-                  event.ticketUrl!.trim() != event.sourceUrl?.trim()) ...[
+              if (ticketUrl?.isNotEmpty == true)
                 _LinkButton(
                   buttonKey: ValueKey('outside-event-tickets-${event.id}'),
                   label: 'Tickets',
-                  url: event.ticketUrl!.trim(),
+                  url: ticketUrl!,
                 ),
-                const SizedBox(width: 8),
-              ],
-              GestureDetector(
-                key: ValueKey('outside-event-add-${event.id}'),
+              _EventAction(
+                actionKey: ValueKey('outside-event-add-${event.id}'),
+                label: added ? 'Added' : 'Add to plan',
                 onTap: added ? null : onAdd,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: added ? warmBeige : primaryTerracotta,
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(
-                      color: added ? borderWarmStrong : primaryTerracotta,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    added ? 'Added' : 'Add to plan',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: added ? textMuted : Colors.white,
-                    ),
-                  ),
-                ),
+                primary: !added,
               ),
             ],
           ),
@@ -743,6 +696,52 @@ class _EventSuggestionCard extends StatelessWidget {
     final period = value.hour >= 12 ? 'PM' : 'AM';
     return '${weekdays[value.weekday - 1]}, ${months[value.month - 1]} '
         '${value.day} at $hour:$minute $period';
+  }
+}
+
+class _EventAction extends StatelessWidget {
+  const _EventAction({
+    required this.actionKey,
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  final Key actionKey;
+  final String label;
+  final VoidCallback? onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+    return GestureDetector(
+      key: actionKey,
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: primary
+              ? primaryTerracotta
+              : (disabled ? warmBeige : surfaceWhite),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: primary ? primaryTerracotta : borderWarmStrong,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: primary ? Colors.white : textMuted,
+          ),
+        ),
+      ),
+    );
   }
 }
 

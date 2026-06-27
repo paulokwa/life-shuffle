@@ -109,6 +109,21 @@ void main() {
   });
 
   group('OutsideEventDiscoveryService', () {
+    test('default discovery excludes mock sources', () {
+      expect(
+        OutsideEventDiscoveryService.defaultAdapters
+            .map((adapter) => adapter.config.type),
+        isNot(contains(OutsideEventSourceType.mock)),
+      );
+      expect(
+        OutsideEventQuery(
+          start: DateTime(2026, 7),
+          end: DateTime(2026, 7, 7),
+        ).includeMock,
+        isFalse,
+      );
+    });
+
     test('combines source results, dedupes, sorts, and keeps warnings',
         () async {
       final start = DateTime(2026, 7, 1);

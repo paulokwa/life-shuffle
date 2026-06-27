@@ -36,7 +36,6 @@ class OutsideEventDiscoveryService {
         _organizer = organizer ?? const OutsideEventOrganizerService();
 
   static List<OutsideEventSourceAdapter> get defaultAdapters => [
-        const MockOutsideEventAdapter(),
         CuratedRssOutsideEventAdapter(),
         TicketmasterOutsideEventAdapter(),
         EventbriteOutsideEventAdapter(),

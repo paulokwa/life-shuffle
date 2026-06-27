@@ -6,7 +6,7 @@ class OutsideEventQuery {
     required this.end,
     this.city = 'Halifax',
     this.tags = const [],
-    this.includeMock = true,
+    this.includeMock = false,
   });
 
   final DateTime start;

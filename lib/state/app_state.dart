@@ -1321,7 +1321,6 @@ class AppState extends ChangeNotifier {
         ? days.last.date
         : DateTime.now().add(const Duration(days: 6));
     final adapters = <OutsideEventSourceAdapter>[
-      const MockOutsideEventAdapter(),
       CuratedRssOutsideEventAdapter(),
       ..._outsideEventSources.map(_adapterForSource),
       TicketmasterOutsideEventAdapter(),
@@ -1362,7 +1361,6 @@ class AppState extends ChangeNotifier {
 
   OutsideEventDiscoveryResult cachedOutsideEventDiscoveryResult() {
     final adapters = <OutsideEventSourceAdapter>[
-      const MockOutsideEventAdapter(),
       CuratedRssOutsideEventAdapter(),
       ..._outsideEventSources.map(_adapterForSource),
       TicketmasterOutsideEventAdapter(),
