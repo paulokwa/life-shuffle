@@ -131,6 +131,10 @@ class AppState extends ChangeNotifier {
   List<UserEventSource> _outsideEventSources = const [];
   List<EventSuggestion> _cachedOutsideEvents = const [];
   int? _cachedOutsideEventsFetchedAtMillis;
+  bool _isRefreshingOutsideEvents = false;
+  String? _refreshingOutsideEventSourceId;
+  OutsideEventRefreshSummary? _lastOutsideEventRefreshSummary;
+  bool? _lastWebpageAiConfigured;
   SavedState? _lastRegenerationSnapshot;
   String? _plannerConflictMessage;
   String? _displayName;
@@ -225,10 +229,16 @@ class AppState extends ChangeNotifier {
       _rangeStart = _dateOnly(DateTime.now());
       _generatedDays = _buildPlan();
     }
-    _outsideEventSources = PersistenceService.loadOutsideEventSources();
-    _cachedOutsideEvents = PersistenceService.loadCachedOutsideEvents();
+    // _calendarId is still null here (Firestore sync hasn't run yet), so
+    // this reads the device-local/"before sign-in" cache scope; switching to
+    // a synced calendar reloads the right scope via _applyCalendarMetadata.
+    _cachedOutsideEvents = PersistenceService.loadCachedOutsideEvents(
+      _calendarId,
+    );
     _cachedOutsideEventsFetchedAtMillis =
-        PersistenceService.loadCachedOutsideEventsFetchedAtMillis();
+        PersistenceService.loadCachedOutsideEventsFetchedAtMillis(
+      _calendarId,
+    );
   }
 
   /// The 7-day slice of [generatedRange] that Today/Progress/print/ICS use,
@@ -327,6 +337,13 @@ class AppState extends ChangeNotifier {
   bool get calendarNameConfirmed => _calendarNameConfirmed;
   bool get introOnboardingCompleted => _introOnboardingCompleted;
   String? get calendarOwnerUserId => _calendarOwnerUserId;
+
+  /// Friendly label for [calendarOwnerUserId]: "You", a known display
+  /// name/email, or a shortened UID as a last resort when no profile info
+  /// is loaded for that user. Null when there is no owner (local-only).
+  String? get calendarOwnerDisplayLabel => _calendarOwnerUserId == null
+      ? null
+      : _memberDisplayLabel(_calendarOwnerUserId!);
   List<String> get calendarMemberUserIds =>
       List.unmodifiable(_calendarMemberUserIds);
   List<String> get calendarMemberDisplayLabels => List.unmodifiable(
@@ -382,6 +399,26 @@ class AppState extends ChangeNotifier {
       List.unmodifiable(_cachedOutsideEvents);
   int? get cachedOutsideEventsFetchedAtMillis =>
       _cachedOutsideEventsFetchedAtMillis;
+
+  /// Whether [refreshOutsideEventSources] is currently running, so Settings
+  /// and the Outside events screen can disable their fetch/refresh
+  /// controls and show progress instead of allowing repeated taps.
+  bool get isRefreshingOutsideEvents => _isRefreshingOutsideEvents;
+
+  /// The source id currently being fetched during a refresh, or null
+  /// between sources (or when not refreshing). Sources run sequentially, so
+  /// at most one id is ever "fetching" at a time.
+  String? get refreshingOutsideEventSourceId => _refreshingOutsideEventSourceId;
+
+  /// Tally from the most recently completed refresh, or null before the
+  /// first manual refresh this session.
+  OutsideEventRefreshSummary? get lastOutsideEventRefreshSummary =>
+      _lastOutsideEventRefreshSummary;
+
+  /// Whether the server-side AI organizer was configured, from the most
+  /// recent webpage-source fetch. Null until a webpage source has been
+  /// fetched at least once this session.
+  bool? get lastWebpageAiConfigured => _lastWebpageAiConfigured;
 
   /// Calm, plain-language description of the current sync problem or
   /// notice, or `null` when sync is healthy. Never exposes raw Firebase
@@ -1277,7 +1314,7 @@ class AppState extends ChangeNotifier {
       kind: kind,
     );
     _outsideEventSources = [..._outsideEventSources, source];
-    _persistOutsideEventSources();
+    _persist();
     notifyListeners();
   }
 
@@ -1289,7 +1326,7 @@ class AppState extends ChangeNotifier {
       return source;
     }).toList();
     if (!changed) return;
-    _persistOutsideEventSources();
+    _persist();
     notifyListeners();
   }
 
@@ -1297,7 +1334,7 @@ class AppState extends ChangeNotifier {
     _outsideEventSources = _outsideEventSources.map((source) {
       return source.id == id ? source.copyWith(enabled: enabled) : source;
     }).toList();
-    _persistOutsideEventSources();
+    _persist();
     notifyListeners();
   }
 
@@ -1309,54 +1346,102 @@ class AppState extends ChangeNotifier {
     _cachedOutsideEvents = _cachedOutsideEvents
         .where((event) => event.raw['userSourceId'] != id)
         .toList();
-    _persistOutsideEventSources();
+    _persist();
     _persistCachedOutsideEvents();
     notifyListeners();
   }
 
+  /// Runs a manual outside-events refresh across curated, user-managed, and
+  /// built-in API sources. Never called automatically (not on app open,
+  /// login, calendar switch, or background sync) - only from the Settings
+  /// "Fetch latest events" action and the Outside events screen's refresh
+  /// action, to avoid spending AI/API credits the user didn't ask to spend.
+  /// [isRefreshingOutsideEvents] and [refreshingOutsideEventSourceId] track
+  /// progress for those screens; [lastOutsideEventRefreshSummary] holds the
+  /// final tally once this completes.
   Future<OutsideEventDiscoveryResult> refreshOutsideEventSources() async {
-    final days = generatedRange.days;
-    final start = days.isNotEmpty ? days.first.date : DateTime.now();
-    final end = days.isNotEmpty
-        ? days.last.date
-        : DateTime.now().add(const Duration(days: 6));
-    final adapters = <OutsideEventSourceAdapter>[
-      CuratedRssOutsideEventAdapter(),
-      ..._outsideEventSources.map(_adapterForSource),
-      TicketmasterOutsideEventAdapter(),
-      EventbriteOutsideEventAdapter(),
-      BandsintownOutsideEventAdapter(),
-    ];
-    final service = OutsideEventDiscoveryService(
-      adapters: adapters,
-      organizer: const OutsideEventOrganizerService(),
-    );
-    final result = await service.discover(
-      OutsideEventQuery(
-        start: DateTime(start.year, start.month, start.day),
-        end: DateTime(end.year, end.month, end.day, 23, 59),
-        city: 'Halifax',
-      ),
-    );
-    final now = DateTime.now().millisecondsSinceEpoch;
-    _cachedOutsideEvents = result.events;
-    _cachedOutsideEventsFetchedAtMillis = now;
-    _outsideEventSources = _outsideEventSources.map((source) {
-      if (!result.attemptedSourceIds.contains(source.id)) return source;
-      final warning = _firstSourceWarning(result.warnings, source.id);
-      final eventCount = result.sourceEventCounts[source.id] ?? 0;
-      return source.copyWith(
-        lastFetchedAtMillis: now,
-        lastError: warning,
-        clearLastError: warning == null,
-        lastEventCount: eventCount,
-        lastSuccessAtMillis: warning == null ? now : source.lastSuccessAtMillis,
-      );
-    }).toList();
-    _persistOutsideEventSources();
-    _persistCachedOutsideEvents();
+    if (_isRefreshingOutsideEvents) return cachedOutsideEventDiscoveryResult();
+    _isRefreshingOutsideEvents = true;
+    _refreshingOutsideEventSourceId = null;
     notifyListeners();
-    return result;
+
+    try {
+      final days = generatedRange.days;
+      final start = days.isNotEmpty ? days.first.date : DateTime.now();
+      final end = days.isNotEmpty
+          ? days.last.date
+          : DateTime.now().add(const Duration(days: 6));
+      final adapters = <OutsideEventSourceAdapter>[
+        CuratedRssOutsideEventAdapter(),
+        ..._outsideEventSources.map(_adapterForSource),
+        TicketmasterOutsideEventAdapter(),
+        EventbriteOutsideEventAdapter(),
+        BandsintownOutsideEventAdapter(),
+      ];
+      final service = OutsideEventDiscoveryService(
+        adapters: adapters,
+        organizer: const OutsideEventOrganizerService(),
+      );
+      final result = await service.discover(
+        OutsideEventQuery(
+          start: DateTime(start.year, start.month, start.day),
+          end: DateTime(end.year, end.month, end.day, 23, 59),
+          city: 'Halifax',
+        ),
+        onSourceStart: (config) {
+          _refreshingOutsideEventSourceId = config.id;
+          notifyListeners();
+        },
+        onSourceResult: (_) {
+          _refreshingOutsideEventSourceId = null;
+          notifyListeners();
+        },
+      );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _cachedOutsideEvents = result.events;
+      _cachedOutsideEventsFetchedAtMillis = now;
+      if (result.webpageAiConfigured != null) {
+        _lastWebpageAiConfigured = result.webpageAiConfigured;
+      }
+      _outsideEventSources = _outsideEventSources.map((source) {
+        if (!result.attemptedSourceIds.contains(source.id)) return source;
+        final warning = _firstSourceWarningFor(result.warnings, source.id);
+        final eventCount = result.sourceEventCounts[source.id] ?? 0;
+        return source.copyWith(
+          lastFetchedAtMillis: now,
+          lastError: warning?.message,
+          clearLastError: warning == null,
+          lastEventCount: eventCount,
+          lastSuccessAtMillis:
+              warning == null ? now : source.lastSuccessAtMillis,
+          lastErrorCategory: warning?.category.name,
+          clearLastErrorCategory: warning == null,
+          lastErrorHttpStatusCode: warning?.httpStatusCode,
+          clearLastErrorHttpStatusCode: warning == null,
+        );
+      }).toList();
+      _lastOutsideEventRefreshSummary = OutsideEventRefreshSummary(
+        sourcesChecked: result.attemptedSourceIds.length,
+        sourcesSucceeded: result.attemptedSourceIds
+            .where(
+              (id) => _firstSourceWarningFor(result.warnings, id) == null,
+            )
+            .length,
+        sourcesFailed: result.attemptedSourceIds
+            .where(
+              (id) => _firstSourceWarningFor(result.warnings, id) != null,
+            )
+            .length,
+        eventsFound: result.events.length,
+      );
+      _persist();
+      _persistCachedOutsideEvents();
+      return result;
+    } finally {
+      _isRefreshingOutsideEvents = false;
+      _refreshingOutsideEventSourceId = null;
+      notifyListeners();
+    }
   }
 
   OutsideEventDiscoveryResult cachedOutsideEventDiscoveryResult() {
@@ -1377,11 +1462,14 @@ class AppState extends ChangeNotifier {
               sourceId: source.id,
               sourceName: source.displayName,
               message: source.lastError!,
+              httpStatusCode: source.lastErrorHttpStatusCode,
+              category: _failureCategoryFromName(source.lastErrorCategory),
             ),
       ],
       aiStatusMessage:
           'Webpage AI organizer runs server-side when configured. Without '
           'an AI key, webpage sources use deterministic date/title fallback.',
+      webpageAiConfigured: _lastWebpageAiConfigured,
     );
   }
 
@@ -1397,25 +1485,30 @@ class AppState extends ChangeNotifier {
     };
   }
 
-  void _persistOutsideEventSources() {
-    PersistenceService.saveOutsideEventSources(_outsideEventSources);
-  }
-
   void _persistCachedOutsideEvents() {
-    PersistenceService.saveCachedOutsideEvents(_cachedOutsideEvents);
+    PersistenceService.saveCachedOutsideEvents(
+        _calendarId, _cachedOutsideEvents);
     PersistenceService.saveCachedOutsideEventsFetchedAtMillis(
+      _calendarId,
       _cachedOutsideEventsFetchedAtMillis,
     );
   }
 
-  static String? _firstSourceWarning(
+  static OutsideEventSourceWarning? _firstSourceWarningFor(
     List<OutsideEventSourceWarning> warnings,
     String sourceId,
   ) {
     for (final warning in warnings) {
-      if (warning.sourceId == sourceId) return warning.message;
+      if (warning.sourceId == sourceId) return warning;
     }
     return null;
+  }
+
+  static OutsideEventFailureCategory _failureCategoryFromName(String? name) {
+    return OutsideEventFailureCategory.values.firstWhere(
+      (category) => category.name == name,
+      orElse: () => OutsideEventFailureCategory.unknown,
+    );
   }
 
   static String _occurrenceKey(DateTime date, String activityId) =>
@@ -1687,6 +1780,9 @@ class AppState extends ChangeNotifier {
     _manualPlanItems = Map<String, ManualPlanItem>.from(
       saved.manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
     );
+    _outsideEventSources = List<UserEventSource>.from(
+      saved.outsideEventSources,
+    );
     _generatedDays = _buildPlan();
     _applyRemovals();
     _applyManualItems();
@@ -1851,13 +1947,15 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveRemovedMap(state.removedMap);
     PersistenceService.saveOccurrenceOverridesMap(state.occurrenceOverrides);
     PersistenceService.saveManualPlanItems(state.manualPlanItems);
+    PersistenceService.saveOutsideEventSources(state.outsideEventSources);
   }
 
   bool _applyCalendarMetadata(
     CalendarMetadata metadata, {
     bool rememberSelection = false,
   }) {
-    final changed = _calendarId != metadata.calendarId ||
+    final calendarIdChanged = _calendarId != metadata.calendarId;
+    final changed = calendarIdChanged ||
         _calendarTitle != metadata.title ||
         _calendarOwnerUserId != metadata.ownerUserId ||
         _calendarMemberUserIds.join('|') != metadata.memberUserIds.join('|');
@@ -1869,10 +1967,12 @@ class AppState extends ChangeNotifier {
     _calendarTitle = metadata.title;
     _calendarOwnerUserId = metadata.ownerUserId;
     _calendarMemberUserIds = List.unmodifiable(metadata.memberUserIds);
+    if (calendarIdChanged) _reloadCachedOutsideEventsForCurrentCalendar();
     return changed;
   }
 
   void _clearCalendarMetadata() {
+    final calendarIdChanged = _calendarId != null;
     _calendarId = null;
     _preferredCalendarId = null;
     if (!_calendarNameConfirmed) {
@@ -1880,6 +1980,21 @@ class AppState extends ChangeNotifier {
     }
     _calendarOwnerUserId = null;
     _calendarMemberUserIds = const [];
+    if (calendarIdChanged) _reloadCachedOutsideEventsForCurrentCalendar();
+  }
+
+  /// Cached outside-event results are device-local (never synced; see
+  /// [SavedState.outsideEventSources] for the part that does sync), but kept
+  /// scoped to [_calendarId] so switching calendars never shows another
+  /// calendar's fetched events under the newly-selected calendar's sources.
+  void _reloadCachedOutsideEventsForCurrentCalendar() {
+    _cachedOutsideEvents = PersistenceService.loadCachedOutsideEvents(
+      _calendarId,
+    );
+    _cachedOutsideEventsFetchedAtMillis =
+        PersistenceService.loadCachedOutsideEventsFetchedAtMillis(
+      _calendarId,
+    );
   }
 
   SavedState _newCalendarSavedState({
@@ -1965,6 +2080,7 @@ class AppState extends ChangeNotifier {
       manualPlanItems: Map<String, ManualPlanItem>.from(
         _manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
       ),
+      outsideEventSources: List<UserEventSource>.from(_outsideEventSources),
     );
   }
 

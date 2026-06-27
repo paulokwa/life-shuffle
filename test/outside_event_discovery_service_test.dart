@@ -209,6 +209,58 @@ void main() {
       expect(result.sourceEventCounts['enabled-source'], 2);
       expect(result.sourceEventCounts['disabled-source'], 0);
     });
+
+    test('reports per-source start/result progress for attempted sources only',
+        () async {
+      final start = DateTime(2026, 7, 1);
+      final service = OutsideEventDiscoveryService(
+        adapters: [
+          _FixedAdapter(id: 'a', displayName: 'A', events: const []),
+          const _FixedAdapter(
+            id: 'disabled',
+            displayName: 'Disabled',
+            events: [],
+            enabled: false,
+          ),
+          _FixedAdapter(id: 'b', displayName: 'B', events: const []),
+        ],
+      );
+      final started = <String>[];
+      final finished = <String>[];
+
+      await service.discover(
+        OutsideEventQuery(
+            start: start, end: start.add(const Duration(days: 7))),
+        onSourceStart: (config) => started.add(config.id),
+        onSourceResult: (result) => finished.add(result.source.id),
+      );
+
+      expect(started, ['a', 'b']);
+      expect(finished, ['a', 'disabled', 'b']);
+    });
+
+    test('webpageAiConfigured reflects the most recent webpage source result',
+        () async {
+      final start = DateTime(2026, 7, 1);
+      final service = OutsideEventDiscoveryService(
+        adapters: [
+          _FixedAdapter(id: 'rss', displayName: 'RSS', events: const []),
+          _FixedAdapter(
+            id: 'web',
+            displayName: 'Web',
+            events: const [],
+            aiConfigured: true,
+          ),
+        ],
+      );
+
+      final result = await service.discover(
+        OutsideEventQuery(
+            start: start, end: start.add(const Duration(days: 7))),
+      );
+
+      expect(result.webpageAiConfigured, isTrue);
+    });
   });
 
   group('RssAtomFeedParser', () {
@@ -598,6 +650,51 @@ void main() {
       expect(restored.lastSuccessAtMillis, 90);
       expect(restored.lastEventCount, 4);
     });
+
+    test(
+        'round-trips diagnostic category and HTTP status through toMap/fromMap',
+        () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.webPage,
+        lastFetchedAtMillis: 100,
+        lastError: 'Web page could not load through the source proxy.',
+        lastErrorCategory: 'upstreamError',
+        lastErrorHttpStatusCode: 503,
+      );
+
+      final restored = UserEventSource.fromMap(source.toMap());
+
+      expect(restored.lastErrorCategory, 'upstreamError');
+      expect(restored.lastErrorHttpStatusCode, 503);
+    });
+
+    test('copyWith clears diagnostic category and HTTP status on success', () {
+      const failed = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.webPage,
+        lastFetchedAtMillis: 100,
+        lastError: 'Web page could not load.',
+        lastErrorCategory: 'corsOrProxy',
+        lastErrorHttpStatusCode: 502,
+      );
+
+      final healthy = failed.copyWith(
+        lastFetchedAtMillis: 200,
+        clearLastError: true,
+        clearLastErrorCategory: true,
+        clearLastErrorHttpStatusCode: true,
+      );
+
+      expect(healthy.lastError, isNull);
+      expect(healthy.lastErrorCategory, isNull);
+      expect(healthy.lastErrorHttpStatusCode, isNull);
+      expect(healthy.healthStatus, SourceHealthStatus.healthy);
+    });
   });
 
   group('EventSuggestion extraction metadata', () {
@@ -686,6 +783,7 @@ class _FixedAdapter implements OutsideEventSourceAdapter {
     required this.events,
     this.warning,
     this.enabled = true,
+    this.aiConfigured,
   });
 
   final String id;
@@ -693,6 +791,7 @@ class _FixedAdapter implements OutsideEventSourceAdapter {
   final List<EventSuggestion> events;
   final String? warning;
   final bool enabled;
+  final bool? aiConfigured;
 
   @override
   OutsideEventSourceConfig get config => OutsideEventSourceConfig(
@@ -718,6 +817,7 @@ class _FixedAdapter implements OutsideEventSourceAdapter {
             message: warning!,
           ),
       ],
+      aiConfigured: aiConfigured,
     );
   }
 }

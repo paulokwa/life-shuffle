@@ -64,6 +64,8 @@ class UserEventSource {
     this.lastError,
     this.lastSuccessAtMillis,
     this.lastEventCount,
+    this.lastErrorCategory,
+    this.lastErrorHttpStatusCode,
   });
 
   final String id;
@@ -85,6 +87,18 @@ class UserEventSource {
   /// cross-source dedupe), so Settings can show "events found" even when
   /// the source also reported a warning.
   final int? lastEventCount;
+
+  /// `OutsideEventFailureCategory.name` for the most recent [lastError],
+  /// e.g. `"timeout"` or `"responseTooLarge"`. Stored as a plain string
+  /// (rather than the enum itself) so this model file - synced through
+  /// [SavedState] - doesn't need to import the services-layer adapter file
+  /// that defines the enum. See Settings diagnostics for where this is
+  /// mapped back to a label.
+  final String? lastErrorCategory;
+
+  /// HTTP status returned by the fetcher proxy or upstream source for
+  /// [lastError], when known.
+  final int? lastErrorHttpStatusCode;
 
   OutsideEventSourceType get sourceType => kind.sourceType;
 
@@ -108,6 +122,10 @@ class UserEventSource {
     bool clearLastError = false,
     int? lastSuccessAtMillis,
     int? lastEventCount,
+    String? lastErrorCategory,
+    bool clearLastErrorCategory = false,
+    int? lastErrorHttpStatusCode,
+    bool clearLastErrorHttpStatusCode = false,
   }) {
     return UserEventSource(
       id: id,
@@ -119,6 +137,12 @@ class UserEventSource {
       lastError: clearLastError ? null : lastError ?? this.lastError,
       lastSuccessAtMillis: lastSuccessAtMillis ?? this.lastSuccessAtMillis,
       lastEventCount: lastEventCount ?? this.lastEventCount,
+      lastErrorCategory: clearLastErrorCategory
+          ? null
+          : lastErrorCategory ?? this.lastErrorCategory,
+      lastErrorHttpStatusCode: clearLastErrorHttpStatusCode
+          ? null
+          : lastErrorHttpStatusCode ?? this.lastErrorHttpStatusCode,
     );
   }
 
@@ -133,6 +157,8 @@ class UserEventSource {
       'lastError': lastError,
       'lastSuccessAtMillis': lastSuccessAtMillis,
       'lastEventCount': lastEventCount,
+      'lastErrorCategory': lastErrorCategory,
+      'lastErrorHttpStatusCode': lastErrorHttpStatusCode,
     };
   }
 
@@ -148,6 +174,8 @@ class UserEventSource {
       lastError: _readNullableString(map['lastError']),
       lastSuccessAtMillis: _readInt(map['lastSuccessAtMillis']),
       lastEventCount: _readInt(map['lastEventCount']),
+      lastErrorCategory: _readNullableString(map['lastErrorCategory']),
+      lastErrorHttpStatusCode: _readInt(map['lastErrorHttpStatusCode']),
     );
   }
 }

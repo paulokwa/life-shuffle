@@ -269,6 +269,8 @@ class UserRssAtomOutsideEventAdapter implements OutsideEventSourceAdapter {
               sourceId: _source.id,
               sourceName: _source.displayName,
               message: _rssErrorMessage(response.statusCode),
+              httpStatusCode: response.statusCode,
+              category: _rssFailureCategory(response.statusCode),
             ),
           ],
         );
@@ -296,6 +298,7 @@ class UserRssAtomOutsideEventAdapter implements OutsideEventSourceAdapter {
             sourceId: _source.id,
             sourceName: _source.displayName,
             message: 'Feed returned malformed XML and was skipped.',
+            category: OutsideEventFailureCategory.parserFailure,
           ),
         ],
       );
@@ -307,6 +310,7 @@ class UserRssAtomOutsideEventAdapter implements OutsideEventSourceAdapter {
             sourceId: _source.id,
             sourceName: _source.displayName,
             message: 'Feed could not load. Other sources can still refresh.',
+            category: OutsideEventFailureCategory.corsOrProxy,
           ),
         ],
       );
@@ -320,6 +324,15 @@ class UserRssAtomOutsideEventAdapter implements OutsideEventSourceAdapter {
       413 => 'Feed response was too large to process.',
       415 => 'URL did not look like RSS/Atom XML.',
       _ => 'Feed could not load through the source proxy.',
+    };
+  }
+
+  OutsideEventFailureCategory _rssFailureCategory(int statusCode) {
+    return switch (statusCode) {
+      400 => OutsideEventFailureCategory.blockedUrl,
+      413 => OutsideEventFailureCategory.responseTooLarge,
+      415 => OutsideEventFailureCategory.parserFailure,
+      _ => OutsideEventFailureCategory.upstreamError,
     };
   }
 }
@@ -373,6 +386,8 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
               sourceId: _source.id,
               sourceName: _source.displayName,
               message: _webErrorMessage(response.statusCode),
+              httpStatusCode: response.statusCode,
+              category: _webFailureCategory(response.statusCode),
             ),
           ],
         );
@@ -394,12 +409,16 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
             sourceId: _source.id,
             sourceName: _source.displayName,
             message: warning,
+            category: _categorizeWebpageWarning(warning),
           ),
       ];
       return OutsideEventSourceResult(
         source: config,
         suggestions: suggestions,
         warnings: warnings,
+        aiConfigured: decoded['aiConfigured'] is bool
+            ? decoded['aiConfigured'] as bool
+            : null,
       );
     } catch (_) {
       return OutsideEventSourceResult(
@@ -410,6 +429,7 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
             sourceName: _source.displayName,
             message:
                 'Web page could not load. Other sources can still refresh.',
+            category: OutsideEventFailureCategory.corsOrProxy,
           ),
         ],
       );
@@ -437,6 +457,35 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
       413 => 'Web page was too large to process.',
       _ => 'Web page could not load through the source proxy.',
     };
+  }
+
+  OutsideEventFailureCategory _webFailureCategory(int statusCode) {
+    return switch (statusCode) {
+      400 => OutsideEventFailureCategory.blockedUrl,
+      413 => OutsideEventFailureCategory.responseTooLarge,
+      _ => OutsideEventFailureCategory.upstreamError,
+    };
+  }
+
+  /// The webpage Netlify function reports warnings as plain strings (see
+  /// `netlify/functions/outside-events-webpage.js`); sniff a few known
+  /// phrasings so Settings diagnostics can show a category without the
+  /// function needing to return structured data.
+  OutsideEventFailureCategory _categorizeWebpageWarning(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('ai organizer not configured')) {
+      return OutsideEventFailureCategory.aiNotConfigured;
+    }
+    if (lower.contains('ai organizer') || lower.contains('ai extraction')) {
+      return OutsideEventFailureCategory.aiFailure;
+    }
+    if (lower.contains('no events') || lower.contains('no dated event')) {
+      return OutsideEventFailureCategory.noEventsFound;
+    }
+    if (lower.contains('too large')) {
+      return OutsideEventFailureCategory.responseTooLarge;
+    }
+    return OutsideEventFailureCategory.unknown;
   }
 }
 

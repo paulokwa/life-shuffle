@@ -26,19 +26,19 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= _load();
-  }
-
-  Future<OutsideEventDiscoveryResult> _load() {
-    final state = AppStateScope.of(context);
-    final cached = state.cachedOutsideEventDiscoveryResult();
-    if (cached.events.isNotEmpty) return Future.value(cached);
-    return state.refreshOutsideEventSources();
+    // Never fetches outside events automatically on open - only shows
+    // whatever is already cached on this device. Fetching costs AI/API
+    // credits, so it only happens when the user taps refresh below.
+    _future ??= Future.value(
+      AppStateScope.of(context).cachedOutsideEventDiscoveryResult(),
+    );
   }
 
   void _refresh() {
+    final state = AppStateScope.of(context);
+    if (state.isRefreshingOutsideEvents) return;
     setState(() {
-      _future = AppStateScope.of(context).refreshOutsideEventSources();
+      _future = state.refreshOutsideEventSources();
     });
   }
 
@@ -84,11 +84,24 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                         ),
                         IconButton(
                           key: const ValueKey('outside-events-refresh'),
-                          onPressed: _refresh,
-                          icon: const Icon(
-                            Icons.refresh_rounded,
-                            color: primaryTerracotta,
-                          ),
+                          onPressed: AppStateScope.of(context)
+                                  .isRefreshingOutsideEvents
+                              ? null
+                              : _refresh,
+                          icon: AppStateScope.of(context)
+                                  .isRefreshingOutsideEvents
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: primaryTerracotta,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.refresh_rounded,
+                                  color: primaryTerracotta,
+                                ),
                         ),
                       ],
                     ),
@@ -143,13 +156,26 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                               const SizedBox(height: 14),
                             ],
                             if (events.isEmpty)
-                              const _MessageCard(
-                                icon: Icons.search_off_rounded,
-                                title: 'No matching outside events',
-                                body: 'Try clearing filters or refresh later. '
-                                    'No event is added unless you tap Add.',
-                                color: surfaceWhite,
-                              )
+                              AppStateScope.of(context)
+                                          .cachedOutsideEventsFetchedAtMillis ==
+                                      null
+                                  ? const _MessageCard(
+                                      icon: Icons.travel_explore_rounded,
+                                      title: 'Nothing fetched yet',
+                                      body: 'Tap refresh above to fetch '
+                                          'outside events from your sources. '
+                                          'No event is added unless you tap '
+                                          'Add.',
+                                      color: surfaceWhite,
+                                    )
+                                  : const _MessageCard(
+                                      icon: Icons.search_off_rounded,
+                                      title: 'No matching outside events',
+                                      body: 'Try clearing filters or tap '
+                                          'refresh above. No event is added '
+                                          'unless you tap Add.',
+                                      color: surfaceWhite,
+                                    )
                             else
                               ...events.map(
                                 (event) => Padding(

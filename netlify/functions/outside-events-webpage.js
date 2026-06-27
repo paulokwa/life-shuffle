@@ -136,6 +136,89 @@ async function fetchPage(url, fetchImpl) {
   });
 }
 
+// ---- Same-domain pagination -----------------------------------------------
+//
+// Some listing pages spread events across several pages with an obvious
+// "next page" link (e.g. `?page=2`). This follows that link generically -
+// no site-specific code - by diffing each candidate link's query string
+// against the current page's URL: if exactly one parameter differs and that
+// difference is a numeric +1, it is treated as the next page. Same-origin
+// and same-path only; capped at MAX_ADDITIONAL_PAGES and an overall time
+// budget so a single user-initiated fetch can't run away.
+
+const MAX_ADDITIONAL_PAGES = 4;
+const PAGINATION_DEADLINE_MS = 15000;
+
+function diffSearchParams(a, b) {
+  const keys = new Set([...a.searchParams.keys(), ...b.searchParams.keys()]);
+  let changedKey = null;
+  for (const key of keys) {
+    if (a.searchParams.get(key) !== b.searchParams.get(key)) {
+      if (changedKey !== null) return null;
+      changedKey = key;
+    }
+  }
+  if (changedKey === null) return null;
+  const aNum = Number.parseInt(a.searchParams.get(changedKey), 10);
+  const bNum = Number.parseInt(b.searchParams.get(changedKey), 10);
+  if (!Number.isFinite(bNum)) return null;
+  const aVal = Number.isFinite(aNum) ? aNum : 1;
+  return bNum - aVal;
+}
+
+function findNextPageUrl(html, currentPageUrl) {
+  let current;
+  try {
+    current = new URL(currentPageUrl);
+  } catch (_) {
+    return null;
+  }
+  const anchorPattern = /<a\s[^>]*href=["']([^"']+)["']/gi;
+  let match;
+  while ((match = anchorPattern.exec(html))) {
+    let candidate;
+    try {
+      candidate = new URL(match[1].replace(/&amp;/g, '&'), currentPageUrl);
+    } catch (_) {
+      continue;
+    }
+    if (candidate.origin !== current.origin) continue;
+    if (candidate.pathname !== current.pathname) continue;
+    if (diffSearchParams(current, candidate) === 1) return candidate.href;
+  }
+  return null;
+}
+
+async function fetchPaginatedPages({
+  firstUrl,
+  firstHtml,
+  fetchImpl,
+  maxAdditionalPages = MAX_ADDITIONAL_PAGES,
+  deadlineMs = PAGINATION_DEADLINE_MS,
+}) {
+  const startedAt = Date.now();
+  const pages = [{ url: firstUrl, html: firstHtml }];
+  const visited = new Set([firstUrl]);
+  let currentUrl = firstUrl;
+  let currentHtml = firstHtml;
+  while (pages.length <= maxAdditionalPages) {
+    if (Date.now() - startedAt > deadlineMs) break;
+    const nextUrl = findNextPageUrl(currentHtml, currentUrl);
+    if (!nextUrl || visited.has(nextUrl)) break;
+    visited.add(nextUrl);
+    let nextHtml;
+    try {
+      nextHtml = await fetchPage(nextUrl, fetchImpl);
+    } catch (_) {
+      break;
+    }
+    pages.push({ url: nextUrl, html: nextHtml });
+    currentUrl = nextUrl;
+    currentHtml = nextHtml;
+  }
+  return pages;
+}
+
 // ---- Known-source resolvers ----------------------------------------------
 //
 // Some sites (e.g. JS-heavy event calendars) return unusable static HTML, but
@@ -1005,6 +1088,7 @@ async function handler(event, context) {
 
     let html = null;
     let jsonText = null;
+    let pagesFetched = 1;
     if (resolver) {
       const resolved = await resolver.fetchContent(parsedUrl.href, { fetchImpl });
       if (resolved.contentType === 'json') {
@@ -1013,7 +1097,14 @@ async function handler(event, context) {
         html = resolved.text;
       }
     } else {
-      html = await fetchPage(parsedUrl.href, fetchImpl);
+      const firstHtml = await fetchPage(parsedUrl.href, fetchImpl);
+      const pages = await fetchPaginatedPages({
+        firstUrl: parsedUrl.href,
+        firstHtml,
+        fetchImpl,
+      });
+      pagesFetched = pages.length;
+      html = pages.map((page) => page.html).join('\n');
     }
 
     const structuredEvents = extractStructuredEvents({
@@ -1051,6 +1142,7 @@ async function handler(event, context) {
       sourceName,
       sourceUrl: parsedUrl.href,
       contentLength: text.length,
+      pagesFetched,
       aiConfigured: extraction.aiConfigured,
       warnings: extraction.warnings,
       events: extraction.events,
@@ -1093,4 +1185,7 @@ module.exports = {
   methodNotAllowedResponse,
   badRequestResponse,
   upstreamErrorResponse,
+  findNextPageUrl,
+  fetchPaginatedPages,
+  MAX_ADDITIONAL_PAGES,
 };

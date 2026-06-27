@@ -540,3 +540,155 @@ test('handler falls back to existing AI/deterministic extraction when no resolve
   assert.equal(payload.events.length, 1);
   assert.equal(payload.events[0].raw.extractionMode, 'deterministic-webpage-fallback');
 });
+
+// ---- Same-domain pagination ------------------------------------------------
+
+test('findNextPageUrl follows a same-origin ?page=N+1 link', () => {
+  const html =
+    '<a href="https://example.com/events?page=2">2</a>' +
+    '<a href="https://example.com/events?page=3">3</a>';
+  const next = webpage.findNextPageUrl(html, 'https://example.com/events');
+  assert.equal(next, 'https://example.com/events?page=2');
+});
+
+test('findNextPageUrl advances from the current page number, not always page 2', () => {
+  const html = '<a href="https://example.com/events?page=4">4</a>';
+  const next = webpage.findNextPageUrl(
+    html,
+    'https://example.com/events?page=3',
+  );
+  assert.equal(next, 'https://example.com/events?page=4');
+});
+
+test('findNextPageUrl ignores cross-origin links even if the page param matches', () => {
+  const html = '<a href="https://other.example.com/events?page=2">2</a>';
+  const next = webpage.findNextPageUrl(html, 'https://example.com/events');
+  assert.equal(next, null);
+});
+
+test('findNextPageUrl ignores links whose only difference is non-numeric', () => {
+  const html =
+    '<a href="https://example.com/events?sortType=name">By name</a>';
+  const next = webpage.findNextPageUrl(
+    html,
+    'https://example.com/events?sortType=date',
+  );
+  assert.equal(next, null);
+});
+
+test('findNextPageUrl returns null when there is no next-page link', () => {
+  const html = '<a href="https://example.com/about">About</a>';
+  const next = webpage.findNextPageUrl(html, 'https://example.com/events');
+  assert.equal(next, null);
+});
+
+test('fetchPaginatedPages follows links across pages and stops when no more are found', async () => {
+  const pageHtml = (page, hasNext) =>
+    `<p>page ${page}</p>` +
+    (hasNext
+      ? `<a href="https://example.com/events?page=${page + 1}">next</a>`
+      : '');
+  const fetched = [];
+  const fetchImpl = async (url) => {
+    fetched.push(url);
+    const page = Number.parseInt(new URL(url).searchParams.get('page') || '1', 10);
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => pageHtml(page, page < 3),
+    };
+  };
+
+  const pages = await webpage.fetchPaginatedPages({
+    firstUrl: 'https://example.com/events',
+    firstHtml: pageHtml(1, true),
+    fetchImpl,
+  });
+
+  assert.equal(pages.length, 3);
+  assert.equal(pages[1].url, 'https://example.com/events?page=2');
+  assert.equal(pages[2].url, 'https://example.com/events?page=3');
+  assert.equal(fetched.length, 2);
+});
+
+test('fetchPaginatedPages caps at MAX_ADDITIONAL_PAGES even if more links exist', async () => {
+  const fetchImpl = async (url) => {
+    const page = Number.parseInt(new URL(url).searchParams.get('page') || '1', 10);
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () =>
+        `<a href="https://example.com/events?page=${page + 1}">next</a>`,
+    };
+  };
+
+  const pages = await webpage.fetchPaginatedPages({
+    firstUrl: 'https://example.com/events',
+    firstHtml: '<a href="https://example.com/events?page=2">next</a>',
+    fetchImpl,
+  });
+
+  assert.equal(pages.length, 1 + webpage.MAX_ADDITIONAL_PAGES);
+});
+
+test('fetchPaginatedPages returns only the first page when there is no pagination link', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return { ok: true, status: 200, headers: { get: () => null }, text: async () => '<p>only page</p>' };
+  };
+
+  const pages = await webpage.fetchPaginatedPages({
+    firstUrl: 'https://example.com/events',
+    firstHtml: '<p>only page</p>',
+    fetchImpl,
+  });
+
+  assert.equal(pages.length, 1);
+  assert.equal(calls, 0);
+});
+
+test('handler merges JSON-LD events found across paginated pages', async () => {
+  const page1Html =
+    '<script type="application/ld+json">' +
+    '{"@type":"Event","name":"Page one show","startDate":"2026-07-02T19:00:00"}' +
+    '</script>' +
+    '<a href="https://example.com/events?page=2">next</a>';
+  const page2Html =
+    '<script type="application/ld+json">' +
+    '{"@type":"Event","name":"Page two show","startDate":"2026-07-04T19:00:00"}' +
+    '</script>';
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: 'https://example.com/events',
+        start: '2026-07-01T00:00:00',
+        end: '2026-07-07T23:59:00',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async (url) => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () =>
+          new URL(url).searchParams.get('page') === '2' ? page2Html : page1Html,
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.pagesFetched, 2);
+  assert.equal(payload.events.length, 2);
+  assert.deepEqual(
+    payload.events.map((event) => event.title).sort(),
+    ['Page one show', 'Page two show'],
+  );
+});

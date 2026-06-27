@@ -29,7 +29,6 @@ class SettingsScreen extends StatelessWidget {
     final displayName = state.displayName?.trim();
     final googleDisplayName = user?.displayName?.trim();
     final email = user?.email?.trim();
-    final currentUserId = user?.uid ?? state.userId;
     final accountName = displayName?.isNotEmpty == true
         ? displayName!
         : googleDisplayName?.isNotEmpty == true
@@ -38,11 +37,7 @@ class SettingsScreen extends StatelessWidget {
                 ? 'Signed in'
                 : 'Local-only mode';
     final profileInitial = _profileInitial(accountName, email);
-    final ownerLabel = state.calendarOwnerUserId == null
-        ? 'Local only'
-        : state.calendarOwnerUserId == currentUserId
-            ? 'You'
-            : _shortId(state.calendarOwnerUserId!);
+    final ownerLabel = state.calendarOwnerDisplayLabel ?? 'Local only';
     final memberLabel = state.calendarMemberDisplayLabels.isEmpty
         ? 'Local only'
         : state.calendarMemberDisplayLabels.join(', ');
@@ -357,11 +352,6 @@ class SettingsScreen extends StatelessWidget {
     final source = displayName?.isNotEmpty == true ? displayName! : email;
     if (source == null || source.isEmpty) return 'K';
     return source.characters.first.toUpperCase();
-  }
-
-  static String _shortId(String id) {
-    if (id.length <= 8) return id;
-    return '${id.substring(0, 8)}...';
   }
 }
 
@@ -1609,6 +1599,9 @@ class _OutsideEventSourcesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sources = state.outsideEventSources;
+    final isRefreshing = state.isRefreshingOutsideEvents;
+    final fetchingSourceId = state.refreshingOutsideEventSourceId;
+    final summary = state.lastOutsideEventRefreshSummary;
     return LsCard(
       key: const ValueKey('settings-outside-event-sources-card'),
       child: Column(
@@ -1662,8 +1655,9 @@ class _OutsideEventSourcesCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Add public event pages or RSS/Atom feeds. Results are cached on '
-            'this device and suggestions stay separate from Activities.',
+            'Add public event pages or RSS/Atom feeds. This list syncs with '
+            'this calendar across devices; fetched results stay cached on '
+            'this device only and may need refreshing per device.',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               height: 1.35,
@@ -1684,8 +1678,11 @@ class _OutsideEventSourcesCard extends StatelessWidget {
               _PublishingActionButton(
                 key: const ValueKey('settings-refresh-outside-event-sources'),
                 icon: Icons.sync_rounded,
-                label: 'Fetch latest events',
-                onTap: () => unawaited(_refreshOutsideSources(context, state)),
+                label: isRefreshing ? 'Fetching...' : 'Fetch latest events',
+                loading: isRefreshing,
+                onTap: isRefreshing
+                    ? null
+                    : () => unawaited(_refreshOutsideSources(context, state)),
               ),
             ],
           ),
@@ -1697,6 +1694,21 @@ class _OutsideEventSourcesCard extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: textMuted,
+              ),
+            ),
+          ],
+          if (summary != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              key: const ValueKey('settings-outside-event-refresh-summary'),
+              '${summary.sourcesChecked} source${summary.sourcesChecked == 1 ? '' : 's'} checked · '
+              '${summary.sourcesSucceeded} succeeded · '
+              '${summary.sourcesFailed} failed · '
+              '${summary.eventsFound} event${summary.eventsFound == 1 ? '' : 's'} found',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: summary.sourcesFailed > 0 ? sand : accentSage,
               ),
             ),
           ],
@@ -1725,6 +1737,8 @@ class _OutsideEventSourcesCard extends StatelessWidget {
             ...sources.map((source) {
               return _OutsideEventSourceRow(
                 source: source,
+                isFetching: fetchingSourceId == source.id,
+                webpageAiConfigured: state.lastWebpageAiConfigured,
                 onToggle: (enabled) =>
                     state.setOutsideEventSourceEnabled(source.id, enabled),
                 onEdit: () => _showOutsideSourceDialog(
@@ -1751,10 +1765,15 @@ class _OutsideEventSourcesCard extends StatelessWidget {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final result = await state.refreshOutsideEventSources();
+    final summary = state.lastOutsideEventRefreshSummary;
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          'Fetched ${result.events.length} outside event suggestion${result.events.length == 1 ? '' : 's'}.',
+          summary == null
+              ? 'Fetched ${result.events.length} outside event suggestion${result.events.length == 1 ? '' : 's'}.'
+              : '${summary.sourcesChecked} checked, ${summary.sourcesSucceeded} '
+                  'succeeded, ${summary.sourcesFailed} failed, '
+                  '${summary.eventsFound} event${summary.eventsFound == 1 ? '' : 's'} found.',
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -1768,12 +1787,28 @@ class _OutsideEventSourceRow extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    this.isFetching = false,
+    this.webpageAiConfigured,
   });
 
   final UserEventSource source;
   final ValueChanged<bool> onToggle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// True while this source is the one currently being fetched during a
+  /// refresh (sources run sequentially); shows a "Fetching..." pill in
+  /// place of the health pill.
+  final bool isFetching;
+
+  /// Whether the server-side AI organizer was configured, from the most
+  /// recent webpage fetch. Only relevant for [UserEventSourceKind.webPage]
+  /// (and auto-detected webpage) sources.
+  final bool? webpageAiConfigured;
+
+  bool get _isFailedOrWarning =>
+      source.healthStatus == SourceHealthStatus.warning ||
+      source.healthStatus == SourceHealthStatus.failed;
 
   @override
   Widget build(BuildContext context) {
@@ -1824,7 +1859,9 @@ class _OutsideEventSourceRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      _SourceHealthPill(status: source.healthStatus),
+                      isFetching
+                          ? const _FetchingPill()
+                          : _SourceHealthPill(status: source.healthStatus),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -1850,6 +1887,13 @@ class _OutsideEventSourceRow extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (_isFailedOrWarning) ...[
+                    const SizedBox(height: 6),
+                    _SourceDiagnostics(
+                      source: source,
+                      webpageAiConfigured: webpageAiConfigured,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1869,6 +1913,129 @@ class _OutsideEventSourceRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _FetchingPill extends StatelessWidget {
+  const _FetchingPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF3FA),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 10,
+            height: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.6),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'Fetching...',
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Developer-friendly diagnostics for a failed or warning source: enough
+/// to triage without server logs (URL, fetcher, failure category, HTTP
+/// status, and the sanitized last warning/error message). Never shows
+/// secrets - every message here comes from developer-authored strings or
+/// HTTP status text, never raw exception output or API keys.
+class _SourceDiagnostics extends StatelessWidget {
+  const _SourceDiagnostics({
+    required this.source,
+    required this.webpageAiConfigured,
+  });
+
+  final UserEventSource source;
+  final bool? webpageAiConfigured;
+
+  @override
+  Widget build(BuildContext context) {
+    final usesWebpageFetcher = source.kind == UserEventSourceKind.webPage ||
+        source.kind == UserEventSourceKind.autoDetect;
+    final lines = <String>[
+      'Fetcher: ${_fetcherLabel(source.kind)}',
+      if (usesWebpageFetcher)
+        'AI organizer: ${_aiConfiguredLabel(webpageAiConfigured)}',
+      if (source.lastErrorHttpStatusCode != null)
+        'HTTP status: ${source.lastErrorHttpStatusCode}',
+      'Likely cause: ${_failureCategoryLabel(source.lastErrorCategory)}',
+    ];
+    return Container(
+      key: ValueKey('outside-event-source-diagnostics-${source.id}'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: backgroundCream,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderWarm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                line,
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: textMuted,
+                  height: 1.3,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _fetcherLabel(UserEventSourceKind kind) {
+    return switch (kind) {
+      UserEventSourceKind.rssAtom => 'RSS/Atom proxy',
+      UserEventSourceKind.webPage =>
+        'Webpage proxy (structured data, then AI/deterministic fallback)',
+      UserEventSourceKind.autoDetect =>
+        'Auto-detect (RSS/Atom or webpage proxy)',
+    };
+  }
+
+  String _aiConfiguredLabel(bool? configured) {
+    if (configured == null) return 'Not used yet this session';
+    return configured
+        ? 'Configured'
+        : 'Not configured (used deterministic fallback)';
+  }
+
+  String _failureCategoryLabel(String? categoryName) {
+    return switch (categoryName) {
+      'blockedUrl' => 'URL blocked (private/local address or bad scheme)',
+      'timeout' => 'Request timed out',
+      'corsOrProxy' => 'CORS/proxy request failed',
+      'responseTooLarge' => 'Response too large to process',
+      'noEventsFound' => 'No events found in the selected date range',
+      'parserFailure' => 'Response could not be parsed',
+      'aiFailure' => 'AI organizer failed',
+      'aiNotConfigured' => 'AI organizer not configured',
+      'upstreamError' => 'Upstream source returned an error',
+      _ => 'Unknown',
+    };
   }
 }
 
@@ -2080,23 +2247,30 @@ class _PublishingActionButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.quiet = false,
+    this.loading = false,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool quiet;
+
+  /// Shows a small spinner instead of [icon] and ignores taps, for an
+  /// action already in flight (e.g. an outside-events fetch), so the user
+  /// gets visible progress and can't double-tap a slow network request.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = quiet ? textMuted : primaryTerracotta;
+    final disabled = loading || onTap == null;
+    final foreground = quiet || disabled ? textMuted : primaryTerracotta;
     return GestureDetector(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: quiet ? warmBeige : const Color(0xFFFAF0EC),
+          color: quiet || disabled ? warmBeige : const Color(0xFFFAF0EC),
           borderRadius: BorderRadius.circular(100),
         ),
         child: Wrap(
@@ -2104,7 +2278,17 @@ class _PublishingActionButton extends StatelessWidget {
           spacing: 6,
           runSpacing: 2,
           children: [
-            Icon(icon, size: 16, color: foreground),
+            if (loading)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: foreground,
+                ),
+              )
+            else
+              Icon(icon, size: 16, color: foreground),
             Text(
               label,
               style: GoogleFonts.dmSans(

@@ -12,6 +12,7 @@ class OutsideEventDiscoveryResult {
     required this.aiStatusMessage,
     this.attemptedSourceIds = const {},
     this.sourceEventCounts = const {},
+    this.webpageAiConfigured,
   });
 
   final List<EventSuggestion> events;
@@ -26,6 +27,29 @@ class OutsideEventDiscoveryResult {
   /// Raw (pre-dedupe) suggestion count per source id, i.e. "events found"
   /// for source health, distinct from the final deduped [events] list.
   final Map<String, int> sourceEventCounts;
+
+  /// Whether the server-side AI organizer was configured, from the most
+  /// recent attempted webpage source that reported it. Null when no webpage
+  /// source was attempted this refresh (AI configuration is a single
+  /// server-side setting, so any one webpage fetch reflects all of them).
+  final bool? webpageAiConfigured;
+}
+
+/// Tally shown to the user after a manual outside-events refresh (Settings
+/// "Fetch latest events" / Outside events "Refresh"): how many sources were
+/// checked, how many succeeded/failed, and how many events were found.
+class OutsideEventRefreshSummary {
+  const OutsideEventRefreshSummary({
+    required this.sourcesChecked,
+    required this.sourcesSucceeded,
+    required this.sourcesFailed,
+    required this.eventsFound,
+  });
+
+  final int sourcesChecked;
+  final int sourcesSucceeded;
+  final int sourcesFailed;
+  final int eventsFound;
 }
 
 class OutsideEventDiscoveryService {
@@ -48,31 +72,41 @@ class OutsideEventDiscoveryService {
   List<OutsideEventSourceConfig> get sources =>
       _adapters.map((adapter) => adapter.config).toList();
 
-  Future<OutsideEventDiscoveryResult> discover(OutsideEventQuery query) async {
+  Future<OutsideEventDiscoveryResult> discover(
+    OutsideEventQuery query, {
+    void Function(OutsideEventSourceConfig config)? onSourceStart,
+    void Function(OutsideEventSourceResult result)? onSourceResult,
+  }) async {
     final results = <OutsideEventSourceResult>[];
     for (final adapter in _adapters) {
       final config = adapter.config;
       if (!config.enabled) {
-        results.add(OutsideEventSourceResult(source: config, attempted: false));
+        final skipped =
+            OutsideEventSourceResult(source: config, attempted: false);
+        results.add(skipped);
+        onSourceResult?.call(skipped);
         continue;
       }
+      onSourceStart?.call(config);
+      OutsideEventSourceResult result;
       try {
-        results.add(await adapter.fetch(query));
+        result = await adapter.fetch(query);
       } catch (_) {
-        results.add(
-          OutsideEventSourceResult(
-            source: config,
-            warnings: [
-              OutsideEventSourceWarning(
-                sourceId: config.id,
-                sourceName: config.displayName,
-                message: '${config.displayName} could not load. Showing other '
-                    'sources that did work.',
-              ),
-            ],
-          ),
+        result = OutsideEventSourceResult(
+          source: config,
+          warnings: [
+            OutsideEventSourceWarning(
+              sourceId: config.id,
+              sourceName: config.displayName,
+              message: '${config.displayName} could not load. Showing other '
+                  'sources that did work.',
+              category: OutsideEventFailureCategory.corsOrProxy,
+            ),
+          ],
         );
       }
+      results.add(result);
+      onSourceResult?.call(result);
     }
 
     final deduped = <String, EventSuggestion>{};
@@ -103,6 +137,17 @@ class OutsideEventDiscoveryService {
         for (final result in results)
           result.source.id: result.suggestions.length,
       },
+      webpageAiConfigured: _lastNonNull(
+        results.map((result) => result.aiConfigured),
+      ),
     );
+  }
+
+  static bool? _lastNonNull(Iterable<bool?> values) {
+    bool? found;
+    for (final value in values) {
+      if (value != null) found = value;
+    }
+    return found;
   }
 }
