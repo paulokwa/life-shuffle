@@ -76,9 +76,18 @@ class OutsideEventDiscoveryService {
     OutsideEventQuery query, {
     void Function(OutsideEventSourceConfig config)? onSourceStart,
     void Function(OutsideEventSourceResult result)? onSourceResult,
+
+    /// Fired once per adapter, in order, before [onSourceStart]/skip - so
+    /// callers can show "checking N of total" progress that advances even
+    /// for disabled sources (which never get an [onSourceStart] call).
+    void Function(int index, int total)? onProgress,
   }) async {
     final results = <OutsideEventSourceResult>[];
+    final total = _adapters.length;
+    var index = 0;
     for (final adapter in _adapters) {
+      index += 1;
+      onProgress?.call(index, total);
       final config = adapter.config;
       if (!config.enabled) {
         final skipped =

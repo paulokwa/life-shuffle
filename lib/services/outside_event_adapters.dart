@@ -99,6 +99,7 @@ class MockOutsideEventAdapter implements OutsideEventSourceAdapter {
       city: city,
       sourceName: 'Sample events',
       sourceType: OutsideEventSourceType.mock,
+      sourceId: 'mock-sample',
       sourceUrl: 'https://example.com/life-shuffle/sample-events/$id',
       ticketUrl: 'https://example.com/life-shuffle/sample-events/$id/tickets',
       priceLabel: priceLabel,
@@ -155,7 +156,9 @@ class CuratedRssOutsideEventAdapter implements OutsideEventSourceAdapter {
           source: source,
           query: query,
         );
-        suggestions.addAll(parsed.suggestions);
+        suggestions.addAll(
+          parsed.suggestions.map((e) => e.copyWith(sourceId: config.id)),
+        );
         warnings.addAll(parsed.warnings);
       } on XmlParserException {
         warnings.add(
@@ -287,7 +290,9 @@ class UserRssAtomOutsideEventAdapter implements OutsideEventSourceAdapter {
       );
       return OutsideEventSourceResult(
         source: config,
-        suggestions: parsed.suggestions,
+        suggestions: parsed.suggestions
+            .map((e) => e.copyWith(sourceId: config.id))
+            .toList(),
         warnings: parsed.warnings,
       );
     } on XmlParserException {
@@ -399,7 +404,7 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
               .whereType<Map>()
               .map((map) => EventSuggestion.fromMap(
                     Map<String, dynamic>.from(map),
-                  ))
+                  ).copyWith(sourceId: config.id))
               .where((event) => query.contains(event.startDateTime))
               .toList()
           : const <EventSuggestion>[];
@@ -552,7 +557,7 @@ class TicketmasterOutsideEventAdapter implements OutsideEventSourceAdapter {
               .whereType<Map>()
               .map((map) => EventSuggestion.fromMap(
                     Map<String, dynamic>.from(map),
-                  ))
+                  ).copyWith(sourceId: _sourceId))
               .where((event) => query.contains(event.startDateTime))
               .toList()
           : const <EventSuggestion>[];

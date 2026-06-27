@@ -106,6 +106,7 @@ class EventDedupeService {
         'sourceName': other.sourceName,
         'sourceType': other.sourceType.storageName,
         if (other.sourceUrl != null) 'sourceUrl': other.sourceUrl,
+        if (other.sourceId != null) 'sourceId': other.sourceId,
       },
     ];
     final extraMissing = <String>{

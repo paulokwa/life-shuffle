@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -19,31 +21,46 @@ class OutsideEventsScreen extends StatefulWidget {
 }
 
 class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
-  Future<OutsideEventDiscoveryResult>? _future;
-  final Set<OutsideEventSourceType> _selectedSources = {};
+  String? _refreshErrorMessage;
+  final Set<String> _selectedSources = {};
   final Set<String> _selectedTags = {};
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Never fetches outside events automatically on open - only shows
-    // whatever is already cached on this device. Fetching costs AI/API
-    // credits, so it only happens when the user taps refresh below.
-    _future ??= Future.value(
-      AppStateScope.of(context).cachedOutsideEventDiscoveryResult(),
-    );
-  }
+  // Deliberately reads AppState's cache directly in build() below instead
+  // of caching a Future in state - that one-shot-Future pattern is what
+  // caused the list to stay stale until navigating away and back: a refresh
+  // kicked off from Settings (or finishing while this screen was the
+  // *previous*, still-mounted route) updated AppState's cache, but nothing
+  // pointed this screen's Future at the new data until it was torn down and
+  // rebuilt from scratch. Reading the cache fresh on every build reacts to
+  // AppState.notifyListeners() like the rest of the app expects.
+  //
+  // Never fetches outside events automatically on open - only shows
+  // whatever is already cached on this device. Fetching costs AI/API
+  // credits, so it only happens when the user taps refresh below.
 
-  void _refresh() {
+  Future<void> _refresh() async {
     final state = AppStateScope.of(context);
     if (state.isRefreshingOutsideEvents) return;
-    setState(() {
-      _future = state.refreshOutsideEventSources();
-    });
+    setState(() => _refreshErrorMessage = null);
+    try {
+      await state.refreshOutsideEventSources();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _refreshErrorMessage = 'Try refresh. The rest of the planner is '
+            'unchanged.';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final isRefreshing = state.isRefreshingOutsideEvents;
+    final hasEverFetched = state.cachedOutsideEventsFetchedAtMillis != null;
+    final result = state.cachedOutsideEventDiscoveryResult();
+    final events = _filteredEvents(result.events);
+    final allTags = _allTags(result.events);
     return Scaffold(
       backgroundColor: backgroundCream,
       body: SafeArea(
@@ -84,12 +101,9 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                         ),
                         IconButton(
                           key: const ValueKey('outside-events-refresh'),
-                          onPressed: AppStateScope.of(context)
-                                  .isRefreshingOutsideEvents
-                              ? null
-                              : _refresh,
-                          icon: AppStateScope.of(context)
-                                  .isRefreshingOutsideEvents
+                          onPressed:
+                              isRefreshing ? null : () => unawaited(_refresh()),
+                          icon: isRefreshing
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -107,7 +121,9 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Browse sourced events and add the ones you actually want.',
+                      'Browse sourced events and add the ones you actually want. '
+                      'Sources sync across your devices for this calendar; '
+                      'fetched results are cached on this device only.',
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         color: textMuted,
@@ -115,82 +131,74 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    FutureBuilder<OutsideEventDiscoveryResult>(
-                      future: _future,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState != ConnectionState.done) {
-                          return const _LoadingList();
-                        }
-                        if (snapshot.hasError) {
-                          return const _MessageCard(
-                            icon: Icons.error_outline_rounded,
-                            title: 'Events could not load',
-                            body: 'Try refresh. The rest of the planner is '
-                                'unchanged.',
-                            color: Color(0xFFFFF3EC),
-                          );
-                        }
-                        final result = snapshot.data!;
-                        final events = _filteredEvents(result.events);
-                        final allTags = _allTags(result.events);
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _FilterSection(
-                              sources: result.sources,
-                              events: result.events,
-                              selectedSources: _selectedSources,
-                              onToggleSource: _toggleSource,
-                              allTags: allTags,
-                              selectedTags: _selectedTags,
-                              onToggleTag: _toggleTag,
+                    if (isRefreshing) ...[
+                      _RefreshProgressBanner(state: state),
+                      const SizedBox(height: 14),
+                    ],
+                    if (_refreshErrorMessage != null)
+                      _MessageCard(
+                        icon: Icons.error_outline_rounded,
+                        title: 'Events could not load',
+                        body: _refreshErrorMessage!,
+                        color: const Color(0xFFFFF3EC),
+                      )
+                    else if (isRefreshing && !hasEverFetched)
+                      const _LoadingList()
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _FilterSection(
+                            sources: result.sources,
+                            events: result.events,
+                            selectedSources: _selectedSources,
+                            onToggleSource: _toggleSource,
+                            allTags: allTags,
+                            selectedTags: _selectedTags,
+                            onToggleTag: _toggleTag,
+                          ),
+                          const SizedBox(height: 14),
+                          if (result.warnings.isNotEmpty ||
+                              result.aiStatusMessage.isNotEmpty) ...[
+                            _DiagnosticsSection(
+                              result: result,
+                              fetchedAtMillis:
+                                  state.cachedOutsideEventsFetchedAtMillis,
                             ),
                             const SizedBox(height: 14),
-                            if (result.warnings.isNotEmpty ||
-                                result.aiStatusMessage.isNotEmpty) ...[
-                              _DiagnosticsSection(
-                                result: result,
-                                fetchedAtMillis: AppStateScope.of(context)
-                                    .cachedOutsideEventsFetchedAtMillis,
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            if (events.isEmpty)
-                              AppStateScope.of(context)
-                                          .cachedOutsideEventsFetchedAtMillis ==
-                                      null
-                                  ? const _MessageCard(
-                                      icon: Icons.travel_explore_rounded,
-                                      title: 'Nothing fetched yet',
-                                      body: 'Tap refresh above to fetch '
-                                          'outside events from your sources. '
-                                          'No event is added unless you tap '
-                                          'Add.',
-                                      color: surfaceWhite,
-                                    )
-                                  : const _MessageCard(
-                                      icon: Icons.search_off_rounded,
-                                      title: 'No matching outside events',
-                                      body: 'Try clearing filters or tap '
-                                          'refresh above. No event is added '
-                                          'unless you tap Add.',
-                                      color: surfaceWhite,
-                                    )
-                            else
-                              ...events.map(
-                                (event) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _EventSuggestionCard(
-                                    event: event,
-                                    added: _isAdded(event),
-                                    onAdd: () => _addEvent(event),
-                                  ),
+                          ],
+                          if (events.isEmpty)
+                            !hasEverFetched
+                                ? const _MessageCard(
+                                    icon: Icons.travel_explore_rounded,
+                                    title: 'Nothing fetched yet',
+                                    body: 'Tap refresh above to fetch '
+                                        'outside events from your sources. '
+                                        'No event is added unless you tap '
+                                        'Add.',
+                                    color: surfaceWhite,
+                                  )
+                                : const _MessageCard(
+                                    icon: Icons.search_off_rounded,
+                                    title: 'No matching outside events',
+                                    body: 'Try clearing filters or tap '
+                                        'refresh above. No event is added '
+                                        'unless you tap Add.',
+                                    color: surfaceWhite,
+                                  )
+                          else
+                            ...events.map(
+                              (event) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _EventSuggestionCard(
+                                  event: event,
+                                  added: _isAdded(event),
+                                  onAdd: () => _addEvent(event),
                                 ),
                               ),
-                          ],
-                        );
-                      },
-                    ),
+                            ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -204,7 +212,7 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
   List<EventSuggestion> _filteredEvents(List<EventSuggestion> events) {
     return events.where((event) {
       final sourceMatch = _selectedSources.isEmpty ||
-          _selectedSources.contains(event.sourceType);
+          event.contributingSourceIds.any(_selectedSources.contains);
       final tagMatch =
           _selectedTags.isEmpty || event.tags.any(_selectedTags.contains);
       return sourceMatch && tagMatch;
@@ -216,12 +224,12 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
     return tags;
   }
 
-  void _toggleSource(OutsideEventSourceType sourceType) {
+  void _toggleSource(String sourceId) {
     setState(() {
-      if (_selectedSources.contains(sourceType)) {
-        _selectedSources.remove(sourceType);
+      if (_selectedSources.contains(sourceId)) {
+        _selectedSources.remove(sourceId);
       } else {
-        _selectedSources.add(sourceType);
+        _selectedSources.add(sourceId);
       }
     });
   }
@@ -310,6 +318,43 @@ class _LoadingList extends StatelessWidget {
   }
 }
 
+/// Shown above the event list while a refresh is in flight: which source is
+/// currently being checked and how far through the list the refresh is, so
+/// a slow fetch (10+ sources, each a network round trip) doesn't look stuck.
+class _RefreshProgressBanner extends StatelessWidget {
+  const _RefreshProgressBanner({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('outside-events-refresh-progress'),
+      color: const Color(0xFFEFF3FA),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              state.refreshProgressLabel,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FilterSection extends StatelessWidget {
   const _FilterSection({
     required this.sources,
@@ -323,8 +368,13 @@ class _FilterSection extends StatelessWidget {
 
   final List<OutsideEventSourceConfig> sources;
   final List<EventSuggestion> events;
-  final Set<OutsideEventSourceType> selectedSources;
-  final ValueChanged<OutsideEventSourceType> onToggleSource;
+
+  /// [OutsideEventSourceConfig.id] values, not [OutsideEventSourceType] -
+  /// several user-added sources can share a type (RSS/Atom or web page), so
+  /// filtering has to be per-source-id or every same-type pill would
+  /// select/deselect together.
+  final Set<String> selectedSources;
+  final ValueChanged<String> onToggleSource;
   final List<String> allTags;
   final Set<String> selectedTags;
   final ValueChanged<String> onToggleTag;
@@ -348,13 +398,16 @@ class _FilterSection extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: sources.where((source) => source.canFetch).map((source) {
-            final selected = selectedSources.contains(source.type);
-            final count =
-                events.where((event) => event.sourceType == source.type).length;
+            final selected = selectedSources.contains(source.id);
+            final count = events
+                .where((event) => event.contributingSourceIds.contains(
+                      source.id,
+                    ))
+                .length;
             return _FilterChip(
               label: '${source.displayName} ($count)',
               selected: selected,
-              onTap: () => onToggleSource(source.type),
+              onTap: () => onToggleSource(source.id),
             );
           }).toList(),
         ),

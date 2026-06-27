@@ -162,6 +162,40 @@ class UserEventSource {
     };
   }
 
+  /// Just the fields a person could usefully share or re-import: display
+  /// name, URL, kind, and enabled status. Deliberately excludes [id]
+  /// (calendar-local) and every health/diagnostic field (`lastError`,
+  /// `lastEventCount`, etc. - device-local fetch history, not part of the
+  /// source's definition) so exporting never leaks more than the source
+  /// definition itself. See Settings' source list export/import.
+  Map<String, dynamic> toExportMap() {
+    return {
+      'displayName': displayName,
+      'url': url,
+      'kind': kind.name,
+      'enabled': enabled,
+    };
+  }
+
+  /// Parses one entry from an exported source-list JSON paste (see
+  /// [toExportMap]). The returned source's [id] is a placeholder - callers
+  /// that persist an import (see `AppState.importOutsideEventSources`)
+  /// replace it with a freshly generated one. Throws [FormatException] if
+  /// `url` is missing or blank, since a source with no URL can never fetch.
+  factory UserEventSource.fromExportMap(Map<String, dynamic> map) {
+    final url = _readString(map['url'], fallback: '');
+    if (url.isEmpty) {
+      throw const FormatException('Missing or empty "url" field.');
+    }
+    return UserEventSource(
+      id: 'import-placeholder',
+      displayName: _readString(map['displayName'], fallback: url),
+      url: url,
+      kind: UserEventSourceKindLabel.fromStorage(map['kind'] as String?),
+      enabled: map['enabled'] is bool ? map['enabled'] as bool : true,
+    );
+  }
+
   factory UserEventSource.fromMap(Map<String, dynamic> map) {
     return UserEventSource(
       id: _readString(map['id'],

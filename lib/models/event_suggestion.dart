@@ -58,6 +58,7 @@ class EventSuggestion {
     this.confidence,
     this.missingFields = const [],
     this.raw = const {},
+    this.sourceId,
   });
 
   final String id;
@@ -73,6 +74,15 @@ class EventSuggestion {
   final String? city;
   final String sourceName;
   final OutsideEventSourceType sourceType;
+
+  /// The exact [OutsideEventSourceConfig.id] that produced this event, e.g.
+  /// a specific user-added source's id rather than its (possibly shared)
+  /// [sourceType]. Several user sources can share a [sourceType] (RSS/Atom
+  /// or web page), so this is what Outside Events' source filter pills
+  /// match on. Null for events built before this field existed (old cached
+  /// data) or fixtures that don't set it; [contributingSourceIds] falls back
+  /// to [sourceType] in that case.
+  final String? sourceId;
   final String? sourceUrl;
   final String? ticketUrl;
   final String? priceLabel;
@@ -149,6 +159,7 @@ class EventSuggestion {
     String? sourceUrl,
     String? ticketUrl,
     Map<String, Object?>? raw,
+    String? sourceId,
   }) {
     return EventSuggestion(
       id: id,
@@ -164,6 +175,7 @@ class EventSuggestion {
       city: city ?? this.city,
       sourceName: sourceName,
       sourceType: sourceType,
+      sourceId: sourceId ?? this.sourceId,
       sourceUrl: sourceUrl ?? this.sourceUrl,
       ticketUrl: ticketUrl ?? this.ticketUrl,
       priceLabel: priceLabel ?? this.priceLabel,
@@ -179,7 +191,8 @@ class EventSuggestion {
 
   /// Other sources that turned out to describe this same event, attached by
   /// [EventDedupeService] when it merges near-duplicates. Each entry has at
-  /// least a `sourceName`, and a `sourceType`/`sourceUrl` when known.
+  /// least a `sourceName`, and a `sourceType`/`sourceUrl`/`sourceId` when
+  /// known.
   List<Map<String, Object?>> get mergedSources {
     final value = raw['mergedSources'];
     if (value is! Iterable) return const [];
@@ -188,6 +201,16 @@ class EventSuggestion {
         .map((map) => Map<String, Object?>.from(map))
         .toList();
   }
+
+  /// Every source id this event can be filtered by: its own [sourceId]
+  /// (falling back to [sourceType] when unset) plus any contributed by
+  /// [mergedSources], so an event merged from several sources matches a
+  /// filter pill for *any* of them, not just whichever "won" the merge.
+  Set<String> get contributingSourceIds => {
+        sourceId ?? sourceType.storageName,
+        for (final source in mergedSources)
+          if (source['sourceId'] is String) source['sourceId'] as String,
+      };
 
   /// `sourceName`, plus any [mergedSources] names, joined for display so a
   /// merged event credits every source that reported it (e.g. "Venue page +
@@ -253,6 +276,7 @@ class EventSuggestion {
       if (city != null) 'city': city,
       'sourceName': sourceName,
       'sourceType': sourceType.storageName,
+      if (sourceId != null) 'sourceId': sourceId,
       if (sourceUrl != null) 'sourceUrl': sourceUrl,
       if (ticketUrl != null) 'ticketUrl': ticketUrl,
       if (priceLabel != null) 'priceLabel': priceLabel,
@@ -291,6 +315,7 @@ class EventSuggestion {
       sourceType: OutsideEventSourceTypeLabel.fromStorage(
         map['sourceType'] as String?,
       ),
+      sourceId: _readNullableString(map['sourceId']),
       sourceUrl: _readNullableString(map['sourceUrl']),
       ticketUrl: _readNullableString(map['ticketUrl']),
       priceLabel: _readNullableString(map['priceLabel']),

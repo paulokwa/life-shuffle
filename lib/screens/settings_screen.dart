@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -831,6 +832,239 @@ Future<void> _confirmDeleteOutsideSource(
   if (confirmed == true) {
     state.deleteOutsideEventSource(source.id);
   }
+}
+
+/// Identifies an exported source list so import doesn't silently accept an
+/// unrelated JSON document that happens to have a "sources" key.
+const _outsideEventSourceExportType = 'life-shuffle-outside-event-sources';
+
+String _encodeOutsideEventSourcesExport(List<UserEventSource> sources) {
+  return const JsonEncoder.withIndent('  ').convert({
+    'type': _outsideEventSourceExportType,
+    'version': 1,
+    'sources': sources.map((source) => source.toExportMap()).toList(),
+  });
+}
+
+/// Throws [FormatException] if [raw] isn't valid JSON or doesn't match the
+/// exported shape (see [_encodeOutsideEventSourcesExport]).
+List<UserEventSource> _decodeOutsideEventSourcesImport(String raw) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } on FormatException {
+    throw const FormatException('That is not valid JSON.');
+  }
+  if (decoded is! Map || decoded['sources'] is! List) {
+    throw const FormatException(
+      'Expected an exported source list: a JSON object with a "sources" '
+      'list.',
+    );
+  }
+  return (decoded['sources'] as List)
+      .whereType<Map>()
+      .map(
+        (map) => UserEventSource.fromExportMap(
+          Map<String, dynamic>.from(map),
+        ),
+      )
+      .toList();
+}
+
+Future<void> _showExportOutsideSourcesDialog(
+  BuildContext context,
+  List<UserEventSource> sources,
+) async {
+  final json = _encodeOutsideEventSourcesExport(sources);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Export sources'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${sources.length} source${sources.length == 1 ? '' : 's'}'
+                  ' - display name, URL, type, and enabled status only. No '
+                  'cached events, API keys, or calendar IDs.',
+                  style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: backgroundCream,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SelectableText(
+                    json,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: json));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Source list copied as JSON')),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> _showImportOutsideSourcesDialog(
+  BuildContext context,
+  AppState state,
+) async {
+  final controller = TextEditingController();
+  String? errorText;
+  List<UserEventSource>? preview;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          void runPreview() {
+            final raw = controller.text.trim();
+            if (raw.isEmpty) {
+              setDialogState(() {
+                errorText = 'Paste exported JSON first.';
+                preview = null;
+              });
+              return;
+            }
+            try {
+              final parsed = _decodeOutsideEventSourcesImport(raw);
+              setDialogState(() {
+                errorText = null;
+                preview = parsed;
+              });
+            } catch (e) {
+              setDialogState(() {
+                errorText = e is FormatException
+                    ? e.message
+                    : 'Could not parse that as an exported source list.';
+                preview = null;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Import sources'),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Paste a source list exported from Life Shuffle. '
+                      'Imported sources are added to this calendar and '
+                      'sync like any other source.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: controller,
+                      maxLines: 6,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                      decoration: InputDecoration(
+                        hintText:
+                            '{"type": "$_outsideEventSourceExportType", ...}',
+                        errorText: errorText,
+                      ),
+                      onChanged: (_) {
+                        if (preview != null || errorText != null) {
+                          setDialogState(() {
+                            preview = null;
+                            errorText = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    if (preview != null)
+                      Text(
+                        'Found ${preview!.length} source'
+                        '${preview!.length == 1 ? '' : 's'} to check for '
+                        'import.',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: runPreview,
+                        child: const Text('Preview'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: preview == null
+                    ? null
+                    : () {
+                        final added = state.importOutsideEventSources(preview!);
+                        Navigator.of(dialogContext).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              added == 0
+                                  ? 'No new sources - all already in this '
+                                      'calendar.'
+                                  : '$added source${added == 1 ? '' : 's'} '
+                                      'imported.',
+                            ),
+                          ),
+                        );
+                      },
+                child: const Text('Import'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  controller.dispose();
 }
 
 class _RenameCalendarDialog extends StatefulWidget {
@@ -1684,12 +1918,40 @@ class _OutsideEventSourcesCard extends StatelessWidget {
                     ? null
                     : () => unawaited(_refreshOutsideSources(context, state)),
               ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-export-outside-event-sources'),
+                icon: Icons.ios_share_rounded,
+                label: 'Export sources',
+                quiet: true,
+                onTap: sources.isEmpty
+                    ? null
+                    : () => _showExportOutsideSourcesDialog(context, sources),
+              ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-import-outside-event-sources'),
+                icon: Icons.file_download_outlined,
+                label: 'Import sources',
+                quiet: true,
+                onTap: () => _showImportOutsideSourcesDialog(context, state),
+              ),
             ],
           ),
           if (state.cachedOutsideEventsFetchedAtMillis != null) ...[
             const SizedBox(height: 10),
             Text(
               'Last fetched: ${_formatLocalTimestamp(state.cachedOutsideEventsFetchedAtMillis!)}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (isRefreshing) ...[
+            const SizedBox(height: 6),
+            Text(
+              key: const ValueKey('settings-outside-event-refresh-progress'),
+              state.refreshProgressLabel,
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1738,6 +2000,7 @@ class _OutsideEventSourcesCard extends StatelessWidget {
               return _OutsideEventSourceRow(
                 source: source,
                 isFetching: fetchingSourceId == source.id,
+                fetchDisabled: isRefreshing && fetchingSourceId != source.id,
                 webpageAiConfigured: state.lastWebpageAiConfigured,
                 onToggle: (enabled) =>
                     state.setOutsideEventSourceEnabled(source.id, enabled),
@@ -1751,6 +2014,9 @@ class _OutsideEventSourcesCard extends StatelessWidget {
                   state,
                   source,
                 ),
+                onFetch: () => unawaited(state.refreshOutsideEventSource(
+                  source.id,
+                )),
               );
             }),
           ],
@@ -1787,7 +2053,9 @@ class _OutsideEventSourceRow extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
+    required this.onFetch,
     this.isFetching = false,
+    this.fetchDisabled = false,
     this.webpageAiConfigured,
   });
 
@@ -1796,10 +2064,20 @@ class _OutsideEventSourceRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  /// Fetches only this source - see [AppState.refreshOutsideEventSource].
+  /// Useful for retrying a single failing source without re-spending
+  /// AI/API credits on every other source.
+  final VoidCallback onFetch;
+
   /// True while this source is the one currently being fetched during a
   /// refresh (sources run sequentially); shows a "Fetching..." pill in
   /// place of the health pill.
   final bool isFetching;
+
+  /// True while a different fetch (full refresh or another source) is in
+  /// flight, so this row's fetch button can't start a second, overlapping
+  /// fetch.
+  final bool fetchDisabled;
 
   /// Whether the server-side AI organizer was configured, from the most
   /// recent webpage fetch. Only relevant for [UserEventSourceKind.webPage]
@@ -1899,6 +2177,18 @@ class _OutsideEventSourceRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          IconButton(
+            key: ValueKey('outside-event-source-fetch-${source.id}'),
+            tooltip: 'Fetch this source only',
+            onPressed: (fetchDisabled || isFetching) ? null : onFetch,
+            icon: isFetching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_rounded, color: textMuted),
+          ),
           Switch.adaptive(
             value: source.enabled,
             activeThumbColor: primaryTerracotta,

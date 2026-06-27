@@ -13,6 +13,7 @@ import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../models/user_event_source.dart';
+import '../services/event_dedupe_service.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
 import '../services/outside_event_adapters.dart';
@@ -133,6 +134,9 @@ class AppState extends ChangeNotifier {
   int? _cachedOutsideEventsFetchedAtMillis;
   bool _isRefreshingOutsideEvents = false;
   String? _refreshingOutsideEventSourceId;
+  String? _refreshingOutsideEventSourceName;
+  int? _refreshSourceIndex;
+  int? _refreshSourceTotal;
   OutsideEventRefreshSummary? _lastOutsideEventRefreshSummary;
   bool? _lastWebpageAiConfigured;
   SavedState? _lastRegenerationSnapshot;
@@ -409,6 +413,37 @@ class AppState extends ChangeNotifier {
   /// between sources (or when not refreshing). Sources run sequentially, so
   /// at most one id is ever "fetching" at a time.
   String? get refreshingOutsideEventSourceId => _refreshingOutsideEventSourceId;
+
+  /// Display name of the source currently being fetched, for progress text
+  /// like "Fetching 3 of 10: HalifaxEvents.ca". Null whenever
+  /// [refreshingOutsideEventSourceId] is null.
+  String? get refreshingOutsideEventSourceName =>
+      _refreshingOutsideEventSourceName;
+
+  /// 1-based position of the source currently being fetched among
+  /// [refreshSourceTotal] sources this refresh will check, advancing even
+  /// for disabled sources that are skipped rather than fetched. Null when
+  /// not refreshing.
+  int? get refreshSourceIndex => _refreshSourceIndex;
+
+  /// Total number of sources this refresh will check (fetched or skipped).
+  /// Null when not refreshing.
+  int? get refreshSourceTotal => _refreshSourceTotal;
+
+  /// Human-readable progress for the in-flight refresh, e.g. "Fetching 3 of
+  /// 10: HalifaxEvents.ca", shared by Settings and the Outside events
+  /// screen so both show identical wording next to their spinners.
+  /// Meaningless (but harmless) when [isRefreshingOutsideEvents] is false.
+  String get refreshProgressLabel {
+    final total = _refreshSourceTotal;
+    final index = _refreshSourceIndex;
+    if (total == null || index == null) return 'Fetching outside events...';
+    final name = _refreshingOutsideEventSourceName;
+    if (name == null || name.trim().isEmpty) {
+      return 'Checking source $index of $total...';
+    }
+    return 'Fetching $index of $total: $name';
+  }
 
   /// Tally from the most recently completed refresh, or null before the
   /// first manual refresh this session.
@@ -1318,6 +1353,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Merges [drafts] (parsed from an exported source-list JSON paste - see
+  /// `UserEventSource.fromExportMap`) into this calendar's outside event
+  /// sources, matching by normalized URL so re-importing the same list, or
+  /// one that overlaps with existing sources, never creates duplicates.
+  /// Each [drafts] entry's own `id` is ignored; a fresh one is generated
+  /// here. Returns how many sources were actually added.
+  int importOutsideEventSources(List<UserEventSource> drafts) {
+    final seenUrls = _outsideEventSources
+        .map((source) => _normalizedSourceUrl(source.url))
+        .toSet();
+    final next = [..._outsideEventSources];
+    var added = 0;
+    for (final draft in drafts) {
+      final normalized = _normalizedSourceUrl(draft.url);
+      if (normalized.isEmpty || seenUrls.contains(normalized)) continue;
+      seenUrls.add(normalized);
+      next.add(UserEventSource(
+        id: 'user_src_${DateTime.now().microsecondsSinceEpoch}_$added',
+        displayName: draft.displayName,
+        url: draft.url,
+        kind: draft.kind,
+        enabled: draft.enabled,
+      ));
+      added += 1;
+    }
+    if (added == 0) return 0;
+    _outsideEventSources = next;
+    _persist();
+    notifyListeners();
+    return added;
+  }
+
+  static String _normalizedSourceUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.toLowerCase().replaceAll(RegExp(r'/+$'), '');
+  }
+
   void updateOutsideEventSource(UserEventSource source) {
     var changed = false;
     _outsideEventSources = _outsideEventSources.map((existing) {
@@ -1344,7 +1417,7 @@ class AppState extends ChangeNotifier {
     if (filtered.length == _outsideEventSources.length) return;
     _outsideEventSources = filtered;
     _cachedOutsideEvents = _cachedOutsideEvents
-        .where((event) => event.raw['userSourceId'] != id)
+        .where((event) => !event.contributingSourceIds.contains(id))
         .toList();
     _persist();
     _persistCachedOutsideEvents();
@@ -1363,6 +1436,9 @@ class AppState extends ChangeNotifier {
     if (_isRefreshingOutsideEvents) return cachedOutsideEventDiscoveryResult();
     _isRefreshingOutsideEvents = true;
     _refreshingOutsideEventSourceId = null;
+    _refreshingOutsideEventSourceName = null;
+    _refreshSourceIndex = null;
+    _refreshSourceTotal = null;
     notifyListeners();
 
     try {
@@ -1388,12 +1464,19 @@ class AppState extends ChangeNotifier {
           end: DateTime(end.year, end.month, end.day, 23, 59),
           city: 'Halifax',
         ),
+        onProgress: (index, total) {
+          _refreshSourceIndex = index;
+          _refreshSourceTotal = total;
+          notifyListeners();
+        },
         onSourceStart: (config) {
           _refreshingOutsideEventSourceId = config.id;
+          _refreshingOutsideEventSourceName = config.displayName;
           notifyListeners();
         },
         onSourceResult: (_) {
           _refreshingOutsideEventSourceId = null;
+          _refreshingOutsideEventSourceName = null;
           notifyListeners();
         },
       );
@@ -1440,6 +1523,97 @@ class AppState extends ChangeNotifier {
     } finally {
       _isRefreshingOutsideEvents = false;
       _refreshingOutsideEventSourceId = null;
+      _refreshingOutsideEventSourceName = null;
+      _refreshSourceIndex = null;
+      _refreshSourceTotal = null;
+      notifyListeners();
+    }
+  }
+
+  /// Refetches exactly one user-managed outside-event source (Settings'
+  /// per-source "Fetch" action), leaving every other source's cached events
+  /// and health untouched. Useful for retrying a single failing source -
+  /// e.g. after fixing its URL - without re-spending AI/API credits on every
+  /// other source. No-op if a refresh (full or single-source) is already
+  /// running, or if [sourceId] isn't a known user-managed source.
+  Future<void> refreshOutsideEventSource(String sourceId) async {
+    if (_isRefreshingOutsideEvents) return;
+    UserEventSource? source;
+    for (final candidate in _outsideEventSources) {
+      if (candidate.id == sourceId) {
+        source = candidate;
+        break;
+      }
+    }
+    if (source == null) return;
+
+    _isRefreshingOutsideEvents = true;
+    _refreshingOutsideEventSourceId = sourceId;
+    _refreshingOutsideEventSourceName = source.displayName;
+    _refreshSourceIndex = 1;
+    _refreshSourceTotal = 1;
+    notifyListeners();
+
+    try {
+      final days = generatedRange.days;
+      final start = days.isNotEmpty ? days.first.date : DateTime.now();
+      final end = days.isNotEmpty
+          ? days.last.date
+          : DateTime.now().add(const Duration(days: 6));
+      final service = OutsideEventDiscoveryService(
+        adapters: [_adapterForSource(source)],
+        organizer: const OutsideEventOrganizerService(),
+      );
+      final result = await service.discover(
+        OutsideEventQuery(
+          start: DateTime(start.year, start.month, start.day),
+          end: DateTime(end.year, end.month, end.day, 23, 59),
+          city: 'Halifax',
+        ),
+      );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (result.webpageAiConfigured != null) {
+        _lastWebpageAiConfigured = result.webpageAiConfigured;
+      }
+      final warning = _firstSourceWarningFor(result.warnings, sourceId);
+      final eventCount = result.sourceEventCounts[sourceId] ?? 0;
+      _outsideEventSources = _outsideEventSources.map((existing) {
+        if (existing.id != sourceId) return existing;
+        return existing.copyWith(
+          lastFetchedAtMillis: now,
+          lastError: warning?.message,
+          clearLastError: warning == null,
+          lastEventCount: eventCount,
+          lastSuccessAtMillis:
+              warning == null ? now : existing.lastSuccessAtMillis,
+          lastErrorCategory: warning?.category.name,
+          clearLastErrorCategory: warning == null,
+          lastErrorHttpStatusCode: warning?.httpStatusCode,
+          clearLastErrorHttpStatusCode: warning == null,
+        );
+      }).toList();
+      final otherEvents = _cachedOutsideEvents
+          .where((event) => !event.contributingSourceIds.contains(sourceId))
+          .toList();
+      final merged = EventDedupeService.mergeSimilar([
+        ...otherEvents,
+        ...result.events,
+      ])
+        ..sort((a, b) {
+          final byDate = a.startDateTime.compareTo(b.startDateTime);
+          if (byDate != 0) return byDate;
+          return a.displayTitle.compareTo(b.displayTitle);
+        });
+      _cachedOutsideEvents = merged;
+      _cachedOutsideEventsFetchedAtMillis = now;
+      _persist();
+      _persistCachedOutsideEvents();
+    } finally {
+      _isRefreshingOutsideEvents = false;
+      _refreshingOutsideEventSourceId = null;
+      _refreshingOutsideEventSourceName = null;
+      _refreshSourceIndex = null;
+      _refreshSourceTotal = null;
       notifyListeners();
     }
   }

@@ -248,6 +248,48 @@ function findSourceResolver(url) {
   return SOURCE_RESOLVERS.find((resolver) => resolver.matches(url)) || null;
 }
 
+// ---- Known listing-only sources -------------------------------------------
+//
+// Some event-listing pages only show a title and link per event - the date
+// lives on each event's own detail page (e.g. community.thecoast.ca's event
+// search: confirmed via curl that the listing HTML has no per-event date
+// anywhere, but every detail page carries a full schema.org Event JSON-LD
+// with startDate/endDate). Extracting these for real needs a second-level
+// crawl (listing page -> each event's own detail page), which is a bigger
+// feature with its own timeout/cost budget and isn't built yet. Detecting
+// the pattern up front gives a specific, actionable diagnostic instead of a
+// generic "no events found", and skips a wasted AI/deterministic extraction
+// call on a page we already know has no dates to find.
+const LISTING_ONLY_NO_DATE_SOURCES = [
+  {
+    id: 'thecoast-community-events',
+    matches(url) {
+      return /community\.thecoast\.ca\/.+\/EventSearch/i.test(url);
+    },
+    // Matches the listing's repeated event-card markup, purely to confirm
+    // (and count, for the diagnostic message) that events really are
+    // visible on the listing - not used for date extraction.
+    eventCardPattern: /fdn-event-search-text-block/gi,
+    explanation:
+      "each event's own detail page has the date - the listing itself " +
+      'never shows it. Life Shuffle does not crawl into individual event ' +
+      "detail pages yet, so this source can't extract dates from the " +
+      'listing alone.',
+  },
+];
+
+function findListingOnlyNoDateSource(url) {
+  return (
+    LISTING_ONLY_NO_DATE_SOURCES.find((source) => source.matches(url)) || null
+  );
+}
+
+function countMatches(text, pattern) {
+  if (!text || !pattern) return 0;
+  const matches = text.match(pattern);
+  return matches ? matches.length : 0;
+}
+
 function cleanHtml(rawHtml) {
   return rawHtml
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -1119,6 +1161,10 @@ async function handler(event, context) {
     });
 
     const text = html ? cleanHtml(html) : jsonText || '';
+    const listingOnlySource =
+      structuredEvents.length === 0
+        ? findListingOnlyNoDateSource(parsedUrl.href)
+        : null;
     const extraction =
       structuredEvents.length > 0
         ? {
@@ -1126,17 +1172,29 @@ async function handler(event, context) {
             warnings: [],
             aiConfigured: Boolean(env.OPENAI_API_KEY || env.GEMINI_API_KEY),
           }
-        : await extractEventsWithAiOrFallback({
-            text,
-            sourceId,
-            sourceName,
-            sourceUrl: parsedUrl.href,
-            city,
-            rangeStart,
-            rangeEnd,
-            fetchImpl,
-            env,
-          });
+        : listingOnlySource
+          ? {
+              events: [],
+              warnings: [
+                `Listing page loaded (${pagesFetched} page` +
+                  `${pagesFetched === 1 ? '' : 's'}, ` +
+                  `${countMatches(html, listingOnlySource.eventCardPattern)} ` +
+                  'event card(s) visible), but no dated events were found ' +
+                  `on the listing - ${listingOnlySource.explanation}`,
+              ],
+              aiConfigured: null,
+            }
+          : await extractEventsWithAiOrFallback({
+              text,
+              sourceId,
+              sourceName,
+              sourceUrl: parsedUrl.href,
+              city,
+              rangeStart,
+              rangeEnd,
+              fetchImpl,
+              env,
+            });
     return jsonResponse(200, {
       sourceId,
       sourceName,
@@ -1167,6 +1225,8 @@ module.exports = {
   parseDateTime,
   findSourceResolver,
   sourceResolvers: SOURCE_RESOLVERS,
+  findListingOnlyNoDateSource,
+  listingOnlyNoDateSources: LISTING_ONLY_NO_DATE_SOURCES,
   extractJsonLdEvents,
   extractEventLikeJsonBlobs,
   extractStructuredEvents,

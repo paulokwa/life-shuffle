@@ -541,6 +541,58 @@ test('handler falls back to existing AI/deterministic extraction when no resolve
   assert.equal(payload.events[0].raw.extractionMode, 'deterministic-webpage-fallback');
 });
 
+// ---- Known listing-only sources --------------------------------------------
+
+test('findListingOnlyNoDateSource detects The Coast event search URLs and ignores others', () => {
+  const source = webpage.findListingOnlyNoDateSource(
+    'https://community.thecoast.ca/halifax/EventSearch?narrowByDate=2026-06-26-to-2027-01-01&sortType=date&v=g',
+  );
+  assert.ok(source);
+  assert.equal(source.id, 'thecoast-community-events');
+
+  assert.equal(
+    webpage.findListingOnlyNoDateSource('https://example.com/events'),
+    null,
+  );
+});
+
+test('handler returns a specific diagnostic for The Coast listing pages instead of a generic "no events" warning', async () => {
+  const listingHtml =
+    '<html><body>' +
+    '<div class="fdn-event-search-text-block"><a href="/halifax/girls-day-out/Event?oid=1">Girls Day Out</a></div>' +
+    '<div class="fdn-event-search-text-block"><a href="/halifax/market/Event?oid=2">Market Day</a></div>' +
+    '</body></html>';
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: 'https://community.thecoast.ca/halifax/EventSearch?narrowByDate=2026-06-26-to-2027-01-01&sortType=date&v=g',
+        start: '2026-07-01T00:00:00',
+        end: '2026-07-07T23:59:00',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => listingHtml,
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 0);
+  assert.equal(payload.warnings.length, 1);
+  assert.match(payload.warnings[0], /2 event card\(s\) visible/);
+  assert.match(payload.warnings[0], /no dated events were found on the listing/);
+  assert.match(payload.warnings[0], /detail page has the date/);
+});
+
 // ---- Same-domain pagination ------------------------------------------------
 
 test('findNextPageUrl follows a same-origin ?page=N+1 link', () => {
