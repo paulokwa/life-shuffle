@@ -34,7 +34,28 @@
       "Bash(git ls-files *)",
       "Bash(flutter build *)",
       "Bash(git rev-parse *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(curl -s -A \"LifeShuffleOutsideEvents/1.0\" \"https://community.thecoast.ca/halifax/EventSearch?narrowByDate=2026-06-26-to-2027-01-01&sortType=date&v=g\" -o /tmp/thecoast.html -w \"%{http_code}\\\\n\" --max-time 20)",
+      "Read(//tmp/**)",
+      "Bash(grep -n -i 'fdn-event-search-text-block\\\\|fdn-event-search-date\\\\|fdn-date\\\\|date-display\\\\|class=\"[^\"]*date' /tmp/thecoast.html | head -60)",
+      "Bash(sed -n '1744,1840p' /tmp/thecoast.html)",
+      "Bash(sed -n '1836,1950p' /tmp/thecoast.html)",
+      "Bash(grep -n -i 'datetime\\\\|data-date\\\\|dtstart\\\\|fdn-event-date\\\\|event-date\\\\|\"date\"\\\\|Sat\\\\.\\\\|Sun\\\\.\\\\|narrowByDate' /tmp/thecoast.html | head -40)",
+      "Bash(sed -n '2400,2445p' /tmp/thecoast.html)",
+      "Bash(grep -n 'fdn-teaser-subheadline' /tmp/thecoast.html)",
+      "Bash(sed -n '4550,4615p' /tmp/thecoast.html)",
+      "Bash(sed -n '1700,1745p' /tmp/thecoast.html)",
+      "Bash(awk 'NR==1744,NR==1834' /tmp/thecoast.html | grep -n '<li\\\\|</li>')",
+      "Bash(sed -n '2380,2480p' /tmp/thecoast.html)",
+      "Bash(grep -n -A2 'fdn-event-teaser-price' /tmp/thecoast.html | head -60)",
+      "Bash(grep -n -B8 'Continues through' /tmp/thecoast.html | head -60)",
+      "Bash(node -e ' *)",
+      "Bash(cp /tmp/thecoast.html \"C:/Users/mwake/AppData/Local/Temp/claude/c--Coding-LifeShuffle-life-shuffle/f5f700d0-b581-4532-b1d3-3f8fca3bad7e/scratchpad/thecoast.html\" && ls -la \"C:/Users/mwake/AppData/Local/Temp/claude/c--Coding-LifeShuffle-life-shuffle/f5f700d0-b581-4532-b1d3-3f8fca3bad7e/scratchpad/\")",
+      "Bash(node -e \"require\\('./netlify/functions/outside-events-webpage.js'\\); console.log\\('module loads OK'\\)\")",
+      "Bash(node --test \"netlify/tests/outside-events-webpage.test.js\")"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

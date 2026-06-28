@@ -313,50 +313,18 @@ function findSourceResolver(url) {
   return SOURCE_RESOLVERS.find((resolver) => resolver.matches(url)) || null;
 }
 
-// ---- Known listing-only sources -------------------------------------------
-//
-// Some event-listing pages only show a title and link per event - the date
-// lives on each event's own detail page (e.g. community.thecoast.ca's event
-// search: confirmed via curl that the listing HTML has no per-event date
-// anywhere, but every detail page carries a full schema.org Event JSON-LD
-// with startDate/endDate). Extracting these for real needs a second-level
-// crawl (listing page -> each event's own detail page), which is a bigger
-// feature with its own timeout/cost budget and isn't built yet. Detecting
-// the pattern up front gives a specific, actionable diagnostic instead of a
-// generic "no events found", and skips a wasted AI/deterministic extraction
-// call on a page we already know has no dates to find.
-const LISTING_ONLY_NO_DATE_SOURCES = [
-  {
-    id: 'thecoast-community-events',
-    matches(url) {
-      return /community\.thecoast\.ca\/.+\/EventSearch/i.test(url);
-    },
-    // Matches the listing's repeated event-card markup, purely to confirm
-    // (and count, for the diagnostic message) that events really are
-    // visible on the listing - not used for date extraction.
-    eventCardPattern: /fdn-event-search-text-block/gi,
-    explanation:
-      "each event's own detail page has the date - the listing itself " +
-      'never shows it. Life Shuffle does not crawl into individual event ' +
-      "detail pages yet, so this source can't extract dates from the " +
-      'listing alone.',
-  },
-];
-
-function findListingOnlyNoDateSource(url) {
-  return (
-    LISTING_ONLY_NO_DATE_SOURCES.find((source) => source.matches(url)) || null
-  );
-}
-
-function countMatches(text, pattern) {
-  if (!text || !pattern) return 0;
-  const matches = text.match(pattern);
-  return matches ? matches.length : 0;
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
 }
 
 function cleanHtml(rawHtml) {
-  return rawHtml
+  const stripped = rawHtml
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
@@ -368,13 +336,8 @@ function cleanHtml(rawHtml) {
     .replace(/<form[\s\S]*?<\/form>/gi, ' ')
     .replace(/<\/(p|div|li|article|section|h[1-6]|tr)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
+    .replace(/<[^>]+>/g, ' ');
+  return decodeHtmlEntities(stripped)
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s+/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -465,6 +428,164 @@ function titleFromSnippet(snippet) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 90) || 'Possible event';
+}
+
+// ---- Foundation CMS listing-card extraction -------------------------------
+//
+// Some event-listing pages (e.g. community.thecoast.ca's event search, built
+// on the "Foundation" CMS) only show a title and link per event card, with
+// the date living on each event's own detail page. But confirmed via curl
+// that most cards on that same listing *do* carry a dedicated date line
+// (`fdn-teaser-subheadline`, e.g. "Sat., June 27, 6-9:30 p.m.") right on the
+// card - only a minority (ongoing promos, vague multi-week festivals,
+// bare weekly-recurring blurbs with no concrete next date like "Thursdays,
+// 8 p.m.") omit it and would genuinely need a second-level crawl into their
+// detail page, which isn't built. So: parse the date when the card has one,
+// and skip (with a warning, not silently) the cards that don't.
+const FOUNDATION_LISTING_SOURCES = [
+  {
+    id: 'thecoast-community-events',
+    matches(url) {
+      return /community\.thecoast\.ca\/.+\/EventSearch/i.test(url);
+    },
+  },
+];
+
+function findFoundationListingSource(url) {
+  return FOUNDATION_LISTING_SOURCES.find((source) => source.matches(url)) || null;
+}
+
+const FOUNDATION_CARD_MARKER_PATTERN = /fdn-event-search-text-block/gi;
+
+// Cards aren't individually delimited by a unique wrapper tag, only by this
+// repeated class name, so slice the page into one chunk per marker rather
+// than trying to balance nested <div>s. Each slice runs past the end of its
+// own card into the next card's leading image markup, but that trailing
+// markup never contains the headline/subheadline/location classes below, so
+// it can't bleed a wrong value into the current card.
+function splitFoundationCards(html) {
+  const pattern = new RegExp(FOUNDATION_CARD_MARKER_PATTERN.source, 'gi');
+  const starts = [];
+  let match;
+  while ((match = pattern.exec(html))) starts.push(match.index);
+  return starts.map((start, i) =>
+    html.slice(start, i + 1 < starts.length ? starts[i + 1] : html.length),
+  );
+}
+
+function parseFoundationCard(cardHtml) {
+  const titleMatch = /<p class="fdn-teaser-headline[^>]*>\s*<a href="([^"]+)">([^<]+)<\/a>/i.exec(
+    cardHtml,
+  );
+  if (!titleMatch) return null;
+  const title = decodeHtmlEntities(titleMatch[2]).trim();
+  if (!title) return null;
+
+  const subheadlineMatch = /<p class="fdn-teaser-subheadline">([\s\S]*?)<\/p>/i.exec(cardHtml);
+  const dateText = subheadlineMatch
+    ? decodeHtmlEntities(subheadlineMatch[1]).replace(/\s+/g, ' ').trim()
+    : null;
+
+  const venueMatch = /<a class="fdn-event-teaser-location-link"[^>]*>([^<]+)<\/a>/i.exec(cardHtml);
+  const venue = venueMatch ? decodeHtmlEntities(venueMatch[1]).trim() : undefined;
+
+  const addressMatch = /fdn-inline-split-list[^>]*>\s*<span>\s*([^<]+?)\s*<\/span>/i.exec(cardHtml);
+  const address = addressMatch
+    ? decodeHtmlEntities(addressMatch[1]).replace(/\s+/g, ' ').trim()
+    : undefined;
+
+  const priceMatch = /<span class="fdn-event-teaser-price[^"]*">([^<]*)<\/span>/i.exec(cardHtml);
+  const price = priceMatch ? decodeHtmlEntities(priceMatch[1]).replace(/\s+/g, ' ').trim() : undefined;
+
+  const descriptionMatch = /<div class="fdn-teaser-description[^"]*">([\s\S]*?)<\/div>/i.exec(
+    cardHtml,
+  );
+  const description = descriptionMatch
+    ? decodeHtmlEntities(descriptionMatch[1].replace(/<[^>]+>/g, ' '))
+        .replace(/\s+/g, ' ')
+        .trim()
+    : undefined;
+
+  return { link: titleMatch[1], title, dateText, venue, address, price, description };
+}
+
+// The listing's date text never includes a year and uses "a.m./p.m." (with
+// periods), which the generic parseDateTime() time-of-day group doesn't
+// match - so only the date itself is trustworthy here, not the time. Resolve
+// the year against the requested range rather than always defaulting to its
+// start year, so events in, say, a January slice of a range that starts in
+// December still land in the right year.
+function resolveFoundationCardDate(dateText, rangeStart, rangeEnd) {
+  if (!dateText) return null;
+  const start = parseDateTime(dateText, rangeStart.getFullYear());
+  if (!start) return null;
+  if (start >= rangeStart && start <= rangeEnd) return start;
+  const bumped = parseDateTime(dateText, rangeStart.getFullYear() + 1);
+  if (bumped && bumped >= rangeStart && bumped <= rangeEnd) return bumped;
+  return start;
+}
+
+function extractFoundationListingEvents({
+  html,
+  sourceId,
+  sourceName,
+  sourceUrl,
+  city,
+  rangeStart,
+  rangeEnd,
+}) {
+  const cards = splitFoundationCards(html);
+  const events = [];
+  const seen = new Set();
+  let skippedNoDate = 0;
+
+  for (const cardHtml of cards) {
+    const parsed = parseFoundationCard(cardHtml);
+    if (!parsed) continue;
+    const start = resolveFoundationCardDate(parsed.dateText, rangeStart, rangeEnd);
+    if (!start) {
+      skippedNoDate += 1;
+      continue;
+    }
+    if (start < rangeStart || start > rangeEnd) continue;
+
+    let detailUrl;
+    try {
+      detailUrl = new URL(parsed.link, sourceUrl).href;
+    } catch (_) {
+      detailUrl = sourceUrl;
+    }
+    const missingFields = ['time'];
+    if (!parsed.venue) missingFields.push('venue');
+    if (!parsed.address) missingFields.push('address');
+    if (!parsed.price) missingFields.push('price');
+
+    const dedupeKey = eventDedupeKey(parsed.title, start, parsed.venue);
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    events.push({
+      id: `${sourceId}-${stableId(`${parsed.title}|${start.toISOString()}|${detailUrl}`)}`,
+      title: parsed.title,
+      cleanedTitle: parsed.title,
+      summary: parsed.description ? parsed.description.slice(0, 280) : undefined,
+      startDateTimeMillis: start.getTime(),
+      venueName: parsed.venue,
+      address: parsed.address,
+      city: city || undefined,
+      sourceName,
+      sourceType: 'webPage',
+      sourceUrl: detailUrl,
+      priceLabel: parsed.price,
+      isFree: parsed.price ? /free/i.test(parsed.price) : undefined,
+      tags: inferTags(`${parsed.title} ${parsed.description || ''}`),
+      confidence: 0.75,
+      missingFields,
+      raw: { userSourceId: sourceId, extractionMode: 'deterministic-fdn-listing' },
+      dedupeKey,
+    });
+  }
+
+  return { events: events.slice(0, 60), totalCards: cards.length, skippedNoDate };
 }
 
 // ---- Structured data extraction ------------------------------------------
@@ -1226,40 +1347,66 @@ async function handler(event, context) {
     });
 
     const text = html ? cleanHtml(html) : jsonText || '';
-    const listingOnlySource =
-      structuredEvents.length === 0
-        ? findListingOnlyNoDateSource(parsedUrl.href)
-        : null;
-    const extraction =
-      structuredEvents.length > 0
-        ? {
-            events: structuredEvents,
-            warnings: [],
-            aiConfigured: Boolean(env.OPENAI_API_KEY || env.GEMINI_API_KEY),
-          }
-        : listingOnlySource
-          ? {
-              events: [],
-              warnings: [
-                `Listing page loaded (${pagesFetched} page` +
-                  `${pagesFetched === 1 ? '' : 's'}, ` +
-                  `${countMatches(html, listingOnlySource.eventCardPattern)} ` +
-                  'event card(s) visible), but no dated events were found ' +
-                  `on the listing - ${listingOnlySource.explanation}`,
-              ],
-              aiConfigured: null,
-            }
-          : await extractEventsWithAiOrFallback({
-              text,
-              sourceId,
-              sourceName,
-              sourceUrl: parsedUrl.href,
-              city,
-              rangeStart,
-              rangeEnd,
-              fetchImpl,
-              env,
-            });
+    const foundationSource =
+      structuredEvents.length === 0 && html ? findFoundationListingSource(parsedUrl.href) : null;
+    const foundationResult = foundationSource
+      ? extractFoundationListingEvents({
+          html,
+          sourceId,
+          sourceName,
+          sourceUrl: parsedUrl.href,
+          city,
+          rangeStart,
+          rangeEnd,
+        })
+      : null;
+
+    let extraction;
+    if (structuredEvents.length > 0) {
+      extraction = {
+        events: structuredEvents,
+        warnings: [],
+        aiConfigured: Boolean(env.OPENAI_API_KEY || env.GEMINI_API_KEY),
+      };
+    } else if (foundationResult && foundationResult.events.length > 0) {
+      const warnings = [];
+      if (foundationResult.skippedNoDate > 0) {
+        warnings.push(
+          `${foundationResult.skippedNoDate} event(s) on this listing have no date shown ` +
+            "on the card itself (only on their own detail page, which Life Shuffle doesn't " +
+            'crawl into yet) and were skipped.',
+        );
+      }
+      extraction = {
+        events: foundationResult.events,
+        warnings,
+        aiConfigured: Boolean(env.OPENAI_API_KEY || env.GEMINI_API_KEY),
+      };
+    } else if (foundationResult && foundationResult.totalCards > 0) {
+      extraction = {
+        events: [],
+        warnings: [
+          `Listing page loaded (${pagesFetched} page${pagesFetched === 1 ? '' : 's'}, ` +
+            `${foundationResult.totalCards} event card(s) visible), but none of them had a ` +
+            "date shown on the card itself - each event's own detail page has the date, and " +
+            "Life Shuffle does not crawl into individual event detail pages yet, so this " +
+            "source can't extract dates from the listing alone.",
+        ],
+        aiConfigured: null,
+      };
+    } else {
+      extraction = await extractEventsWithAiOrFallback({
+        text,
+        sourceId,
+        sourceName,
+        sourceUrl: parsedUrl.href,
+        city,
+        rangeStart,
+        rangeEnd,
+        fetchImpl,
+        env,
+      });
+    }
     return jsonResponse(200, {
       sourceId,
       sourceName,
@@ -1290,8 +1437,11 @@ module.exports = {
   parseDateTime,
   findSourceResolver,
   sourceResolvers: SOURCE_RESOLVERS,
-  findListingOnlyNoDateSource,
-  listingOnlyNoDateSources: LISTING_ONLY_NO_DATE_SOURCES,
+  findFoundationListingSource,
+  foundationListingSources: FOUNDATION_LISTING_SOURCES,
+  splitFoundationCards,
+  parseFoundationCard,
+  extractFoundationListingEvents,
   extractJsonLdEvents,
   extractEventLikeJsonBlobs,
   extractStructuredEvents,

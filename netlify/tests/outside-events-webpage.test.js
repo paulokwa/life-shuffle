@@ -611,22 +611,130 @@ test('handler falls back to existing AI/deterministic extraction when no resolve
   assert.equal(payload.events[0].raw.extractionMode, 'deterministic-webpage-fallback');
 });
 
-// ---- Known listing-only sources --------------------------------------------
+// ---- Foundation CMS listing-card extraction --------------------------------
 
-test('findListingOnlyNoDateSource detects The Coast event search URLs and ignores others', () => {
-  const source = webpage.findListingOnlyNoDateSource(
+function foundationCard({ title, link, dateText, venue, address, price }) {
+  return (
+    '<li class="fdn-pres-item"><div class="fdn-pres-item-content">' +
+    '<div class="fdn-event-search-image-block"></div>' +
+    '<div class="fdn-pres-content fdn-event-search-text-block">' +
+    `<p class="fdn-teaser-headline"><a href="${link}">${title}</a></p>` +
+    (dateText ? `<p class="fdn-teaser-subheadline">${dateText}</p>` : '') +
+    (venue
+      ? '<div class="fdn-event-teaser-location-block">' +
+        `<p class="fdn-event-teaser-location"><a class="fdn-event-teaser-location-link" href="https://community.thecoast.ca/halifax/venue/Location?oid=1">${venue}</a></p>` +
+        `<p class="fdn-inline-split-list fdn-teaser-infoline"><span>${address || ''}</span></p>` +
+        '</div>'
+      : '') +
+    (price ? `<span class="fdn-event-teaser-price">${price}</span>` : '') +
+    '</div></div></li>'
+  );
+}
+
+test('findFoundationListingSource detects The Coast event search URLs and ignores others', () => {
+  const source = webpage.findFoundationListingSource(
     'https://community.thecoast.ca/halifax/EventSearch?narrowByDate=2026-06-26-to-2027-01-01&sortType=date&v=g',
   );
   assert.ok(source);
   assert.equal(source.id, 'thecoast-community-events');
 
   assert.equal(
-    webpage.findListingOnlyNoDateSource('https://example.com/events'),
+    webpage.findFoundationListingSource('https://example.com/events'),
     null,
   );
 });
 
-test('handler returns a specific diagnostic for The Coast listing pages instead of a generic "no events" warning', async () => {
+test('extractFoundationListingEvents extracts cards with a date and skips cards without one', () => {
+  const html =
+    foundationCard({
+      title: 'Art Talks: Bags & Stories',
+      link: 'https://community.thecoast.ca/halifax/art-talks/Event?oid=1',
+      dateText: 'Sat., July 4, 6-9:30 p.m.',
+      venue: 'Agricola Street Brasserie',
+      address: '2540 Agricola Street, Halifax',
+      price: '15',
+    }) +
+    foundationCard({
+      title: 'Goodwill Trivia Mondays',
+      link: 'https://community.thecoast.ca/halifax/trivia/Event?oid=2',
+      dateText: 'Mondays, 7-9:30 p.m.',
+      venue: 'Good Robot Brewing Company',
+    }) +
+    foundationCard({
+      title: 'Girls Day Out',
+      link: 'https://community.thecoast.ca/halifax/girls-day-out/Event?oid=3',
+    });
+
+  const result = webpage.extractFoundationListingEvents({
+    html,
+    sourceId: 'thecoast',
+    sourceName: 'The Coast',
+    sourceUrl: 'https://community.thecoast.ca/halifax/EventSearch',
+    city: 'Halifax',
+    rangeStart: new Date('2026-07-01T00:00:00'),
+    rangeEnd: new Date('2026-07-31T23:59:00'),
+  });
+
+  assert.equal(result.totalCards, 3);
+  assert.equal(result.skippedNoDate, 2);
+  assert.equal(result.events.length, 1);
+  const [event] = result.events;
+  assert.equal(event.title, 'Art Talks: Bags & Stories');
+  assert.equal(event.venueName, 'Agricola Street Brasserie');
+  assert.equal(event.priceLabel, '15');
+  assert.equal(event.sourceUrl, 'https://community.thecoast.ca/halifax/art-talks/Event?oid=1');
+  assert.ok(event.missingFields.includes('time'));
+  const start = new Date(event.startDateTimeMillis);
+  assert.equal(start.getMonth(), 6);
+  assert.equal(start.getDate(), 4);
+});
+
+test('handler extracts dated events from a The Coast listing and warns about the rest', async () => {
+  const listingHtml =
+    '<html><body>' +
+    foundationCard({
+      title: 'Art Talks: Bags & Stories',
+      link: 'https://community.thecoast.ca/halifax/art-talks/Event?oid=1',
+      dateText: 'Sat., July 4, 6-9:30 p.m.',
+      venue: 'Agricola Street Brasserie',
+    }) +
+    foundationCard({
+      title: 'Girls Day Out',
+      link: 'https://community.thecoast.ca/halifax/girls-day-out/Event?oid=3',
+    }) +
+    '</body></html>';
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: 'https://community.thecoast.ca/halifax/EventSearch?narrowByDate=2026-06-26-to-2027-01-01&sortType=date&v=g',
+        start: '2026-07-01T00:00:00',
+        end: '2026-07-31T23:59:00',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => listingHtml,
+      }),
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].title, 'Art Talks: Bags & Stories');
+  assert.equal(payload.warnings.length, 1);
+  assert.match(payload.warnings[0], /1 event\(s\)/);
+  assert.match(payload.warnings[0], /no date shown/);
+});
+
+test('handler returns a specific diagnostic for The Coast listing pages when no card has a usable date', async () => {
   const listingHtml =
     '<html><body>' +
     '<div class="fdn-event-search-text-block"><a href="/halifax/girls-day-out/Event?oid=1">Girls Day Out</a></div>' +
@@ -659,7 +767,7 @@ test('handler returns a specific diagnostic for The Coast listing pages instead 
   assert.equal(payload.events.length, 0);
   assert.equal(payload.warnings.length, 1);
   assert.match(payload.warnings[0], /2 event card\(s\) visible/);
-  assert.match(payload.warnings[0], /no dated events were found on the listing/);
+  assert.match(payload.warnings[0], /none of them had a date shown on the card itself/);
   assert.match(payload.warnings[0], /detail page has the date/);
 });
 
