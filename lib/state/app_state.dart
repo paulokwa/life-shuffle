@@ -1653,9 +1653,14 @@ class AppState extends ChangeNotifier {
           source: source,
         ),
       UserEventSourceKind.webPage => WebPageEventSourceAdapter(source: source),
-      UserEventSourceKind.autoDetect => _looksLikeFeed(source.url)
-          ? UserRssAtomOutsideEventAdapter(source: source)
-          : WebPageEventSourceAdapter(source: source),
+      UserEventSourceKind.icsCalendar => UserIcsOutsideEventAdapter(
+          source: source,
+        ),
+      UserEventSourceKind.autoDetect => _looksLikeIcs(source.url)
+          ? UserIcsOutsideEventAdapter(source: source)
+          : _looksLikeFeed(source.url)
+              ? UserRssAtomOutsideEventAdapter(source: source)
+              : WebPageEventSourceAdapter(source: source),
     };
   }
 
@@ -2469,6 +2474,15 @@ class AppState extends ChangeNotifier {
         lower.endsWith('/feed/') ||
         lower.contains('rss') ||
         lower.contains('atom');
+  }
+
+  static bool _looksLikeIcs(String url) {
+    final lower = url.trim().toLowerCase();
+    return lower.endsWith('.ics') ||
+        lower.contains('ical=1') ||
+        lower.contains('outlook-ical=1') ||
+        lower.startsWith('webcal://') ||
+        lower.contains('/ical/');
   }
 
   static String _sourceNameFromUrl(String url) {

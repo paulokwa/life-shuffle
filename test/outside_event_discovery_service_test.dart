@@ -504,6 +504,46 @@ void main() {
       expect(result.suggestions.single.sourceName, 'Venue page');
       expect(result.warnings.single.message, contains('AI organizer'));
     });
+
+    test('loads user ICS URLs through the Netlify proxy url parameter',
+        () async {
+      final adapter = UserIcsOutsideEventAdapter(
+        source: const UserEventSource(
+          id: 'user-ics',
+          displayName: 'Halifax Events',
+          url: 'https://halifaxevents.ca/events/?ical=1',
+          kind: UserEventSourceKind.icsCalendar,
+        ),
+        client: MockClient((request) async {
+          expect(request.url.path, '/.netlify/functions/outside-events-ics');
+          expect(request.url.queryParameters['url'],
+              'https://halifaxevents.ca/events/?ical=1');
+          return http.Response(
+            [
+              'BEGIN:VCALENDAR',
+              'BEGIN:VEVENT',
+              'SUMMARY:Geekorium 2026',
+              'DTSTART:20260627T100000Z',
+              'END:VEVENT',
+              'END:VCALENDAR',
+            ].join('\r\n'),
+            200,
+          );
+        }),
+      );
+
+      final result = await adapter.fetch(
+        OutsideEventQuery(
+          start: DateTime(2026, 6, 1),
+          end: DateTime(2026, 7, 31),
+        ),
+      );
+
+      expect(result.suggestions.single.sourceType,
+          OutsideEventSourceType.icsCalendar);
+      expect(result.suggestions.single.sourceName, 'Halifax Events');
+      expect(result.suggestions.single.title, 'Geekorium 2026');
+    });
   });
 
   group('TicketmasterOutsideEventAdapter', () {

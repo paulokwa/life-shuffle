@@ -6,6 +6,7 @@ import 'package:xml/xml.dart';
 import '../models/event_suggestion.dart';
 import '../models/user_event_source.dart';
 import 'curated_rss_feed_registry.dart';
+import 'ics_feed_parser.dart';
 import 'outside_event_source_adapter.dart';
 import 'rss_atom_feed_parser.dart';
 
@@ -491,6 +492,106 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
       return OutsideEventFailureCategory.responseTooLarge;
     }
     return OutsideEventFailureCategory.unknown;
+  }
+}
+
+class UserIcsOutsideEventAdapter implements OutsideEventSourceAdapter {
+  UserIcsOutsideEventAdapter({
+    required UserEventSource source,
+    http.Client? client,
+    IcsFeedParser parser = const IcsFeedParser(),
+  })  : _source = source,
+        _client = client ?? http.Client(),
+        _parser = parser;
+
+  final UserEventSource _source;
+  final http.Client _client;
+  final IcsFeedParser _parser;
+
+  @override
+  OutsideEventSourceConfig get config => OutsideEventSourceConfig(
+        id: _source.id,
+        displayName: _source.displayName,
+        type: OutsideEventSourceType.icsCalendar,
+        enabled: _source.enabled,
+        needsApiKey: false,
+        configured: _source.url.trim().isNotEmpty,
+        description: _source.url,
+        helpText: _source.lastError,
+      );
+
+  @override
+  Future<OutsideEventSourceResult> fetch(OutsideEventQuery query) async {
+    if (!config.canFetch) return OutsideEventSourceResult(source: config);
+    final proxyUri = Uri(
+      path: '/.netlify/functions/outside-events-ics',
+      queryParameters: {'url': _source.url},
+    );
+    try {
+      final response = await _client.get(
+        proxyUri,
+        headers: const {'Accept': 'text/calendar'},
+      );
+      if (response.statusCode != 200) {
+        return OutsideEventSourceResult(
+          source: config,
+          warnings: [
+            OutsideEventSourceWarning(
+              sourceId: _source.id,
+              sourceName: _source.displayName,
+              message: _icsErrorMessage(response.statusCode),
+              httpStatusCode: response.statusCode,
+              category: _icsFailureCategory(response.statusCode),
+            ),
+          ],
+        );
+      }
+      final parsed = _parser.parse(
+        icsText: response.body,
+        sourceId: _source.id,
+        sourceName: _source.displayName,
+        sourceUrl: _source.url,
+        query: query,
+      );
+      return OutsideEventSourceResult(
+        source: config,
+        suggestions: parsed.suggestions
+            .map((e) => e.copyWith(sourceId: config.id))
+            .toList(),
+        warnings: parsed.warnings,
+      );
+    } catch (_) {
+      return OutsideEventSourceResult(
+        source: config,
+        warnings: [
+          OutsideEventSourceWarning(
+            sourceId: _source.id,
+            sourceName: _source.displayName,
+            message: 'Feed could not load. Other sources can still refresh.',
+            category: OutsideEventFailureCategory.corsOrProxy,
+          ),
+        ],
+      );
+    }
+  }
+
+  String _icsErrorMessage(int statusCode) {
+    return switch (statusCode) {
+      400 => 'Feed URL is not allowed. Use a public http or https URL.',
+      405 => 'Feed proxy only supports GET requests.',
+      413 => 'Feed response was too large to process.',
+      415 => 'URL did not look like an iCalendar (.ics) feed.',
+      _ => 'Feed could not load through the source proxy.',
+    };
+  }
+
+  OutsideEventFailureCategory _icsFailureCategory(int statusCode) {
+    return switch (statusCode) {
+      400 => OutsideEventFailureCategory.blockedUrl,
+      413 => OutsideEventFailureCategory.responseTooLarge,
+      415 => OutsideEventFailureCategory.parserFailure,
+      _ => OutsideEventFailureCategory.upstreamError,
+    };
   }
 }
 

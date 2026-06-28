@@ -5,6 +5,7 @@ import 'manual_plan_item.dart';
 enum OutsideEventSourceType {
   rssAtom,
   webPage,
+  icsCalendar,
   ticketmaster,
   eventbrite,
   bandsintown,
@@ -16,6 +17,7 @@ extension OutsideEventSourceTypeLabel on OutsideEventSourceType {
   String get label => switch (this) {
         OutsideEventSourceType.rssAtom => 'RSS/Atom',
         OutsideEventSourceType.webPage => 'Web page',
+        OutsideEventSourceType.icsCalendar => 'iCalendar (ICS)',
         OutsideEventSourceType.ticketmaster => 'Ticketmaster',
         OutsideEventSourceType.eventbrite => 'Eventbrite',
         OutsideEventSourceType.bandsintown => 'Bandsintown',

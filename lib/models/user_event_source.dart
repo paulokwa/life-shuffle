@@ -4,6 +4,7 @@ enum UserEventSourceKind {
   autoDetect,
   rssAtom,
   webPage,
+  icsCalendar,
 }
 
 /// Coarse health signal for a [UserEventSource], derived from its last
@@ -37,12 +38,14 @@ extension UserEventSourceKindLabel on UserEventSourceKind {
         UserEventSourceKind.autoDetect => 'Auto-detect',
         UserEventSourceKind.rssAtom => 'RSS/Atom',
         UserEventSourceKind.webPage => 'Web page',
+        UserEventSourceKind.icsCalendar => 'iCalendar (ICS)',
       };
 
   OutsideEventSourceType get sourceType => switch (this) {
         UserEventSourceKind.autoDetect => OutsideEventSourceType.webPage,
         UserEventSourceKind.rssAtom => OutsideEventSourceType.rssAtom,
         UserEventSourceKind.webPage => OutsideEventSourceType.webPage,
+        UserEventSourceKind.icsCalendar => OutsideEventSourceType.icsCalendar,
       };
 
   static UserEventSourceKind fromStorage(String? value) {

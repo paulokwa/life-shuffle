@@ -758,7 +758,14 @@ Future<void> _showOutsideSourceDialog(
               ),
               FilledButton(
                 onPressed: () {
-                  final url = urlController.text.trim();
+                  // `webcal://` is just a calendar-app convention for "open
+                  // this like https" (Apple/Outlook calendar subscribe
+                  // links use it) - normalize it so pasting one of those
+                  // links works the same as pasting the plain https URL.
+                  final rawUrl = urlController.text.trim();
+                  final url = rawUrl.toLowerCase().startsWith('webcal://')
+                      ? 'https://${rawUrl.substring('webcal://'.length)}'
+                      : rawUrl;
                   final uri = Uri.tryParse(url);
                   if (uri == null ||
                       !uri.hasScheme ||
@@ -1889,9 +1896,10 @@ class _OutsideEventSourcesCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Add public event pages or RSS/Atom feeds. This list syncs with '
-            'this calendar across devices; fetched results stay cached on '
-            'this device only and may need refreshing per device.',
+            'Add public event pages, RSS/Atom feeds, or iCalendar (.ics) '
+            'subscription links. This list syncs with this calendar across '
+            'devices; fetched results stay cached on this device only and '
+            'may need refreshing per device.',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               height: 1.35,
@@ -2301,8 +2309,9 @@ class _SourceDiagnostics extends StatelessWidget {
       UserEventSourceKind.rssAtom => 'RSS/Atom proxy',
       UserEventSourceKind.webPage =>
         'Webpage proxy (structured data, then AI/deterministic fallback)',
+      UserEventSourceKind.icsCalendar => 'iCalendar (.ics) proxy',
       UserEventSourceKind.autoDetect =>
-        'Auto-detect (RSS/Atom or webpage proxy)',
+        'Auto-detect (RSS/Atom, iCalendar, or webpage proxy)',
     };
   }
 
