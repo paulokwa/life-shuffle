@@ -86,6 +86,36 @@ void main() {
       expect(merged, hasLength(2));
     });
 
+    test('does not merge unrelated events scraped from the same listing page',
+        () {
+      // Webpage sources stamp every event they scrape with the listing
+      // page's own URL as sourceUrl, so two genuinely different events from
+      // the same source landing on the same calendar day must not collapse
+      // into one just because sourceUrl matches.
+      final a = _event(
+        id: 'one',
+        title: 'Drop-in Storytime',
+        start: DateTime(2026, 7, 5, 10, 0),
+        sourceName: 'Halifax Libraries',
+        sourceType: OutsideEventSourceType.webPage,
+        venueName: 'Central Library',
+        sharedSourceUrl: 'https://halifax.bibliocommons.com/v2/events',
+      );
+      final b = _event(
+        id: 'two',
+        title: 'Tech Help Drop-in',
+        start: DateTime(2026, 7, 5, 14, 0),
+        sourceName: 'Halifax Libraries',
+        sourceType: OutsideEventSourceType.webPage,
+        venueName: 'Spring Garden Road Library',
+        sharedSourceUrl: 'https://halifax.bibliocommons.com/v2/events',
+      );
+
+      final merged = EventDedupeService.mergeSimilar([a, b]);
+
+      expect(merged, hasLength(2));
+    });
+
     test('does not merge similar titles far apart in time', () {
       final a = _event(
         id: 'one',
@@ -118,6 +148,7 @@ EventSuggestion _event({
   String? venueName,
   String? ticketUrl,
   double? confidence,
+  String? sharedSourceUrl,
 }) {
   return EventSuggestion(
     id: id,
@@ -126,7 +157,7 @@ EventSuggestion _event({
     venueName: venueName,
     sourceName: sourceName,
     sourceType: sourceType,
-    sourceUrl: 'https://example.com/$id',
+    sourceUrl: sharedSourceUrl ?? 'https://example.com/$id',
     ticketUrl: ticketUrl,
     confidence: confidence,
     missingFields: venueName == null ? const ['venue'] : const [],

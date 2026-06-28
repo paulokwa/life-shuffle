@@ -38,10 +38,6 @@ class EventDedupeService {
 
   static bool _isDuplicate(EventSuggestion a, EventSuggestion b) {
     if (_sameNonEmptyUrl(a.ticketUrl, b.ticketUrl)) return true;
-    if (_sameNonEmptyUrl(a.sourceUrl, b.sourceUrl) &&
-        _sameDate(a.startDateTime, b.startDateTime)) {
-      return true;
-    }
     final minutesApart =
         a.startDateTime.difference(b.startDateTime).inMinutes.abs();
     if (minutesApart > _maxMinutesApart) return false;
@@ -60,9 +56,6 @@ class EventDedupeService {
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed.toLowerCase().replaceAll(RegExp(r'/+$'), '');
   }
-
-  static bool _sameDate(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 
   static bool _venuesCompatible(String? a, String? b) {
     final wordsA = _normalizeWords(a);
