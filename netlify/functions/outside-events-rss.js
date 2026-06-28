@@ -138,22 +138,25 @@ async function readLimitedText(response) {
 async function fetchFeedXml(feed, fetchImpl) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const response = await fetchImpl(feed.url, {
-    headers: {
-      Accept: 'application/rss+xml, application/atom+xml, text/xml',
-      'User-Agent': 'LifeShuffleOutsideEvents/1.0',
-    },
-    signal: controller.signal,
-  });
-  clearTimeout(timeout);
-  if (!response.ok) {
-    throw new Error(`Feed returned ${response.status}`);
+  try {
+    const response = await fetchImpl(feed.url, {
+      headers: {
+        Accept: 'application/rss+xml, application/atom+xml, text/xml',
+        'User-Agent': 'LifeShuffleOutsideEvents/1.0',
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Feed returned ${response.status}`);
+    }
+    const body = await readLimitedText(response);
+    if (!body.trimStart().startsWith('<')) {
+      throw new Error('Feed did not return XML');
+    }
+    return body;
+  } finally {
+    clearTimeout(timeout);
   }
-  const body = await readLimitedText(response);
-  if (!body.trimStart().startsWith('<')) {
-    throw new Error('Feed did not return XML');
-  }
-  return body;
 }
 
 function xmlResponse(xmlText) {

@@ -124,7 +124,7 @@ async function fetchText(url, fetchImpl, headers) {
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Page returned ${response.status}`);
-    return readLimitedText(response);
+    return await readLimitedText(response);
   } finally {
     clearTimeout(timeout);
   }
@@ -242,7 +242,72 @@ const nsccResolver = {
   },
 };
 
-const SOURCE_RESOLVERS = [nsccResolver];
+// BiblioCommons (e.g. halifax.bibliocommons.com) serves its /v2/events page
+// as a client-rendered SPA - the static HTML has no usable per-event data,
+// only a generic Library schema.org block. The SPA itself is backed by a
+// public JSON API (confirmed via curl: gateway.bibliocommons.com/v2/libraries/
+// {librarySlug}/events, where librarySlug is the page's own subdomain) that
+// returns normalized event/location entities. Paginate a few pages of that
+// API directly and reshape into the flat {title, startDate, ...} item shape
+// the generic JSON extractor already understands, instead of scraping HTML.
+const BIBLIOCOMMONS_HOST_PATTERN = /^([a-z0-9-]+)\.bibliocommons\.com$/i;
+const BIBLIOCOMMONS_EVENTS_PATH_PATTERN = /^\/v2\/events\/?$/i;
+const BIBLIOCOMMONS_MAX_PAGES = 3;
+const BIBLIOCOMMONS_PAGE_LIMIT = 50;
+const BIBLIOCOMMONS_MIN_EVENTS = 30;
+
+const bibliocommonsResolver = {
+  id: 'bibliocommons',
+  matches(url) {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (_) {
+      return false;
+    }
+    return (
+      BIBLIOCOMMONS_HOST_PATTERN.test(parsed.hostname) &&
+      BIBLIOCOMMONS_EVENTS_PATH_PATTERN.test(parsed.pathname)
+    );
+  },
+  async fetchContent(url, { fetchImpl }) {
+    const librarySlug = BIBLIOCOMMONS_HOST_PATTERN.exec(new URL(url).hostname)[1];
+    const items = [];
+    for (let page = 1; page <= BIBLIOCOMMONS_MAX_PAGES; page += 1) {
+      const apiUrl =
+        `https://gateway.bibliocommons.com/v2/libraries/${librarySlug}/events` +
+        `?limit=${BIBLIOCOMMONS_PAGE_LIMIT}&page=${page}`;
+      let parsed;
+      try {
+        const text = await fetchText(apiUrl, fetchImpl, { Accept: 'application/json' });
+        parsed = JSON.parse(text);
+      } catch (_) {
+        break;
+      }
+      const ids = (parsed.events && parsed.events.items) || [];
+      const eventEntities = (parsed.entities && parsed.entities.events) || {};
+      const locations = (parsed.entities && parsed.entities.locations) || {};
+      for (const id of ids) {
+        const definition = eventEntities[id] && eventEntities[id].definition;
+        if (!definition || !definition.title || !definition.start) continue;
+        const location = locations[definition.branchLocationId];
+        items.push({
+          title: definition.title,
+          startDate: definition.start,
+          endDate: definition.end,
+          summary: definition.description,
+          venueName: location ? location.name : undefined,
+        });
+      }
+      if (ids.length < BIBLIOCOMMONS_PAGE_LIMIT || items.length >= BIBLIOCOMMONS_MIN_EVENTS) {
+        break;
+      }
+    }
+    return { text: JSON.stringify({ events: items }), contentType: 'json' };
+  },
+};
+
+const SOURCE_RESOLVERS = [nsccResolver, bibliocommonsResolver];
 
 function findSourceResolver(url) {
   return SOURCE_RESOLVERS.find((resolver) => resolver.matches(url)) || null;

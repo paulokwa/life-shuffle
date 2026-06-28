@@ -427,6 +427,76 @@ test('handler returns no events when the NSCC API responds with unusable data', 
   assert.equal(payload.events.length, 0);
 });
 
+test('findSourceResolver detects BiblioCommons events pages and ignores others', () => {
+  const resolver = webpage.findSourceResolver('https://halifax.bibliocommons.com/v2/events');
+  assert.ok(resolver);
+  assert.equal(resolver.id, 'bibliocommons');
+
+  assert.equal(
+    webpage.findSourceResolver('https://halifax.bibliocommons.com/v2/search'),
+    null,
+  );
+  assert.equal(webpage.findSourceResolver('https://example.com/v2/events'), null);
+});
+
+test('handler resolves BiblioCommons URLs via the gateway API instead of scraping the SPA HTML', async () => {
+  const pageUrl = 'https://halifax.bibliocommons.com/v2/events';
+  const apiUrl = 'https://gateway.bibliocommons.com/v2/libraries/halifax/events?limit=50&page=1';
+  const fetchedUrls = [];
+
+  const response = await webpage.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: {
+        url: pageUrl,
+        start: '2026-06-01T00:00:00Z',
+        end: '2026-07-01T23:59:59Z',
+      },
+    },
+    {
+      lookup: publicLookup,
+      fetch: async (url) => {
+        fetchedUrls.push(url);
+        if (url === apiUrl) {
+          return {
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            text: async () =>
+              JSON.stringify({
+                events: { items: ['evt-1'] },
+                entities: {
+                  events: {
+                    'evt-1': {
+                      definition: {
+                        title: 'Drop-in Storytime',
+                        start: '2026-06-15T10:00',
+                        end: '2026-06-15T11:00',
+                        description: '<p>Stories and songs for little ones.</p>',
+                        branchLocationId: 'SGA',
+                      },
+                    },
+                  },
+                  locations: { SGA: { name: 'Central Library' } },
+                },
+              }),
+          };
+        }
+        return { ok: false, status: 404 };
+      },
+      env: {},
+    },
+  );
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].title, 'Drop-in Storytime');
+  assert.equal(payload.events[0].venueName, 'Central Library');
+  assert.ok(fetchedUrls.includes(apiUrl));
+  assert.ok(!fetchedUrls.includes(pageUrl));
+});
+
 // ---- Structured data extraction -------------------------------------------
 
 test('extractEventLikeJsonBlobs parses NSCC-shaped JSON via generic field aliases', () => {
