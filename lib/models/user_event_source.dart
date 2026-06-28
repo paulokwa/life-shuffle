@@ -20,6 +20,11 @@ enum SourceHealthStatus {
   /// Last attempt produced a warning but still found events.
   warning,
 
+  /// Last attempt loaded and parsed fine, but every event it found falls
+  /// outside the current planning range - distinct from [failed] since the
+  /// source itself isn't broken, see `OutsideEventFailureCategory.noEventsFound`.
+  noEventsInRange,
+
   /// Last attempt produced a warning and found no events.
   failed,
 }
@@ -29,6 +34,7 @@ extension SourceHealthStatusLabel on SourceHealthStatus {
         SourceHealthStatus.unknown => 'Not checked yet',
         SourceHealthStatus.healthy => 'Healthy',
         SourceHealthStatus.warning => 'Warning',
+        SourceHealthStatus.noEventsInRange => 'No events in range',
         SourceHealthStatus.failed => 'Failed',
       };
 }
@@ -110,6 +116,9 @@ class UserEventSource {
     if (lastFetchedAtMillis == null) return SourceHealthStatus.unknown;
     final hasWarning = lastError?.trim().isNotEmpty == true;
     if (!hasWarning) return SourceHealthStatus.healthy;
+    if (lastErrorCategory == 'noEventsFound') {
+      return SourceHealthStatus.noEventsInRange;
+    }
     return (lastEventCount ?? 0) > 0
         ? SourceHealthStatus.warning
         : SourceHealthStatus.failed;

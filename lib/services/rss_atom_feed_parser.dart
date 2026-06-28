@@ -26,6 +26,7 @@ class RssAtomFeedParser {
     final items = _feedItems(document);
     final suggestions = <EventSuggestion>[];
     var skipped = 0;
+    var outOfRange = 0;
 
     for (final item in items) {
       final parsed = _parseItem(item, source, query);
@@ -35,6 +36,8 @@ class RssAtomFeedParser {
       }
       if (query.contains(parsed.startDateTime)) {
         suggestions.add(parsed);
+      } else {
+        outOfRange++;
       }
     }
 
@@ -53,6 +56,15 @@ class RssAtomFeedParser {
             sourceName: source.displayName,
             message: '$skipped feed entr${skipped == 1 ? 'y was' : 'ies were'} '
                 'missing enough title/date data to show.',
+          ),
+        if (suggestions.isEmpty && outOfRange > 0)
+          OutsideEventSourceWarning(
+            sourceId: source.id,
+            sourceName: source.displayName,
+            message: '$outOfRange feed entr${outOfRange == 1 ? 'y' : 'ies'} '
+                '${outOfRange == 1 ? 'was' : 'were'} found, but outside your '
+                'current planning range.',
+            category: OutsideEventFailureCategory.noEventsFound,
           ),
       ],
     );

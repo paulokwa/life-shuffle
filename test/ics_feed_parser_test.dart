@@ -160,4 +160,38 @@ void main() {
 
     expect(result.suggestions, isEmpty);
   });
+
+  test(
+      'reports a distinct warning when every parsed event falls outside the '
+      'planning range', () {
+    final icsText = [
+      'BEGIN:VCALENDAR',
+      'BEGIN:VEVENT',
+      'SUMMARY:Way out',
+      'DTSTART:20260929T130000Z',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'SUMMARY:Also way out',
+      'DTSTART:20261027T223000Z',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+
+    final result = parser.parse(
+      icsText: icsText,
+      sourceId: 'src-1',
+      sourceName: 'Test',
+      sourceUrl: 'https://example.com/events.ics',
+      query: queryFor(DateTime(2026, 6, 28), DateTime(2026, 7, 28)),
+    );
+
+    expect(result.suggestions, isEmpty);
+    expect(
+      result.warnings.single.message,
+      contains('2 calendar events were found, but outside your current '
+          'planning range'),
+    );
+    expect(result.warnings.single.category,
+        OutsideEventFailureCategory.noEventsFound);
+  });
 }

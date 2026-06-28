@@ -33,6 +33,7 @@ class IcsFeedParser {
     final blocks = _veventBlocks(_unfoldLines(icsText));
     final suggestions = <EventSuggestion>[];
     var skipped = 0;
+    var outOfRange = 0;
 
     for (final block in blocks) {
       final parsed = _parseVevent(
@@ -48,6 +49,8 @@ class IcsFeedParser {
       }
       if (query.contains(parsed.startDateTime)) {
         suggestions.add(parsed);
+      } else {
+        outOfRange++;
       }
     }
 
@@ -66,6 +69,16 @@ class IcsFeedParser {
             sourceName: sourceName,
             message: '$skipped calendar event${skipped == 1 ? '' : 's'} '
                 'were missing enough title/date data to show.',
+          ),
+        if (suggestions.isEmpty && outOfRange > 0)
+          OutsideEventSourceWarning(
+            sourceId: sourceId,
+            sourceName: sourceName,
+            message: '$outOfRange calendar event'
+                '${outOfRange == 1 ? '' : 's'} '
+                '${outOfRange == 1 ? 'was' : 'were'} found, but outside '
+                'your current planning range.',
+            category: OutsideEventFailureCategory.noEventsFound,
           ),
       ],
     );

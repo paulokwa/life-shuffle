@@ -400,15 +400,18 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
       }
       final decoded = _decodeJson(response.body);
       final eventMaps = decoded['events'];
-      final suggestions = eventMaps is Iterable
+      final allEvents = eventMaps is Iterable
           ? eventMaps
               .whereType<Map>()
               .map((map) => EventSuggestion.fromMap(
                     Map<String, dynamic>.from(map),
                   ).copyWith(sourceId: config.id))
-              .where((event) => query.contains(event.startDateTime))
               .toList()
           : const <EventSuggestion>[];
+      final suggestions = allEvents
+          .where((event) => query.contains(event.startDateTime))
+          .toList();
+      final outOfRange = allEvents.length - suggestions.length;
       final warnings = <OutsideEventSourceWarning>[
         for (final warning in _readStringList(decoded['warnings']))
           OutsideEventSourceWarning(
@@ -416,6 +419,15 @@ class WebPageEventSourceAdapter implements OutsideEventSourceAdapter {
             sourceName: _source.displayName,
             message: warning,
             category: _categorizeWebpageWarning(warning),
+          ),
+        if (suggestions.isEmpty && outOfRange > 0)
+          OutsideEventSourceWarning(
+            sourceId: _source.id,
+            sourceName: _source.displayName,
+            message: '$outOfRange event${outOfRange == 1 ? '' : 's'} '
+                '${outOfRange == 1 ? 'was' : 'were'} found, but outside '
+                'your current planning range.',
+            category: OutsideEventFailureCategory.noEventsFound,
           ),
       ];
       return OutsideEventSourceResult(

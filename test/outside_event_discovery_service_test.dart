@@ -321,6 +321,50 @@ void main() {
       expect(result.warnings.single.message,
           'Feed loaded but did not contain any RSS/Atom entries.');
     });
+
+    test(
+        'reports a distinct warning when every entry falls outside the '
+        'planning range', () {
+      const parser = RssAtomFeedParser();
+      final result = parser.parse(
+        xmlText: '''
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>16th Annual Dalhousie Mawio'mi</title>
+      <link>https://events.dal.ca/event/5865</link>
+      <pubDate>Tue, 29 Sep 2026 13:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>DAC Presents: JB Smoove Live</title>
+      <link>https://events.dal.ca/event/5910</link>
+      <pubDate>Tue, 27 Oct 2026 22:30:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>
+''',
+        source: const CuratedRssFeedSource(
+          id: 'dal',
+          displayName: 'Dalhousie Events',
+          url: 'https://events.dal.ca/feed.xml',
+          defaultCity: 'Halifax',
+        ),
+        query: OutsideEventQuery(
+          start: DateTime(2026, 6, 28),
+          end: DateTime(2026, 7, 28),
+        ),
+      );
+
+      expect(result.suggestions, isEmpty);
+      expect(
+        result.warnings.single.message,
+        contains(
+            '2 feed entries were found, but outside your current planning '
+            'range'),
+      );
+      expect(result.warnings.single.category,
+          OutsideEventFailureCategory.noEventsFound);
+    });
   });
 
   group('CuratedRssOutsideEventAdapter', () {
@@ -671,6 +715,24 @@ void main() {
       );
 
       expect(source.healthStatus, SourceHealthStatus.failed);
+    });
+
+    test(
+        'reports noEventsInRange (not failed) when events were found but '
+        'all outside the planning range', () {
+      const source = UserEventSource(
+        id: 'src',
+        displayName: 'Source',
+        url: 'https://example.com/feed.xml',
+        kind: UserEventSourceKind.rssAtom,
+        lastFetchedAtMillis: 100,
+        lastEventCount: 0,
+        lastError: '2 feed entries were found, but outside your current '
+            'planning range.',
+        lastErrorCategory: 'noEventsFound',
+      );
+
+      expect(source.healthStatus, SourceHealthStatus.noEventsInRange);
     });
 
     test('round-trips health fields through toMap/fromMap', () {

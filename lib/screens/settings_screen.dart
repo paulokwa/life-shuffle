@@ -2094,6 +2094,7 @@ class _OutsideEventSourceRow extends StatelessWidget {
 
   bool get _isFailedOrWarning =>
       source.healthStatus == SourceHealthStatus.warning ||
+      source.healthStatus == SourceHealthStatus.noEventsInRange ||
       source.healthStatus == SourceHealthStatus.failed;
 
   @override
@@ -2369,6 +2370,7 @@ class _SourceHealthPill extends StatelessWidget {
       SourceHealthStatus.unknown => (warmBeige, textMuted),
       SourceHealthStatus.healthy => (const Color(0xFFEEF6F2), accentSage),
       SourceHealthStatus.warning => (const Color(0xFFFFF7E8), sand),
+      SourceHealthStatus.noEventsInRange => (warmBeige, textMuted),
       SourceHealthStatus.failed => (const Color(0xFFFAF0EC), primaryTerracotta),
     };
     return Container(
