@@ -72,3 +72,14 @@ Each entry should include:
   - Only support shared editing inside Life Shuffle.
   - Only support a static export that does not update.
 - **Status**: Active
+
+### 2026-06-29 — Add a narrow occurrence-snapshot archive before any history UI
+
+- **Decision**: Add `PlanHistoryEntry`/`AppState`'s archive (occurrence-keyed snapshots of title/time/duration/category/dimensions/check-in/locked/removed, synced through the existing flat `SavedState`/Firestore document) as a standalone persistence foundation, before building any "go back in time" browsing UI, year/N-day views, or trend charts.
+- **Why**: The current generated plan is mostly re-derived deterministically from a seed plus the live activity pool/rules (`AppState._buildPlan`). That means a source-`Activity` rename, a rule edit, or simply reloading after the activity pool changed can cause the next regeneration to silently produce different content for a date that already happened, while `_applyOverlays` matches old check-in/lock state by occurrence key and fails quietly if that key no longer exists - the actual history is lost, not just stale. An entry's snapshot fields freeze once its date is today or earlier (only a deliberate per-occurrence edit, check-in, lock, or removal updates it after that), so the archive stays honest regardless of what regeneration or template edits do afterward.
+- **Alternatives considered**:
+  - Store a full immutable plan snapshot keyed by generation/version instead of by occurrence - more complete, but a much larger schema change and not needed yet for the "don't lose what already happened" goal.
+  - Build the history browsing UI and the persistence model in the same slice - rejected per this file's own guardrail: prove the persistence model is safe (document size, multi-device sync) before exposing a large new UI surface on top of it.
+  - Read `ProgressSummaryCalculator`/the Progress screen from the archive immediately - deferred; Progress still reads the live generated/visible window for this slice. See `PARKING_LOT.md`'s "Historical calendar archive and trends" entry and `ROADMAP.md` MVP 2 slice 9.
+- **Status**: Active
+- **Related files**: `lib/models/plan_history_entry.dart`, `lib/state/app_state.dart`, `lib/services/persistence_service.dart`

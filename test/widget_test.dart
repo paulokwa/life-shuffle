@@ -10,6 +10,7 @@ import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/event_suggestion.dart';
 import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
+import 'package:life_shuffle/models/plan_history_entry.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/models/range_type.dart';
 import 'package:life_shuffle/models/user_event_source.dart';
@@ -9254,6 +9255,377 @@ void main() {
     });
   });
 
+  group('Plan history archive', () {
+    test('PlanHistoryEntry round-trips through toMap/fromMap', () {
+      final entry = PlanHistoryEntry(
+        occurrenceKey: '2026-06-29:test_activity',
+        date: DateTime(2026, 6, 29),
+        sourceActivityId: 'test_activity',
+        title: 'Walk',
+        timeSlot: '7:00 AM',
+        durationMinutes: 30,
+        category: 'Outside',
+        difficulty: 4,
+        energy: 'medium',
+        social: 'either',
+        source: PlanHistorySource.generated,
+        status: CheckStatus.done,
+        locked: true,
+        removed: false,
+        createdAtMillis: 1000,
+        updatedAtMillis: 2000,
+      );
+
+      final restored = PlanHistoryEntry.fromMap(entry.toMap());
+      expect(restored.occurrenceKey, entry.occurrenceKey);
+      expect(restored.date, entry.date);
+      expect(restored.sourceActivityId, entry.sourceActivityId);
+      expect(restored.title, entry.title);
+      expect(restored.timeSlot, entry.timeSlot);
+      expect(restored.durationMinutes, entry.durationMinutes);
+      expect(restored.category, entry.category);
+      expect(restored.difficulty, entry.difficulty);
+      expect(restored.energy, entry.energy);
+      expect(restored.social, entry.social);
+      expect(restored.source, entry.source);
+      expect(restored.status, entry.status);
+      expect(restored.locked, entry.locked);
+      expect(restored.removed, entry.removed);
+      expect(restored.createdAtMillis, entry.createdAtMillis);
+      expect(restored.updatedAtMillis, entry.updatedAtMillis);
+    });
+
+    test(
+        'SavedState defaults missing planHistory to empty and round-trips '
+        'an explicit one', () {
+      final defaulted = SavedState.fromMap(const {});
+      expect(defaulted.planHistory, isEmpty);
+
+      final entry = PlanHistoryEntry(
+        occurrenceKey: '2026-06-29:test_activity',
+        date: DateTime(2026, 6, 29),
+        title: 'Walk',
+        timeSlot: '7:00 AM',
+        durationMinutes: 30,
+        category: 'Outside',
+        difficulty: 3,
+        energy: 'medium',
+        social: 'either',
+        status: CheckStatus.done,
+        createdAtMillis: 1000,
+        updatedAtMillis: 2000,
+      );
+      final state = SavedState(
+        activities: const [],
+        seed: 0,
+        updatedAtMillis: 100,
+        planHistory: {'2026-06-29:test_activity': entry},
+        enabledMap: const {},
+        checkinMap: const {},
+        lockedMap: const {},
+      );
+      final map = state.toMap();
+      final restored = SavedState.fromMap(map);
+      expect(restored.planHistory, contains('2026-06-29:test_activity'));
+      expect(
+        restored.planHistory['2026-06-29:test_activity']!.title,
+        'Walk',
+      );
+    });
+
+    test('PersistenceService saves and loads the plan history archive',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final entry = PlanHistoryEntry(
+        occurrenceKey: '2026-06-29:test_activity',
+        date: DateTime(2026, 6, 29),
+        sourceActivityId: 'test_activity',
+        title: 'Walk',
+        timeSlot: '7:00 AM',
+        durationMinutes: 30,
+        category: 'Outside',
+        difficulty: 3,
+        energy: 'medium',
+        social: 'either',
+        status: CheckStatus.done,
+        createdAtMillis: 1000,
+        updatedAtMillis: 2000,
+      );
+      PersistenceService.savePlanHistoryMap({
+        '2026-06-29:test_activity': entry,
+      });
+
+      final loaded = PersistenceService.load(PlannerService.defaultActivities);
+      expect(loaded.planHistory, contains('2026-06-29:test_activity'));
+      final restored = loaded.planHistory['2026-06-29:test_activity']!;
+      expect(restored.title, 'Walk');
+      expect(restored.status, CheckStatus.done);
+      expect(restored.source, PlanHistorySource.generated);
+    });
+
+    test(
+        'Loading an old SavedState with no archive loads normally and '
+        'starts archiving going forward', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final oldSaved = SavedState(
+        activities:
+            PlannerService.defaultActivities.map((a) => a.copy()).toList(),
+        seed: 0,
+        updatedAtMillis: 1000,
+        enabledMap: const {},
+        checkinMap: const {},
+        lockedMap: const {},
+      );
+      expect(oldSaved.planHistory, isEmpty);
+
+      final appState = AppState(
+        activities: PlannerService.defaultActivities,
+        savedState: oldSaved,
+      );
+
+      expect(appState.weekPlan, isNotEmpty);
+      expect(appState.planHistory, isNotEmpty);
+    });
+
+    test(
+        'Archive preserves title/time/category even if the source Activity '
+        'later changes', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final activityId = appState.addActivity(
+        title: 'Original Title',
+        category: 'Outside',
+        durationMinutes: 30,
+        preferredTime: 'anytime',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+        mustIncludeInPlans: true,
+      );
+      appState.regenerate();
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+      final planned =
+          today.activities.firstWhere((a) => a.activity.id == activityId);
+
+      final archivedBefore =
+          appState.planHistoryEntryFor(today.date, activityId);
+      expect(archivedBefore, isNotNull);
+      expect(archivedBefore!.title, 'Original Title');
+      expect(archivedBefore.category, 'Outside');
+
+      appState.updateActivity(
+        activityId,
+        title: 'Renamed later',
+        category: 'Rest',
+        durationMinutes: 30,
+        preferredTime: 'anytime',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+        mustIncludeInPlans: true,
+      );
+      // The live occurrence reflects the rename immediately, since it
+      // shares the same Activity instance as the library.
+      expect(planned.title, 'Renamed later');
+
+      planned.status = CheckStatus.done;
+      appState.notifyCheckIn(planned);
+
+      final archivedAfter =
+          appState.planHistoryEntryFor(today.date, activityId);
+      expect(archivedAfter, isNotNull);
+      expect(archivedAfter!.title, 'Original Title');
+      expect(archivedAfter.category, 'Outside');
+    });
+
+    test('Check-in status updates the archived occurrence', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final activityId = appState.addActivity(
+        title: 'Daily check activity',
+        category: 'Outside',
+        durationMinutes: 20,
+        preferredTime: 'anytime',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+        mustIncludeInPlans: true,
+      );
+      appState.regenerate();
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+      final planned =
+          today.activities.firstWhere((a) => a.activity.id == activityId);
+
+      expect(
+        appState.planHistoryEntryFor(today.date, activityId)!.status,
+        CheckStatus.none,
+      );
+
+      planned.status = CheckStatus.done;
+      appState.notifyCheckIn(planned);
+
+      expect(
+        appState.planHistoryEntryFor(today.date, activityId)!.status,
+        CheckStatus.done,
+      );
+    });
+
+    test('Regeneration does not erase archived past occurrences', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final beforeKeys =
+          appState.planHistory.map((e) => e.occurrenceKey).toSet();
+      expect(beforeKeys, isNotEmpty);
+
+      appState.regenerate();
+      final afterRegenerateKeys =
+          appState.planHistory.map((e) => e.occurrenceKey).toSet();
+      expect(afterRegenerateKeys.containsAll(beforeKeys), isTrue);
+
+      appState.generateRange(RangeType.month);
+      final afterRangeKeys =
+          appState.planHistory.map((e) => e.occurrenceKey).toSet();
+      expect(afterRangeKeys.containsAll(afterRegenerateKeys), isTrue);
+    });
+
+    test('Manual plan item is archived with its snapshot values', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_archive_1',
+          dateKey: _dateKey(today.date),
+          title: 'Pinned dinner',
+          timeSlot: '6:00 PM',
+          category: 'Food',
+          durationMinutes: 40,
+          difficulty: 2,
+          energy: 'low',
+          social: 'together',
+        ),
+      );
+
+      final entry = appState.planHistoryEntryFor(
+        today.date,
+        'manual_manual_archive_1',
+      );
+      expect(entry, isNotNull);
+      expect(entry!.title, 'Pinned dinner');
+      expect(entry.timeSlot, '6:00 PM');
+      expect(entry.category, 'Food');
+      expect(entry.durationMinutes, 40);
+      expect(entry.difficulty, 2);
+      expect(entry.energy, 'low');
+      expect(entry.social, 'together');
+      expect(entry.source, PlanHistorySource.manual);
+      expect(entry.sourceActivityId, isNull);
+    });
+
+    test('Outside-event manual item is archived with source outsideEvent',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+
+      appState.addManualPlanItem(
+        ManualPlanItem(
+          id: 'manual_archive_2',
+          dateKey: _dateKey(today.date),
+          title: 'Concert in the park',
+          timeSlot: '7:00 PM',
+          category: 'Outside',
+          durationMinutes: 90,
+          outsideEventId: 'event_123',
+          outsideEventSourceName: 'City Events',
+        ),
+      );
+
+      final entry = appState.planHistoryEntryFor(
+        today.date,
+        'manual_manual_archive_2',
+      );
+      expect(entry, isNotNull);
+      expect(entry!.source, PlanHistorySource.outsideEvent);
+    });
+
+    test(
+        'Removing a planned occurrence marks its archive entry removed '
+        'without losing the snapshot', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final activityId = appState.addActivity(
+        title: 'Daily removable activity',
+        category: 'Outside',
+        durationMinutes: 20,
+        preferredTime: 'anytime',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+        mustIncludeInPlans: true,
+      );
+      appState.regenerate();
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+      final planned =
+          today.activities.firstWhere((a) => a.activity.id == activityId);
+
+      appState.removeFromPlan(today, planned);
+
+      final entry = appState.planHistoryEntryFor(today.date, activityId);
+      expect(entry, isNotNull);
+      expect(entry!.removed, isTrue);
+      expect(entry.title, 'Daily removable activity');
+    });
+
+    test(
+        'Editing a planned occurrence updates its archived snapshot '
+        'immediately', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final appState = AppState(activities: PlannerService.defaultActivities);
+      final activityId = appState.addActivity(
+        title: 'Daily editable activity',
+        category: 'Outside',
+        durationMinutes: 20,
+        preferredTime: 'anytime',
+        maxPerWeek: 7,
+        allowedWeekdays: Activity.allWeekdays,
+        noConsecutiveDays: false,
+        enabled: true,
+        mustIncludeInPlans: true,
+      );
+      appState.regenerate();
+      final today = appState.weekPlan.firstWhere((d) => d.isToday);
+      final planned =
+          today.activities.firstWhere((a) => a.activity.id == activityId);
+
+      appState.editPlannedOccurrence(
+        today,
+        planned,
+        timeSlot: '8:45 PM',
+        category: 'Rest',
+      );
+
+      final entry = appState.planHistoryEntryFor(today.date, activityId);
+      expect(entry, isNotNull);
+      expect(entry!.timeSlot, '8:45 PM');
+      expect(entry.category, 'Rest');
+    });
+  });
+
   test('Progress summary counts past 7 days and excludes future items', () {
     final now = DateTime(2026, 6, 18, 14);
     final plans = [
@@ -9489,6 +9861,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
+    // weekPlan never contains a past day for a freshly generated range, so
+    // "today or earlier" only ever means today; guarantee today actually
+    // has activities (the daily template randomly skips some days) instead
+    // of letting this test's outcome depend on which weekday it runs on.
+    _todayWithActivities(appState);
     final recentItems = appState.weekPlan
         .where(
           (day) => !DateTime(day.date.year, day.date.month, day.date.day)
@@ -9698,6 +10075,11 @@ void main() {
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
     appState.setDifficultyEnabled(true);
+    // weekPlan never contains a past day for a freshly generated range, so
+    // "today or earlier" only ever means today; guarantee today actually
+    // has activities (the daily template randomly skips some days) instead
+    // of letting this test's outcome depend on which weekday it runs on.
+    _todayWithActivities(appState);
     final recentItems = appState.weekPlan
         .where(
           (day) => !DateTime(day.date.year, day.date.month, day.date.day)

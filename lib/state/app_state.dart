@@ -10,6 +10,7 @@ import '../models/generated_plan_range.dart';
 import '../models/manual_plan_item.dart';
 import '../models/event_suggestion.dart';
 import '../models/mock_data.dart' show CheckStatus;
+import '../models/plan_history_entry.dart';
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../models/source_list_snapshot.dart';
@@ -131,6 +132,15 @@ class AppState extends ChangeNotifier {
   /// pinned user content, not generated-occurrence customizations. See
   /// [addManualPlanItem] and [removeManualPlanItem].
   Map<String, ManualPlanItem> _manualPlanItems = {};
+
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) archive of dated planned
+  /// occurrence snapshots. Unlike [_removedOccurrences]/
+  /// [_occurrenceOverrides]/[_manualPlanItems], this is never cleared by
+  /// [regenerate], [generateRange], or [setPlanStyle] - it only ever grows
+  /// or has individual entries updated. See [_archiveCurrentRange] and
+  /// [_upsertArchiveEntry] for how entries are captured and frozen once
+  /// their date has passed.
+  Map<String, PlanHistoryEntry> _planHistory = {};
   List<UserEventSource> _outsideEventSources = const [];
   List<SourceListSnapshot> _outsideEventSourceSnapshots = const [];
   List<EventSuggestion> _cachedOutsideEvents = const [];
@@ -235,6 +245,7 @@ class AppState extends ChangeNotifier {
     } else {
       _rangeStart = _dateOnly(DateTime.now());
       _generatedDays = _buildPlan();
+      _archiveCurrentRange();
     }
     // _calendarId is still null here (Firestore sync hasn't run yet), so
     // this reads the device-local/"before sign-in" cache scope; switching to
@@ -400,6 +411,17 @@ class AppState extends ChangeNotifier {
   /// for tests; screens should read the merged [DayPlan.activities].
   List<ManualPlanItem> get manualPlanItems =>
       List.unmodifiable(_manualPlanItems.values);
+
+  /// The full dated-occurrence archive, in no particular order. Exposed
+  /// mainly for tests and future history/trend UI; current screens
+  /// (Today/Plan/Progress) still read live [DayPlan]s.
+  List<PlanHistoryEntry> get planHistory =>
+      List.unmodifiable(_planHistory.values);
+
+  /// The archived snapshot for one occurrence, or `null` if it was never
+  /// captured (e.g. an occurrence date that hasn't been generated yet).
+  PlanHistoryEntry? planHistoryEntryFor(DateTime date, String activityId) =>
+      _planHistory[_occurrenceKey(date, activityId)];
   List<UserEventSource> get outsideEventSources =>
       List.unmodifiable(_outsideEventSources);
   List<SourceListSnapshot> get outsideEventSourceSnapshots =>
@@ -1002,6 +1024,7 @@ class AppState extends ChangeNotifier {
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _applyManualItems();
+    _archiveCurrentRange();
     _persist();
     notifyListeners();
   }
@@ -1025,6 +1048,7 @@ class AppState extends ChangeNotifier {
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan();
     _applyManualItems();
+    _archiveCurrentRange();
     _persist();
     notifyListeners();
   }
@@ -1052,6 +1076,7 @@ class AppState extends ChangeNotifier {
     _occurrenceOverrides = {};
     _generatedDays = _buildPlan(lockedItems: _collectLocked());
     _applyManualItems();
+    _archiveCurrentRange();
     _persist();
     notifyListeners();
   }
@@ -1208,13 +1233,33 @@ class AppState extends ChangeNotifier {
 
   void toggleLock(PlannedActivity activity) {
     activity.locked = !activity.locked;
+    _archiveLiveOccurrence(activity);
     _persist();
     notifyListeners();
   }
 
   void notifyCheckIn(PlannedActivity activity) {
+    _archiveLiveOccurrence(activity);
     _persist();
     notifyListeners();
+  }
+
+  /// Updates the archive entry for [activity]'s current day/occurrence
+  /// without forcing a snapshot refresh - used by [toggleLock] and
+  /// [notifyCheckIn], where only [PlanHistoryEntry.locked]/[status] should
+  /// change. No-op if [activity] isn't found in [_generatedDays] (shouldn't
+  /// normally happen, since callers always pass a live planned occurrence).
+  void _archiveLiveOccurrence(PlannedActivity activity) {
+    final day = _dayContaining(activity);
+    if (day == null) return;
+    _archiveOccurrence(day, activity, forceSnapshotUpdate: false);
+  }
+
+  DayPlan? _dayContaining(PlannedActivity activity) {
+    for (final day in _generatedDays) {
+      if (day.activities.contains(activity)) return day;
+    }
+    return null;
   }
 
   /// Removes only [activity]'s occurrence on [day] from the current
@@ -1231,6 +1276,11 @@ class AppState extends ChangeNotifier {
   void removeFromPlan(DayPlan day, PlannedActivity activity) {
     final manualId = activity.manualItemId;
     if (manualId != null) {
+      // Archive before deleting the manual item so the archive pass can
+      // still see whether it was an outside event (see
+      // ManualPlanItem.isOutsideEvent) and its library link.
+      _archiveOccurrence(day, activity,
+          forceSnapshotUpdate: false, removed: true);
       _manualPlanItems.remove(manualId);
       day.activities.remove(activity);
       _persist();
@@ -1239,6 +1289,8 @@ class AppState extends ChangeNotifier {
     }
     if (!day.activities.remove(activity)) return;
     _removedOccurrences[_occurrenceKey(day.date, activity.activity.id)] = true;
+    _archiveOccurrence(day, activity,
+        forceSnapshotUpdate: false, removed: true);
     _persist();
     notifyListeners();
   }
@@ -1311,6 +1363,10 @@ class AppState extends ChangeNotifier {
       (a, b) => PlannerService.timeRank(a.timeSlot)
           .compareTo(PlannerService.timeRank(b.timeSlot)),
     );
+    // A deliberate per-occurrence edit always refreshes the archive
+    // snapshot, even for a past/today date - unlike passive rebuilds, this
+    // is the user explicitly changing what this occurrence actually is.
+    _archiveOccurrence(day, activity, forceSnapshotUpdate: true);
     _persist();
     notifyListeners();
   }
@@ -1321,6 +1377,7 @@ class AppState extends ChangeNotifier {
   void addManualPlanItem(ManualPlanItem item) {
     _manualPlanItems[item.id] = item;
     _applyManualItems();
+    _archiveCurrentRange();
     _persist();
     notifyListeners();
   }
@@ -1334,6 +1391,7 @@ class AppState extends ChangeNotifier {
     _applyRemovals();
     _applyOccurrenceOverrides();
     _applyManualItems();
+    _archiveCurrentRange();
     _persist();
     notifyListeners();
   }
@@ -2030,11 +2088,16 @@ class AppState extends ChangeNotifier {
     );
     _outsideEventSourceSnapshots =
         saved.outsideEventSourceSnapshots.take(10).toList(growable: false);
+    // Loaded before rebuilding _generatedDays so the archive pass below
+    // upserts into (rather than replaces) whatever history already exists -
+    // see _archiveCurrentRange.
+    _planHistory = Map<String, PlanHistoryEntry>.from(saved.planHistory);
     _generatedDays = _buildPlan();
     _applyRemovals();
     _applyManualItems();
     _applyOverlays(saved);
     _applyOccurrenceOverrides();
+    _archiveCurrentRange();
     _refreshCachedIcs();
 
     if (persistLocal) {
@@ -2194,6 +2257,7 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveRemovedMap(state.removedMap);
     PersistenceService.saveOccurrenceOverridesMap(state.occurrenceOverrides);
     PersistenceService.saveManualPlanItems(state.manualPlanItems);
+    PersistenceService.savePlanHistoryMap(state.planHistory);
     PersistenceService.saveOutsideEventSources(state.outsideEventSources);
     PersistenceService.saveOutsideEventSourceSnapshots(
       state.outsideEventSourceSnapshots,
@@ -2332,6 +2396,7 @@ class AppState extends ChangeNotifier {
       manualPlanItems: Map<String, ManualPlanItem>.from(
         _manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
       ),
+      planHistory: Map<String, PlanHistoryEntry>.from(_planHistory),
       outsideEventSources: List<UserEventSource>.from(_outsideEventSources),
       outsideEventSourceSnapshots:
           List<SourceListSnapshot>.from(_outsideEventSourceSnapshots),
@@ -2535,6 +2600,120 @@ class AppState extends ChangeNotifier {
         );
       }
     }
+  }
+
+  /// Passively archives every occurrence currently in [_generatedDays].
+  /// Called after every build/rebuild ([regenerate], [generateRange],
+  /// [setPlanStyle], [_applySavedState], [addManualPlanItem],
+  /// [removeManualPlanItem], and the no-saved-state constructor path) so a
+  /// dated occurrence is captured before it can fall out of
+  /// [_generatedDays] (e.g. when [_rangeStart] advances past it). Never
+  /// marks anything [PlanHistoryEntry.removed] - an occurrence present here
+  /// is, by definition, currently in the live plan; see [removeFromPlan]
+  /// for the only path that sets that flag.
+  void _archiveCurrentRange() {
+    for (final day in _generatedDays) {
+      for (final pa in day.activities) {
+        _archiveOccurrence(day, pa, forceSnapshotUpdate: false);
+      }
+    }
+  }
+
+  /// Resolves [pa]'s source/library-link metadata and upserts its archive
+  /// entry. [forceSnapshotUpdate] is only ever `true` for a deliberate
+  /// per-occurrence edit ([editPlannedOccurrence]); every other caller
+  /// (passive rebuilds, check-in, lock, removal) passes `false` so an
+  /// already-frozen past snapshot can't be quietly overwritten by a source
+  /// [Activity] rename or a regeneration that happens to land a different
+  /// occurrence on the same key. See [_upsertArchiveEntry].
+  void _archiveOccurrence(
+    DayPlan day,
+    PlannedActivity pa, {
+    required bool forceSnapshotUpdate,
+    bool removed = false,
+  }) {
+    final manualId = pa.manualItemId;
+    final manualItem = manualId == null ? null : _manualPlanItems[manualId];
+    final source = manualItem == null
+        ? PlanHistorySource.generated
+        : manualItem.isOutsideEvent
+            ? PlanHistorySource.outsideEvent
+            : PlanHistorySource.manual;
+    final sourceActivityId =
+        manualItem == null ? pa.activity.id : manualItem.sourceActivityId;
+
+    _upsertArchiveEntry(
+      occurrenceKey: _occurrenceKey(day.date, pa.activity.id),
+      date: day.date,
+      sourceActivityId: sourceActivityId,
+      title: pa.title,
+      timeSlot: pa.timeSlot,
+      durationMinutes: pa.activity.durationMinutes,
+      category: pa.category,
+      difficulty: pa.difficulty,
+      energy: pa.energy,
+      social: pa.social,
+      source: source,
+      status: pa.status,
+      locked: pa.locked,
+      removed: removed,
+      forceSnapshotUpdate: forceSnapshotUpdate,
+    );
+  }
+
+  /// Creates or updates one [PlanHistoryEntry]. [status]/[locked]/[removed]
+  /// always reflect the latest call. The remaining "snapshot" fields
+  /// (title/timeSlot/durationMinutes/category/dimensions/source/
+  /// sourceActivityId) are frozen once an entry exists for a date that is
+  /// today or earlier, unless [forceSnapshotUpdate] is true - this is what
+  /// lets the archive answer "what did this day actually look like" even
+  /// after the source [Activity] is renamed or the plan is regenerated.
+  /// Future-dated entries keep refreshing freely, since nothing has
+  /// happened there yet.
+  void _upsertArchiveEntry({
+    required String occurrenceKey,
+    required DateTime date,
+    String? sourceActivityId,
+    required String title,
+    required String timeSlot,
+    required int durationMinutes,
+    required String category,
+    required int difficulty,
+    required String energy,
+    required String social,
+    required PlanHistorySource source,
+    required CheckStatus status,
+    required bool locked,
+    bool removed = false,
+    required bool forceSnapshotUpdate,
+  }) {
+    final dateOnly = _dateOnly(date);
+    final existing = _planHistory[occurrenceKey];
+    final isPastOrToday = !dateOnly.isAfter(_dateOnly(DateTime.now()));
+    final keepFrozenSnapshot =
+        existing != null && isPastOrToday && !forceSnapshotUpdate;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    _planHistory[occurrenceKey] = PlanHistoryEntry(
+      occurrenceKey: occurrenceKey,
+      date: dateOnly,
+      sourceActivityId:
+          keepFrozenSnapshot ? existing.sourceActivityId : sourceActivityId,
+      title: keepFrozenSnapshot ? existing.title : title,
+      timeSlot: keepFrozenSnapshot ? existing.timeSlot : timeSlot,
+      durationMinutes:
+          keepFrozenSnapshot ? existing.durationMinutes : durationMinutes,
+      category: keepFrozenSnapshot ? existing.category : category,
+      difficulty: keepFrozenSnapshot ? existing.difficulty : difficulty,
+      energy: keepFrozenSnapshot ? existing.energy : energy,
+      social: keepFrozenSnapshot ? existing.social : social,
+      source: keepFrozenSnapshot ? existing.source : source,
+      status: status,
+      locked: locked,
+      removed: removed,
+      createdAtMillis: existing?.createdAtMillis ?? now,
+      updatedAtMillis: now,
+    );
   }
 
   static String _normalizeActivityTitle(String title) {

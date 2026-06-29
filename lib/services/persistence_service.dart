@@ -6,6 +6,7 @@ import '../models/activity.dart';
 import '../models/day_plan.dart' show OccurrenceOverride;
 import '../models/event_suggestion.dart';
 import '../models/manual_plan_item.dart';
+import '../models/plan_history_entry.dart';
 import '../models/range_type.dart';
 import '../models/source_list_snapshot.dart';
 import '../models/user_event_source.dart';
@@ -61,6 +62,7 @@ class PersistenceService {
   static const _keyRemovedMap = 'ls_removed_map';
   static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
   static const _keyManualPlanItems = 'ls_manual_plan_items';
+  static const _keyPlanHistoryMap = 'ls_plan_history_map';
   static const _keyOutsideEventSources = 'ls_outside_event_sources';
   static const _keyOutsideEventSourceSnapshots =
       'ls_outside_event_source_snapshots';
@@ -141,6 +143,8 @@ class PersistenceService {
         const <String, OccurrenceOverride>{};
     final manualPlanItems =
         _loadManualPlanItemsBlob() ?? const <String, ManualPlanItem>{};
+    final planHistory =
+        _loadPlanHistoryMapBlob() ?? const <String, PlanHistoryEntry>{};
     final outsideEventSources = loadOutsideEventSources();
     final outsideEventSourceSnapshots = loadOutsideEventSourceSnapshots();
 
@@ -191,6 +195,7 @@ class PersistenceService {
       removedMap: removedMap,
       occurrenceOverrides: occurrenceOverrides,
       manualPlanItems: manualPlanItems,
+      planHistory: planHistory,
       outsideEventSources: outsideEventSources,
       outsideEventSourceSnapshots: outsideEventSourceSnapshots,
     );
@@ -341,6 +346,12 @@ class PersistenceService {
   static void saveManualPlanItems(Map<String, ManualPlanItem> value) =>
       _prefs.setString(
         _keyManualPlanItems,
+        jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
+      );
+
+  static void savePlanHistoryMap(Map<String, PlanHistoryEntry> value) =>
+      _prefs.setString(
+        _keyPlanHistoryMap,
         jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
       );
 
@@ -557,6 +568,28 @@ class PersistenceService {
     return null;
   }
 
+  static Map<String, PlanHistoryEntry>? _loadPlanHistoryMapBlob() {
+    final raw = _prefs.getString(_keyPlanHistoryMap);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            PlanHistoryEntry.fromMap(
+              value is Map ? Map<String, dynamic>.from(value) : const {},
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // A malformed blob is no worse than no archive having ever been
+      // saved; a fresh archive simply starts accumulating from here.
+    }
+    return null;
+  }
+
   static List<Activity> _loadActivities(List<Activity> defaultActivities) {
     final raw = _prefs.getString(_keyActivities);
     if (raw == null || raw.isEmpty) {
@@ -599,6 +632,7 @@ class SavedState {
     this.removedMap = const {},
     this.occurrenceOverrides = const {},
     this.manualPlanItems = const {},
+    this.planHistory = const {},
     this.outsideEventSources = const [],
     this.outsideEventSourceSnapshots = const [],
     this.planStyle = 'balanced',
@@ -690,6 +724,13 @@ class SavedState {
   /// Stable-id-keyed manual plan items. See [ManualPlanItem].
   final Map<String, ManualPlanItem> manualPlanItems;
 
+  /// Occurrence-keyed (`yyyy-MM-dd:activityId`) archive of dated planned
+  /// occurrence snapshots, independent of the live [Activity]/
+  /// [ManualPlanItem] they came from. Never cleared by regeneration/range/
+  /// plan-style changes - see [AppState] for how entries are captured and
+  /// frozen once their date has passed.
+  final Map<String, PlanHistoryEntry> planHistory;
+
   /// User-managed outside-event sources for this calendar. Synced through
   /// the same Firestore calendar document as the rest of [SavedState] so
   /// every device signed into the same calendar sees the same source list.
@@ -741,6 +782,8 @@ class SavedState {
           occurrenceOverrides.map((key, value) => MapEntry(key, value.toMap())),
       'manualPlanItems':
           manualPlanItems.map((key, value) => MapEntry(key, value.toMap())),
+      'planHistory':
+          planHistory.map((key, value) => MapEntry(key, value.toMap())),
       'outsideEventSources':
           outsideEventSources.map((source) => source.toMap()).toList(),
       'outsideEventSourceSnapshots': outsideEventSourceSnapshots
@@ -812,6 +855,7 @@ class SavedState {
         map['occurrenceOverrides'],
       ),
       manualPlanItems: _readManualPlanItems(map['manualPlanItems']),
+      planHistory: _readPlanHistory(map['planHistory']),
       outsideEventSources: _readOutsideEventSources(
         map['outsideEventSources'],
       ),
@@ -866,6 +910,20 @@ class SavedState {
         (key, entry) => MapEntry(
           key.toString(),
           ManualPlanItem.fromMap(
+            entry is Map ? Map<String, dynamic>.from(entry) : const {},
+          ),
+        ),
+      );
+    }
+    return const {};
+  }
+
+  static Map<String, PlanHistoryEntry> _readPlanHistory(Object? value) {
+    if (value is Map) {
+      return value.map(
+        (key, entry) => MapEntry(
+          key.toString(),
+          PlanHistoryEntry.fromMap(
             entry is Map ? Map<String, dynamic>.from(entry) : const {},
           ),
         ),
