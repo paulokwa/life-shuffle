@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/range_type.dart';
+import '../models/source_list_snapshot.dart';
 import '../models/sync_message.dart';
 import '../models/user_event_source.dart';
 import '../services/auth_service.dart';
@@ -1942,6 +1943,13 @@ class _OutsideEventSourcesCard extends StatelessWidget {
                 quiet: true,
                 onTap: () => _showImportOutsideSourcesDialog(context, state),
               ),
+              if (sources.isNotEmpty)
+                _PublishingActionButton(
+                  key: const ValueKey('settings-save-outside-source-list'),
+                  icon: Icons.bookmark_add_outlined,
+                  label: 'Save current list',
+                  onTap: () => _saveCurrentList(context),
+                ),
             ],
           ),
           if (state.cachedOutsideEventsFetchedAtMillis != null) ...[
@@ -2028,6 +2036,9 @@ class _OutsideEventSourcesCard extends StatelessWidget {
               );
             }),
           ],
+          const SizedBox(height: 12),
+          const Divider(height: 1, thickness: 1, color: borderWarm),
+          _SourceSnapshotHistory(state: state),
         ],
       ),
     );
@@ -2053,6 +2064,318 @@ class _OutsideEventSourcesCard extends StatelessWidget {
       ),
     );
   }
+
+  void _saveCurrentList(BuildContext context) {
+    final snapshot = state.saveCurrentOutsideEventSources();
+    if (snapshot == null) return;
+    final message = state.userId == null
+        ? 'Source list saved on this device.'
+        : 'Source list saved. It will sync with this calendar.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+}
+
+class _SourceSnapshotHistory extends StatelessWidget {
+  const _SourceSnapshotHistory({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshots = state.outsideEventSourceSnapshots;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ExpansionTile(
+          key: const ValueKey('settings-source-snapshot-history'),
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          leading: const Icon(
+            Icons.history_rounded,
+            size: 20,
+            color: primaryTerracotta,
+          ),
+          title: Text(
+            'Saved source lists',
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+            ),
+          ),
+          subtitle: Text(
+            snapshots.isEmpty
+                ? 'No saved lists yet'
+                : '${snapshots.length} of 10 saved',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textMuted,
+            ),
+          ),
+          children: [
+            if (snapshots.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Save the current list to create a dated restore point.',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+              )
+            else ...[
+              Text(
+                'The newest 10 are kept. Saving an 11th removes the oldest.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: textMuted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ...snapshots.map(
+                (snapshot) => ListTile(
+                  key: ValueKey('source-snapshot-${snapshot.id}'),
+                  contentPadding: EdgeInsets.zero,
+                  minLeadingWidth: 32,
+                  leading: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: warmBeige,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.bookmark_outline_rounded,
+                      size: 16,
+                      color: primaryTerracotta,
+                    ),
+                  ),
+                  title: Text(
+                    _formatLocalTimestamp(snapshot.createdAtMillis),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${snapshot.sources.length} source${snapshot.sources.length == 1 ? '' : 's'}',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: textMuted,
+                  ),
+                  onTap: () => _showSourceSnapshotPreview(
+                    context,
+                    state,
+                    snapshot,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showSourceSnapshotPreview(
+  BuildContext context,
+  AppState state,
+  SourceListSnapshot snapshot,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: surfaceWhite,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) {
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: borderWarmStrong,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Saved source list',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatLocalTimestamp(snapshot.createdAtMillis)} · ${snapshot.sources.length} source${snapshot.sources.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: borderWarm),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: snapshot.sources.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: borderWarm),
+                    itemBuilder: (context, index) {
+                      final source = snapshot.sources[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          source.displayName,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${source.kind.label} · ${source.enabled ? 'On' : 'Off'}\n${source.url}',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: textMuted,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      key: const ValueKey('delete-source-snapshot'),
+                      onPressed: () async {
+                        final delete = await _confirmDeleteSourceSnapshot(
+                          sheetContext,
+                          snapshot,
+                        );
+                        if (!delete || !sheetContext.mounted) return;
+                        state.deleteOutsideEventSourceSnapshot(snapshot.id);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete'),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      key: const ValueKey('restore-source-snapshot'),
+                      onPressed: () async {
+                        final restore = await _confirmRestoreSourceSnapshot(
+                          sheetContext,
+                          snapshot,
+                          state.outsideEventSources.length,
+                        );
+                        if (!restore || !sheetContext.mounted) return;
+                        state.restoreOutsideEventSourceSnapshot(snapshot.id);
+                        Navigator.of(sheetContext).pop();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Saved source list restored.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.restore_rounded),
+                      label: const Text('Restore list'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<bool> _confirmRestoreSourceSnapshot(
+  BuildContext context,
+  SourceListSnapshot snapshot,
+  int currentCount,
+) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Restore this source list?'),
+          content: Text(
+            'This will replace your current $currentCount source${currentCount == 1 ? '' : 's'} with the ${snapshot.sources.length} in this saved list.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
+Future<bool> _confirmDeleteSourceSnapshot(
+  BuildContext context,
+  SourceListSnapshot snapshot,
+) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete saved list?'),
+          content: Text(
+            'Delete the source list saved ${_formatLocalTimestamp(snapshot.createdAtMillis)}?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 }
 
 class _OutsideEventSourceRow extends StatelessWidget {

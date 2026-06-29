@@ -12,6 +12,7 @@ import '../models/event_suggestion.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
+import '../models/source_list_snapshot.dart';
 import '../models/user_event_source.dart';
 import '../services/curated_rss_feed_registry.dart';
 import '../services/event_dedupe_service.dart';
@@ -131,6 +132,7 @@ class AppState extends ChangeNotifier {
   /// [addManualPlanItem] and [removeManualPlanItem].
   Map<String, ManualPlanItem> _manualPlanItems = {};
   List<UserEventSource> _outsideEventSources = const [];
+  List<SourceListSnapshot> _outsideEventSourceSnapshots = const [];
   List<EventSuggestion> _cachedOutsideEvents = const [];
   int? _cachedOutsideEventsFetchedAtMillis;
   bool _isRefreshingOutsideEvents = false;
@@ -400,6 +402,8 @@ class AppState extends ChangeNotifier {
       List.unmodifiable(_manualPlanItems.values);
   List<UserEventSource> get outsideEventSources =>
       List.unmodifiable(_outsideEventSources);
+  List<SourceListSnapshot> get outsideEventSourceSnapshots =>
+      List.unmodifiable(_outsideEventSourceSnapshots);
   List<EventSuggestion> get cachedOutsideEvents =>
       List.unmodifiable(_cachedOutsideEvents);
   int? get cachedOutsideEventsFetchedAtMillis =>
@@ -1425,6 +1429,57 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  SourceListSnapshot? saveCurrentOutsideEventSources({int? nowMillis}) {
+    if (_outsideEventSources.isEmpty) return null;
+    final snapshot = SourceListSnapshot.capture(
+      createdAtMillis: nowMillis ?? DateTime.now().millisecondsSinceEpoch,
+      sources: _outsideEventSources,
+    );
+    _outsideEventSourceSnapshots = [
+      snapshot,
+      ..._outsideEventSourceSnapshots.where((item) => item.id != snapshot.id),
+    ].take(10).toList(growable: false);
+    _persist();
+    notifyListeners();
+    return snapshot;
+  }
+
+  bool restoreOutsideEventSourceSnapshot(String snapshotId) {
+    final index = _outsideEventSourceSnapshots.indexWhere(
+      (snapshot) => snapshot.id == snapshotId,
+    );
+    if (index < 0) return false;
+    final snapshot = _outsideEventSourceSnapshots[index];
+    _outsideEventSources = snapshot.sources
+        .map(
+          (source) => UserEventSource(
+            id: source.id,
+            displayName: source.displayName,
+            url: source.url,
+            kind: source.kind,
+            enabled: source.enabled,
+          ),
+        )
+        .toList(growable: false);
+    _cachedOutsideEvents = const [];
+    _cachedOutsideEventsFetchedAtMillis = null;
+    _persist();
+    _persistCachedOutsideEvents();
+    notifyListeners();
+    return true;
+  }
+
+  bool deleteOutsideEventSourceSnapshot(String snapshotId) {
+    final filtered = _outsideEventSourceSnapshots
+        .where((snapshot) => snapshot.id != snapshotId)
+        .toList(growable: false);
+    if (filtered.length == _outsideEventSourceSnapshots.length) return false;
+    _outsideEventSourceSnapshots = filtered;
+    _persist();
+    notifyListeners();
+    return true;
+  }
+
   /// Runs a manual outside-events refresh across curated, user-managed, and
   /// built-in API sources. Never called automatically (not on app open,
   /// login, calendar switch, or background sync) - only from the Settings
@@ -1973,6 +2028,8 @@ class AppState extends ChangeNotifier {
     _outsideEventSources = List<UserEventSource>.from(
       saved.outsideEventSources,
     );
+    _outsideEventSourceSnapshots =
+        saved.outsideEventSourceSnapshots.take(10).toList(growable: false);
     _generatedDays = _buildPlan();
     _applyRemovals();
     _applyManualItems();
@@ -2138,6 +2195,9 @@ class AppState extends ChangeNotifier {
     PersistenceService.saveOccurrenceOverridesMap(state.occurrenceOverrides);
     PersistenceService.saveManualPlanItems(state.manualPlanItems);
     PersistenceService.saveOutsideEventSources(state.outsideEventSources);
+    PersistenceService.saveOutsideEventSourceSnapshots(
+      state.outsideEventSourceSnapshots,
+    );
   }
 
   bool _applyCalendarMetadata(
@@ -2202,6 +2262,8 @@ class AppState extends ChangeNotifier {
       calendarTitle: title,
       calendarNameConfirmed: true,
       introOnboardingCompleted: _introOnboardingCompleted,
+      outsideEventSources: const [],
+      outsideEventSourceSnapshots: const [],
       enabledMap: const {},
       checkinMap: const {},
       lockedMap: const {},
@@ -2271,6 +2333,8 @@ class AppState extends ChangeNotifier {
         _manualPlanItems.map((id, item) => MapEntry(id, item.copy())),
       ),
       outsideEventSources: List<UserEventSource>.from(_outsideEventSources),
+      outsideEventSourceSnapshots:
+          List<SourceListSnapshot>.from(_outsideEventSourceSnapshots),
     );
   }
 
