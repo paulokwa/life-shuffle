@@ -358,8 +358,7 @@ void main() {
       expect(result.suggestions, isEmpty);
       expect(
         result.warnings.single.message,
-        contains(
-            '2 feed entries were found, but outside your current planning '
+        contains('2 feed entries were found, but outside your current planning '
             'range'),
       );
       expect(result.warnings.single.category,

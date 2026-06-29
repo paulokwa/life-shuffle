@@ -79,4 +79,4 @@ Production Firestore rules deployment is intentionally separate:
 powershell -ExecutionPolicy Bypass -File tool/diagnostics/deploy_firebase_rules.ps1
 ```
 
-Only run the deploy script after the rules change has been reviewed and approved for production.  
+Only run the deploy script after the rules change has been reviewed and approved for production.

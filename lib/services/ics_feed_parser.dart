@@ -142,8 +142,9 @@ class IcsFeedParser {
     final endRaw = props['DTEND'];
     final end = endRaw == null ? null : _parseIcsDateTime(endRaw);
 
-    final description =
-        props['DESCRIPTION'] == null ? null : _unescapeText(props['DESCRIPTION']!);
+    final description = props['DESCRIPTION'] == null
+        ? null
+        : _unescapeText(props['DESCRIPTION']!);
     final location =
         props['LOCATION'] == null ? null : _unescapeText(props['LOCATION']!);
     final venueName = location?.split(',').first.trim();
@@ -181,7 +182,8 @@ class IcsFeedParser {
         'feedUrl': sourceUrl,
         if (uid != null) 'uid': uid,
       },
-      dedupeKey: eventDedupeKey(title: title, start: start, venueName: venueName),
+      dedupeKey:
+          eventDedupeKey(title: title, start: start, venueName: venueName),
     );
   }
 

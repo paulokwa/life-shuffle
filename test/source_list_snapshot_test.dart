@@ -56,7 +56,7 @@ void main() {
     expect(restored.outsideEventSources, hasLength(1));
     expect(restored.outsideEventSourceSnapshots, hasLength(1));
     expect(
-      restored.outsideEventSourceSnapshots!.single.sources.single.url,
+      restored.outsideEventSourceSnapshots.single.sources.single.url,
       source.url,
     );
   });

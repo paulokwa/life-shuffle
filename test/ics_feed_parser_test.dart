@@ -52,7 +52,9 @@ void main() {
     expect(event.endDateTime, isNotNull);
   });
 
-  test('reads a floating local DTSTART (no Z, no TZID) as plain wall-clock time', () {
+  test(
+      'reads a floating local DTSTART (no Z, no TZID) as plain wall-clock time',
+      () {
     final icsText = [
       'BEGIN:VCALENDAR',
       'BEGIN:VEVENT',
