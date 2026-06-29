@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../widgets/category_chip.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
+import 'outside_events_screen.dart';
 
 class ActivitiesScreen extends StatelessWidget {
   const ActivitiesScreen({super.key});
@@ -75,6 +76,62 @@ class ActivitiesScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  GestureDetector(
+                    key: const ValueKey('activities-outside-events-entry'),
+                    onTap: () => _openOutsideEvents(context, state),
+                    behavior: HitTestBehavior.opaque,
+                    child: LsCard(
+                      color: const Color(0xFFEEF6F2),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accentSage.withValues(alpha: 0.14),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.travel_explore_rounded,
+                              size: 17,
+                              color: accentSage,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Discover outside events',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Browse sourced local ideas and add one to '
+                                  'your plan',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: textMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   GestureDetector(
                     onTap: () => _showStarterPicker(context),
                     behavior: HitTestBehavior.opaque,
@@ -182,6 +239,17 @@ class ActivitiesScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openOutsideEvents(BuildContext context, AppState state) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AppStateScope(
+          state: state,
+          child: const OutsideEventsScreen(),
+        ),
       ),
     );
   }

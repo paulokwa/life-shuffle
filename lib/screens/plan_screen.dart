@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/outside_event_metadata_card.dart';
 import '../widgets/status_choice.dart';
 import 'activities_screen.dart'
     show DimensionFields, SheetButton, showActivityFormSheet;
@@ -1433,6 +1434,18 @@ class _DaySheetActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    ManualPlanItem? manualItem;
+    final manualId = activity.manualItemId;
+    if (manualId != null) {
+      for (final item in state.manualPlanItems) {
+        if (item.id == manualId && item.isOutsideEvent) {
+          manualItem = item;
+          break;
+        }
+      }
+    }
+
     return Container(
       key: ValueKey('day-sheet-activity-${activity.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1493,6 +1506,10 @@ class _DaySheetActivityCard extends StatelessWidget {
               ),
             ],
           ),
+          if (manualItem != null) ...[
+            const SizedBox(height: 10),
+            OutsideEventMetadataCard(item: manualItem),
+          ],
           const SizedBox(height: 12),
           if (canCheckIn)
             Wrap(

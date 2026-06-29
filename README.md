@@ -1,5 +1,5 @@
 # life-shuffle
-Mobile-first Flutter app for planning personal activities, generating rule-based calendars, and helping users get unstuck.
+Mobile-first Flutter application for planning personal activities, generating rule-based calendars, and helping users get unstuck.
 
 ## Local dev setup
 
@@ -40,6 +40,24 @@ npm test
 ```
 
 `npm test` runs `netlify/tests/calendar-feed.test.js` with Node's built-in test runner — no credentials needed, since it only exercises the pure decision logic and the no-credentials/wrong-method/missing-token error paths. Tests intentionally live outside `netlify/functions` so Netlify does not deploy them as serverless functions. Testing against a real calendar requires `netlify dev` plus a real `FIREBASE_SERVICE_ACCOUNT_JSON` — see `docs/ICS_FEED_ENDPOINT_PLAN.md` section 8.
+
+## Outside events spike
+
+The Outside Events browser loads curated RSS/Atom feeds through:
+
+```
+/.netlify/functions/outside-events-rss?source=<curatedSourceId>
+```
+
+The function only accepts source IDs defined in `netlify/functions/outside-events-rss.js`; it does not proxy arbitrary user-provided URLs. The Flutter adapter keeps a matching curated registry in `lib/services/curated_rss_feed_registry.dart` and falls back to direct fetch only when the proxy is unavailable, which is mainly useful for tests/native contexts.
+
+API-backed adapters remain present but are not live unless credentials and backend calls are added:
+
+| Source | Environment variable | Current state |
+|---|---|---|
+| Ticketmaster | `TICKETMASTER_API_KEY` | Adapter reports not configured. Live Flutter web use should go through a Netlify Function so the key is not exposed. |
+| Eventbrite | `EVENTBRITE_API_TOKEN` | Adapter reports not configured. API/token shape still needs verification before live calls. |
+| Bandsintown | `BANDSINTOWN_APP_ID` | Adapter reports not configured. Artist/search strategy still needs a product decision. |
 
 ## Diagnostics
 

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
 import '../models/generated_plan_range.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../services/browser_print.dart';
@@ -71,8 +72,8 @@ class _PrintPreviewViewState extends State<_PrintPreviewView> {
     if (!mounted || printed != false) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-            'Use your browser or device print option to print this page.'),
+        content:
+            Text('Use your browser or device print option to print this page.'),
       ),
     );
   }
@@ -369,6 +370,14 @@ class _PrintActivityRow extends StatelessWidget {
             socialEnabled: state.socialEnabled,
           )
         : const <String>[];
+    final manualItem = state.manualPlanItems.cast<ManualPlanItem?>().firstWhere(
+        (item) => item?.id == activity.manualItemId,
+        orElse: () => null);
+    final outsideEventLines = options.showOutsideEventDetails &&
+            manualItem != null &&
+            manualItem.isOutsideEvent
+        ? TextWeekExportService.outsideEventDetailLines(manualItem)
+        : const <String>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,6 +429,14 @@ class _PrintActivityRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               dimensionLabels.join(' · '),
+              style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
+            ),
+          ),
+        if (outsideEventLines.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              outsideEventLines.join(' · '),
               style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
             ),
           ),

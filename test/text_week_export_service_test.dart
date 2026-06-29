@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
 import 'package:life_shuffle/models/export_print_options.dart';
+import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/range_type.dart';
 import 'package:life_shuffle/services/text_week_export_service.dart';
@@ -417,5 +418,87 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  test('includes outside event metadata when a manual item is supplied', () {
+    final manualItem = ManualPlanItem(
+      id: 'outside-1',
+      dateKey: '2026-06-17',
+      title: 'Garden concert',
+      timeSlot: '8:00 PM',
+      category: 'Outside',
+      durationMinutes: 90,
+      outsideEventId: 'evt-1',
+      outsideEventSourceName: 'Venue page',
+      outsideEventSourceUrl: 'https://example.com/events',
+      outsideEventTicketUrl: 'https://example.com/tickets',
+      outsideEventVenueName: 'Victoria Park',
+      outsideEventConfidence: 0.8,
+      outsideEventUncertainFields: const ['price'],
+    );
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [
+        DayPlan(
+          date: DateTime(2026, 6, 17),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'manual_outside-1',
+                title: 'Garden concert',
+                category: 'Outside',
+                durationMinutes: 90,
+              ),
+              timeSlot: '8:00 PM',
+              manualItemId: 'outside-1',
+            ),
+          ],
+        ),
+      ],
+      manualPlanItemsById: {'outside-1': manualItem},
+    );
+
+    expect(export, contains('Venue: Victoria Park'));
+    expect(export, contains('Source: Venue page'));
+    expect(export, contains('Tickets: https://example.com/tickets'));
+    expect(export, contains('Confidence: 80%'));
+    expect(export, contains('Uncertain: price'));
+  });
+
+  test('hides outside event metadata when the toggle is off', () {
+    final manualItem = ManualPlanItem(
+      id: 'outside-1',
+      dateKey: '2026-06-17',
+      title: 'Garden concert',
+      timeSlot: '8:00 PM',
+      category: 'Outside',
+      durationMinutes: 90,
+      outsideEventId: 'evt-1',
+      outsideEventSourceName: 'Venue page',
+    );
+    final export = TextWeekExportService.generate(
+      calendarTitle: 'Kwame and Laura',
+      plan: [
+        DayPlan(
+          date: DateTime(2026, 6, 17),
+          activities: [
+            PlannedActivity(
+              activity: Activity(
+                id: 'manual_outside-1',
+                title: 'Garden concert',
+                category: 'Outside',
+                durationMinutes: 90,
+              ),
+              timeSlot: '8:00 PM',
+              manualItemId: 'outside-1',
+            ),
+          ],
+        ),
+      ],
+      manualPlanItemsById: {'outside-1': manualItem},
+      options: const ExportPrintOptions(showOutsideEventDetails: false),
+    );
+
+    expect(export, isNot(contains('Source: Venue page')));
   });
 }

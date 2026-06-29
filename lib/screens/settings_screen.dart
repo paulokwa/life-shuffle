@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/range_type.dart';
+import '../models/source_list_snapshot.dart';
 import '../models/sync_message.dart';
+import '../models/user_event_source.dart';
 import '../services/auth_service.dart';
 import '../services/browser_open_url.dart';
 import '../services/feed_status_text_service.dart';
@@ -28,7 +31,6 @@ class SettingsScreen extends StatelessWidget {
     final displayName = state.displayName?.trim();
     final googleDisplayName = user?.displayName?.trim();
     final email = user?.email?.trim();
-    final currentUserId = user?.uid ?? state.userId;
     final accountName = displayName?.isNotEmpty == true
         ? displayName!
         : googleDisplayName?.isNotEmpty == true
@@ -37,11 +39,7 @@ class SettingsScreen extends StatelessWidget {
                 ? 'Signed in'
                 : 'Local-only mode';
     final profileInitial = _profileInitial(accountName, email);
-    final ownerLabel = state.calendarOwnerUserId == null
-        ? 'Local only'
-        : state.calendarOwnerUserId == currentUserId
-            ? 'You'
-            : _shortId(state.calendarOwnerUserId!);
+    final ownerLabel = state.calendarOwnerDisplayLabel ?? 'Local only';
     final memberLabel = state.calendarMemberDisplayLabels.isEmpty
         ? 'Local only'
         : state.calendarMemberDisplayLabels.join(', ');
@@ -309,6 +307,10 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  const _SectionLabel(label: 'OUTSIDE EVENT SOURCES'),
+                  const SizedBox(height: 10),
+                  _OutsideEventSourcesCard(state: state),
+                  const SizedBox(height: 16),
                   const _SectionLabel(label: 'PUBLISHING'),
                   const SizedBox(height: 10),
                   _PublishingCard(state: state),
@@ -352,11 +354,6 @@ class SettingsScreen extends StatelessWidget {
     final source = displayName?.isNotEmpty == true ? displayName! : email;
     if (source == null || source.isEmpty) return 'K';
     return source.characters.first.toUpperCase();
-  }
-
-  static String _shortId(String id) {
-    if (id.length <= 8) return id;
-    return '${id.substring(0, 8)}...';
   }
 }
 
@@ -493,6 +490,16 @@ class _ExportPrintCard extends StatelessWidget {
               state.exportPrintOptions.copyWith(showLockedStatus: value),
             ),
           ),
+          _OutputDetailToggleRow(
+            toggleKey: const ValueKey('settings-export-toggle-outside-event'),
+            label: 'Outside event details',
+            value: state.exportPrintOptions.showOutsideEventDetails,
+            onChanged: (value) => state.setExportPrintOptions(
+              state.exportPrintOptions.copyWith(
+                showOutsideEventDetails: value,
+              ),
+            ),
+          ),
           if (state.difficultyEnabled ||
               state.energyEnabled ||
               state.socialEnabled)
@@ -599,6 +606,9 @@ void _copyWeekTextExport(BuildContext context, AppState state) {
     difficultyEnabled: state.difficultyEnabled,
     energyEnabled: state.energyEnabled,
     socialEnabled: state.socialEnabled,
+    manualPlanItemsById: {
+      for (final item in state.manualPlanItems) item.id: item,
+    },
   );
   Clipboard.setData(ClipboardData(text: text));
   ScaffoldMessenger.of(context).showSnackBar(
@@ -683,6 +693,387 @@ Future<void> _showCalendarSwitcherDialog(
         onClose: () => Navigator.of(dialogContext).pop(),
       ),
     );
+
+Future<void> _showOutsideSourceDialog(
+  BuildContext context,
+  AppState state, {
+  UserEventSource? source,
+}) async {
+  final nameController = TextEditingController(text: source?.displayName ?? '');
+  final urlController = TextEditingController(text: source?.url ?? '');
+  var kind = source?.kind ?? UserEventSourceKind.autoDetect;
+  String? errorText;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(source == null ? 'Add event source' : 'Edit source'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Display name',
+                      hintText: 'Central Library events',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: urlController,
+                    keyboardType: TextInputType.url,
+                    decoration: InputDecoration(
+                      labelText: 'Source URL',
+                      hintText: 'https://example.com/events',
+                      errorText: errorText,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<UserEventSourceKind>(
+                    value: kind,
+                    decoration: const InputDecoration(labelText: 'Source type'),
+                    items: UserEventSourceKind.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setDialogState(() => kind = value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  // `webcal://` is just a calendar-app convention for "open
+                  // this like https" (Apple/Outlook calendar subscribe
+                  // links use it) - normalize it so pasting one of those
+                  // links works the same as pasting the plain https URL.
+                  final rawUrl = urlController.text.trim();
+                  final url = rawUrl.toLowerCase().startsWith('webcal://')
+                      ? 'https://${rawUrl.substring('webcal://'.length)}'
+                      : rawUrl;
+                  final uri = Uri.tryParse(url);
+                  if (uri == null ||
+                      !uri.hasScheme ||
+                      !(uri.scheme == 'http' || uri.scheme == 'https') ||
+                      uri.host.trim().isEmpty) {
+                    setDialogState(() {
+                      errorText = 'Use a public http or https URL.';
+                    });
+                    return;
+                  }
+                  if (source == null) {
+                    state.addOutsideEventSource(
+                      displayName: nameController.text,
+                      url: url,
+                      kind: kind,
+                    );
+                  } else {
+                    state.updateOutsideEventSource(
+                      source.copyWith(
+                        displayName: nameController.text.trim().isEmpty
+                            ? uri.host
+                            : nameController.text.trim(),
+                        url: url,
+                        kind: kind,
+                        clearLastError: true,
+                      ),
+                    );
+                  }
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  nameController.dispose();
+  urlController.dispose();
+}
+
+Future<void> _confirmDeleteOutsideSource(
+  BuildContext context,
+  AppState state,
+  UserEventSource source,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Delete source?'),
+        content: Text(
+          'Delete ${source.displayName}? Cached suggestions from this source '
+          'will be removed from Outside Events, but items already added to '
+          'your plan stay there.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      );
+    },
+  );
+  if (confirmed == true) {
+    state.deleteOutsideEventSource(source.id);
+  }
+}
+
+/// Identifies an exported source list so import doesn't silently accept an
+/// unrelated JSON document that happens to have a "sources" key.
+const _outsideEventSourceExportType = 'life-shuffle-outside-event-sources';
+
+String _encodeOutsideEventSourcesExport(List<UserEventSource> sources) {
+  return const JsonEncoder.withIndent('  ').convert({
+    'type': _outsideEventSourceExportType,
+    'version': 1,
+    'sources': sources.map((source) => source.toExportMap()).toList(),
+  });
+}
+
+/// Throws [FormatException] if [raw] isn't valid JSON or doesn't match the
+/// exported shape (see [_encodeOutsideEventSourcesExport]).
+List<UserEventSource> _decodeOutsideEventSourcesImport(String raw) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } on FormatException {
+    throw const FormatException('That is not valid JSON.');
+  }
+  if (decoded is! Map || decoded['sources'] is! List) {
+    throw const FormatException(
+      'Expected an exported source list: a JSON object with a "sources" '
+      'list.',
+    );
+  }
+  return (decoded['sources'] as List)
+      .whereType<Map>()
+      .map(
+        (map) => UserEventSource.fromExportMap(
+          Map<String, dynamic>.from(map),
+        ),
+      )
+      .toList();
+}
+
+Future<void> _showExportOutsideSourcesDialog(
+  BuildContext context,
+  List<UserEventSource> sources,
+) async {
+  final json = _encodeOutsideEventSourcesExport(sources);
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Export sources'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${sources.length} source${sources.length == 1 ? '' : 's'}'
+                  ' - display name, URL, type, and enabled status only. No '
+                  'cached events, API keys, or calendar IDs.',
+                  style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: backgroundCream,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SelectableText(
+                    json,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: json));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Source list copied as JSON')),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> _showImportOutsideSourcesDialog(
+  BuildContext context,
+  AppState state,
+) async {
+  final controller = TextEditingController();
+  String? errorText;
+  List<UserEventSource>? preview;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          void runPreview() {
+            final raw = controller.text.trim();
+            if (raw.isEmpty) {
+              setDialogState(() {
+                errorText = 'Paste exported JSON first.';
+                preview = null;
+              });
+              return;
+            }
+            try {
+              final parsed = _decodeOutsideEventSourcesImport(raw);
+              setDialogState(() {
+                errorText = null;
+                preview = parsed;
+              });
+            } catch (e) {
+              setDialogState(() {
+                errorText = e is FormatException
+                    ? e.message
+                    : 'Could not parse that as an exported source list.';
+                preview = null;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Import sources'),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Paste a source list exported from Life Shuffle. '
+                      'Imported sources are added to this calendar and '
+                      'sync like any other source.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: controller,
+                      maxLines: 6,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                      decoration: InputDecoration(
+                        hintText:
+                            '{"type": "$_outsideEventSourceExportType", ...}',
+                        errorText: errorText,
+                      ),
+                      onChanged: (_) {
+                        if (preview != null || errorText != null) {
+                          setDialogState(() {
+                            preview = null;
+                            errorText = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    if (preview != null)
+                      Text(
+                        'Found ${preview!.length} source'
+                        '${preview!.length == 1 ? '' : 's'} to check for '
+                        'import.',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: runPreview,
+                        child: const Text('Preview'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: preview == null
+                    ? null
+                    : () {
+                        final added = state.importOutsideEventSources(preview!);
+                        Navigator.of(dialogContext).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              added == 0
+                                  ? 'No new sources - all already in this '
+                                      'calendar.'
+                                  : '$added source${added == 1 ? '' : 's'} '
+                                      'imported.',
+                            ),
+                          ),
+                        );
+                      },
+                child: const Text('Import'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  controller.dispose();
+}
 
 class _RenameCalendarDialog extends StatefulWidget {
   const _RenameCalendarDialog({
@@ -1442,6 +1833,887 @@ class _PublishingCard extends StatelessWidget {
   }
 }
 
+class _OutsideEventSourcesCard extends StatelessWidget {
+  const _OutsideEventSourcesCard({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final sources = state.outsideEventSources;
+    final isRefreshing = state.isRefreshingOutsideEvents;
+    final fetchingSourceId = state.refreshingOutsideEventSourceId;
+    final summary = state.lastOutsideEventRefreshSummary;
+    return LsCard(
+      key: const ValueKey('settings-outside-event-sources-card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: warmBeige,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.travel_explore_rounded,
+                  size: 18,
+                  color: primaryTerracotta,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Outside event sources',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      sources.isEmpty
+                          ? 'No user sources yet'
+                          : '${sources.length} saved source${sources.length == 1 ? '' : 's'}',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Add public event pages, RSS/Atom feeds, or iCalendar (.ics) '
+            'subscription links. This list syncs with this calendar across '
+            'devices; fetched results stay cached on this device only and '
+            'may need refreshing per device.',
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              height: 1.35,
+              color: textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _PublishingActionButton(
+                key: const ValueKey('settings-add-outside-event-source'),
+                icon: Icons.add_link_rounded,
+                label: 'Add source',
+                onTap: () => _showOutsideSourceDialog(context, state),
+              ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-refresh-outside-event-sources'),
+                icon: Icons.sync_rounded,
+                label: isRefreshing ? 'Fetching...' : 'Fetch latest events',
+                loading: isRefreshing,
+                onTap: isRefreshing
+                    ? null
+                    : () => unawaited(_refreshOutsideSources(context, state)),
+              ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-export-outside-event-sources'),
+                icon: Icons.ios_share_rounded,
+                label: 'Export sources',
+                quiet: true,
+                onTap: sources.isEmpty
+                    ? null
+                    : () => _showExportOutsideSourcesDialog(context, sources),
+              ),
+              _PublishingActionButton(
+                key: const ValueKey('settings-import-outside-event-sources'),
+                icon: Icons.file_download_outlined,
+                label: 'Import sources',
+                quiet: true,
+                onTap: () => _showImportOutsideSourcesDialog(context, state),
+              ),
+              if (sources.isNotEmpty)
+                _PublishingActionButton(
+                  key: const ValueKey('settings-save-outside-source-list'),
+                  icon: Icons.bookmark_add_outlined,
+                  label: 'Save current list',
+                  onTap: () => _saveCurrentList(context),
+                ),
+            ],
+          ),
+          if (state.cachedOutsideEventsFetchedAtMillis != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Last fetched: ${_formatLocalTimestamp(state.cachedOutsideEventsFetchedAtMillis!)}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (isRefreshing) ...[
+            const SizedBox(height: 6),
+            Text(
+              key: const ValueKey('settings-outside-event-refresh-progress'),
+              state.refreshProgressLabel,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (summary != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              key: const ValueKey('settings-outside-event-refresh-summary'),
+              '${summary.sourcesChecked} source${summary.sourcesChecked == 1 ? '' : 's'} checked · '
+              '${summary.sourcesSucceeded} succeeded · '
+              '${summary.sourcesFailed} failed · '
+              '${summary.eventsFound} event${summary.eventsFound == 1 ? '' : 's'} found',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: summary.sourcesFailed > 0 ? sand : accentSage,
+              ),
+            ),
+          ],
+          if (sources.isEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: warmBeige,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'Start with a venue, library, city events page, or a feed URL. '
+                'Private network and localhost URLs are blocked by the fetcher.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: textMuted,
+                ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, thickness: 1, color: borderWarm),
+            ...sources.map((source) {
+              return _OutsideEventSourceRow(
+                source: source,
+                isFetching: fetchingSourceId == source.id,
+                fetchDisabled: isRefreshing && fetchingSourceId != source.id,
+                webpageAiConfigured: state.lastWebpageAiConfigured,
+                onToggle: (enabled) =>
+                    state.setOutsideEventSourceEnabled(source.id, enabled),
+                onEdit: () => _showOutsideSourceDialog(
+                  context,
+                  state,
+                  source: source,
+                ),
+                onDelete: () => _confirmDeleteOutsideSource(
+                  context,
+                  state,
+                  source,
+                ),
+                onFetch: () => unawaited(state.refreshOutsideEventSource(
+                  source.id,
+                )),
+              );
+            }),
+          ],
+          const SizedBox(height: 12),
+          const Divider(height: 1, thickness: 1, color: borderWarm),
+          _SourceSnapshotHistory(state: state),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _refreshOutsideSources(
+    BuildContext context,
+    AppState state,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await state.refreshOutsideEventSources();
+    final summary = state.lastOutsideEventRefreshSummary;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          summary == null
+              ? 'Fetched ${result.events.length} outside event suggestion${result.events.length == 1 ? '' : 's'}.'
+              : '${summary.sourcesChecked} checked, ${summary.sourcesSucceeded} '
+                  'succeeded, ${summary.sourcesFailed} failed, '
+                  '${summary.eventsFound} event${summary.eventsFound == 1 ? '' : 's'} found.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _saveCurrentList(BuildContext context) {
+    final snapshot = state.saveCurrentOutsideEventSources();
+    if (snapshot == null) return;
+    final message = state.userId == null
+        ? 'Source list saved on this device.'
+        : 'Source list saved. It will sync with this calendar.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+}
+
+class _SourceSnapshotHistory extends StatelessWidget {
+  const _SourceSnapshotHistory({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshots = state.outsideEventSourceSnapshots;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ExpansionTile(
+          key: const ValueKey('settings-source-snapshot-history'),
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          leading: const Icon(
+            Icons.history_rounded,
+            size: 20,
+            color: primaryTerracotta,
+          ),
+          title: Text(
+            'Saved source lists',
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+            ),
+          ),
+          subtitle: Text(
+            snapshots.isEmpty
+                ? 'No saved lists yet'
+                : '${snapshots.length} of 10 saved',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textMuted,
+            ),
+          ),
+          children: [
+            if (snapshots.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Save the current list to create a dated restore point.',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+              )
+            else ...[
+              Text(
+                'The newest 10 are kept. Saving an 11th removes the oldest.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: textMuted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ...snapshots.map(
+                (snapshot) => ListTile(
+                  key: ValueKey('source-snapshot-${snapshot.id}'),
+                  contentPadding: EdgeInsets.zero,
+                  minLeadingWidth: 32,
+                  leading: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: warmBeige,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.bookmark_outline_rounded,
+                      size: 16,
+                      color: primaryTerracotta,
+                    ),
+                  ),
+                  title: Text(
+                    _formatLocalTimestamp(snapshot.createdAtMillis),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${snapshot.sources.length} source${snapshot.sources.length == 1 ? '' : 's'}',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: textMuted,
+                  ),
+                  onTap: () => _showSourceSnapshotPreview(
+                    context,
+                    state,
+                    snapshot,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showSourceSnapshotPreview(
+  BuildContext context,
+  AppState state,
+  SourceListSnapshot snapshot,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: surfaceWhite,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) {
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: borderWarmStrong,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Saved source list',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatLocalTimestamp(snapshot.createdAtMillis)} · ${snapshot.sources.length} source${snapshot.sources.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                ),
+                const SizedBox(height: 14),
+                const Divider(height: 1, color: borderWarm),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: snapshot.sources.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: borderWarm),
+                    itemBuilder: (context, index) {
+                      final source = snapshot.sources[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          source.displayName,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${source.kind.label} · ${source.enabled ? 'On' : 'Off'}\n${source.url}',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: textMuted,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      key: const ValueKey('delete-source-snapshot'),
+                      onPressed: () async {
+                        final delete = await _confirmDeleteSourceSnapshot(
+                          sheetContext,
+                          snapshot,
+                        );
+                        if (!delete || !sheetContext.mounted) return;
+                        state.deleteOutsideEventSourceSnapshot(snapshot.id);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete'),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      key: const ValueKey('restore-source-snapshot'),
+                      onPressed: () async {
+                        final restore = await _confirmRestoreSourceSnapshot(
+                          sheetContext,
+                          snapshot,
+                          state.outsideEventSources.length,
+                        );
+                        if (!restore || !sheetContext.mounted) return;
+                        state.restoreOutsideEventSourceSnapshot(snapshot.id);
+                        Navigator.of(sheetContext).pop();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Saved source list restored.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.restore_rounded),
+                      label: const Text('Restore list'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<bool> _confirmRestoreSourceSnapshot(
+  BuildContext context,
+  SourceListSnapshot snapshot,
+  int currentCount,
+) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Restore this source list?'),
+          content: Text(
+            'This will replace your current $currentCount source${currentCount == 1 ? '' : 's'} with the ${snapshot.sources.length} in this saved list.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
+Future<bool> _confirmDeleteSourceSnapshot(
+  BuildContext context,
+  SourceListSnapshot snapshot,
+) async {
+  return await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete saved list?'),
+          content: Text(
+            'Delete the source list saved ${_formatLocalTimestamp(snapshot.createdAtMillis)}?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+}
+
+class _OutsideEventSourceRow extends StatelessWidget {
+  const _OutsideEventSourceRow({
+    required this.source,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onFetch,
+    this.isFetching = false,
+    this.fetchDisabled = false,
+    this.webpageAiConfigured,
+  });
+
+  final UserEventSource source;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  /// Fetches only this source - see [AppState.refreshOutsideEventSource].
+  /// Useful for retrying a single failing source without re-spending
+  /// AI/API credits on every other source.
+  final VoidCallback onFetch;
+
+  /// True while this source is the one currently being fetched during a
+  /// refresh (sources run sequentially); shows a "Fetching..." pill in
+  /// place of the health pill.
+  final bool isFetching;
+
+  /// True while a different fetch (full refresh or another source) is in
+  /// flight, so this row's fetch button can't start a second, overlapping
+  /// fetch.
+  final bool fetchDisabled;
+
+  /// Whether the server-side AI organizer was configured, from the most
+  /// recent webpage fetch. Only relevant for [UserEventSourceKind.webPage]
+  /// (and auto-detected webpage) sources.
+  final bool? webpageAiConfigured;
+
+  bool get _isFailedOrWarning =>
+      source.healthStatus == SourceHealthStatus.warning ||
+      source.healthStatus == SourceHealthStatus.noEventsInRange ||
+      source.healthStatus == SourceHealthStatus.failed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: onEdit,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          source.displayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: source.enabled
+                              ? const Color(0xFFEEF6F2)
+                              : warmBeige,
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Text(
+                          source.kind.label,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: source.enabled ? accentSage : textMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      isFetching
+                          ? const _FetchingPill()
+                          : _SourceHealthPill(status: source.healthStatus),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    source.url,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _sourceHealthDetailLine(source),
+                    style: GoogleFonts.dmSans(fontSize: 11, color: textMuted),
+                  ),
+                  if (source.lastError?.trim().isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      source.lastError!,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: sand,
+                      ),
+                    ),
+                  ],
+                  if (_isFailedOrWarning) ...[
+                    const SizedBox(height: 6),
+                    _SourceDiagnostics(
+                      source: source,
+                      webpageAiConfigured: webpageAiConfigured,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            key: ValueKey('outside-event-source-fetch-${source.id}'),
+            tooltip: 'Fetch this source only',
+            onPressed: (fetchDisabled || isFetching) ? null : onFetch,
+            icon: isFetching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_rounded, color: textMuted),
+          ),
+          Switch.adaptive(
+            value: source.enabled,
+            activeThumbColor: primaryTerracotta,
+            activeTrackColor: primaryTerracotta.withValues(alpha: 0.32),
+            onChanged: onToggle,
+          ),
+          IconButton(
+            tooltip: 'Delete source',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded, color: textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FetchingPill extends StatelessWidget {
+  const _FetchingPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF3FA),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 10,
+            height: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.6),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'Fetching...',
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Developer-friendly diagnostics for a failed or warning source: enough
+/// to triage without server logs (URL, fetcher, failure category, HTTP
+/// status, and the sanitized last warning/error message). Never shows
+/// secrets - every message here comes from developer-authored strings or
+/// HTTP status text, never raw exception output or API keys.
+class _SourceDiagnostics extends StatelessWidget {
+  const _SourceDiagnostics({
+    required this.source,
+    required this.webpageAiConfigured,
+  });
+
+  final UserEventSource source;
+  final bool? webpageAiConfigured;
+
+  @override
+  Widget build(BuildContext context) {
+    final usesWebpageFetcher = source.kind == UserEventSourceKind.webPage ||
+        source.kind == UserEventSourceKind.autoDetect;
+    final lines = <String>[
+      'Fetcher: ${_fetcherLabel(source.kind)}',
+      if (usesWebpageFetcher)
+        'AI organizer: ${_aiConfiguredLabel(webpageAiConfigured)}',
+      if (source.lastErrorHttpStatusCode != null)
+        'HTTP status: ${source.lastErrorHttpStatusCode}',
+      'Likely cause: ${_failureCategoryLabel(source.lastErrorCategory)}',
+    ];
+    return Container(
+      key: ValueKey('outside-event-source-diagnostics-${source.id}'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: backgroundCream,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderWarm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                line,
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: textMuted,
+                  height: 1.3,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _fetcherLabel(UserEventSourceKind kind) {
+    return switch (kind) {
+      UserEventSourceKind.rssAtom => 'RSS/Atom proxy',
+      UserEventSourceKind.webPage =>
+        'Webpage proxy (structured data, then AI/deterministic fallback)',
+      UserEventSourceKind.icsCalendar => 'iCalendar (.ics) proxy',
+      UserEventSourceKind.autoDetect =>
+        'Auto-detect (RSS/Atom, iCalendar, or webpage proxy)',
+    };
+  }
+
+  String _aiConfiguredLabel(bool? configured) {
+    if (configured == null) return 'Not used yet this session';
+    return configured
+        ? 'Configured'
+        : 'Not configured (used deterministic fallback)';
+  }
+
+  String _failureCategoryLabel(String? categoryName) {
+    return switch (categoryName) {
+      'blockedUrl' => 'URL blocked (private/local address or bad scheme)',
+      'timeout' => 'Request timed out',
+      'corsOrProxy' => 'CORS/proxy request failed',
+      'responseTooLarge' => 'Response too large to process',
+      'noEventsFound' => 'No events found in the selected date range',
+      'parserFailure' => 'Response could not be parsed',
+      'aiFailure' => 'AI organizer failed',
+      'aiNotConfigured' => 'AI organizer not configured',
+      'upstreamError' => 'Upstream source returned an error',
+      _ => 'Unknown',
+    };
+  }
+}
+
+/// Last-attempt/last-success/events-found summary line for a source's
+/// health (Settings > Outside event sources). See [UserEventSource.healthStatus]
+/// for the status pill shown alongside this.
+String _sourceHealthDetailLine(UserEventSource source) {
+  final attempted = source.lastFetchedAtMillis;
+  if (attempted == null) return 'Not checked yet.';
+  final parts = <String>[
+    'Last attempt: ${_formatLocalTimestamp(attempted)}',
+  ];
+  final success = source.lastSuccessAtMillis;
+  if (success != null) {
+    parts.add('Last success: ${_formatLocalTimestamp(success)}');
+  }
+  final count = source.lastEventCount;
+  if (count != null) {
+    parts.add('$count event${count == 1 ? '' : 's'} found');
+  }
+  return parts.join(' · ');
+}
+
+class _SourceHealthPill extends StatelessWidget {
+  const _SourceHealthPill({required this.status});
+
+  final SourceHealthStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (background, foreground) = switch (status) {
+      SourceHealthStatus.unknown => (warmBeige, textMuted),
+      SourceHealthStatus.healthy => (const Color(0xFFEEF6F2), accentSage),
+      SourceHealthStatus.warning => (const Color(0xFFFFF7E8), sand),
+      SourceHealthStatus.noEventsInRange => (warmBeige, textMuted),
+      SourceHealthStatus.failed => (const Color(0xFFFAF0EC), primaryTerracotta),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        status.label,
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: foreground,
+        ),
+      ),
+    );
+  }
+}
+
 /// Builds the public, token-gated feed URL served by
 /// `netlify/functions/calendar-feed.js`. Uses [Uri.base] so the link is
 /// correct on any deploy domain (localhost, Netlify preview, production).
@@ -1452,6 +2724,16 @@ String _buildCalendarFeedUrl(String token) {
   final origin =
       (base.scheme == 'http' || base.scheme == 'https') ? base.origin : '';
   return '$origin/.netlify/functions/calendar-feed?token=$token';
+}
+
+String _formatLocalTimestamp(int millis) {
+  final value = DateTime.fromMillisecondsSinceEpoch(millis);
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+  final minute = value.minute.toString().padLeft(2, '0');
+  final period = value.hour >= 12 ? 'PM' : 'AM';
+  return '${value.year}-$month-$day $hour:$minute $period';
 }
 
 void _copyFeedLink(BuildContext context, String token) {
@@ -1589,30 +2871,48 @@ class _PublishingActionButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.quiet = false,
+    this.loading = false,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool quiet;
+
+  /// Shows a small spinner instead of [icon] and ignores taps, for an
+  /// action already in flight (e.g. an outside-events fetch), so the user
+  /// gets visible progress and can't double-tap a slow network request.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = quiet ? textMuted : primaryTerracotta;
+    final disabled = loading || onTap == null;
+    final foreground = quiet || disabled ? textMuted : primaryTerracotta;
     return GestureDetector(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: quiet ? warmBeige : const Color(0xFFFAF0EC),
+          color: quiet || disabled ? warmBeige : const Color(0xFFFAF0EC),
           borderRadius: BorderRadius.circular(100),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 6,
+          runSpacing: 2,
           children: [
-            Icon(icon, size: 16, color: foreground),
-            const SizedBox(width: 6),
+            if (loading)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: foreground,
+                ),
+              )
+            else
+              Icon(icon, size: 16, color: foreground),
             Text(
               label,
               style: GoogleFonts.dmSans(

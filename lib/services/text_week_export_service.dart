@@ -1,6 +1,7 @@
 import '../models/activity.dart';
 import '../models/day_plan.dart';
 import '../models/export_print_options.dart';
+import '../models/manual_plan_item.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import 'planner_service.dart';
@@ -18,6 +19,7 @@ class TextWeekExportService {
     bool socialEnabled = false,
     Map<String, String> privateNotesByActivityId = const {},
     bool includePrivateNotes = false,
+    Map<String, ManualPlanItem> manualPlanItemsById = const {},
   }) {
     final sortedPlan = List<DayPlan>.from(plan)
       ..sort((a, b) => a.date.compareTo(b.date));
@@ -77,11 +79,57 @@ class TextWeekExportService {
         if (includePrivateNotes && note != null && note.isNotEmpty) {
           buffer.writeln('  Notes: $note');
         }
+
+        if (options.showOutsideEventDetails) {
+          final manualItem = manualPlanItemsById[planned.manualItemId];
+          if (manualItem != null && manualItem.isOutsideEvent) {
+            for (final line in outsideEventDetailLines(manualItem)) {
+              buffer.writeln('  $line');
+            }
+          }
+        }
       }
       if (dayIndex != plannedDays.length - 1) buffer.writeln();
     }
 
     return buffer.toString().trimRight();
+  }
+
+  /// Plain-text lines describing an outside event's sourced metadata -
+  /// venue/address/price, source, tickets, and confidence - for whichever
+  /// surface is rendering [item] (text export, print, ICS description).
+  /// Returns nothing the source didn't actually provide.
+  static List<String> outsideEventDetailLines(ManualPlanItem item) {
+    final lines = <String>[];
+    final details = [
+      if (item.outsideEventVenueName?.trim().isNotEmpty == true)
+        item.outsideEventVenueName!.trim(),
+      if (item.outsideEventAddress?.trim().isNotEmpty == true)
+        item.outsideEventAddress!.trim(),
+      if (item.outsideEventPriceLabel?.trim().isNotEmpty == true)
+        item.outsideEventPriceLabel!.trim(),
+    ];
+    if (details.isNotEmpty) lines.add('Venue: ${details.join(' / ')}');
+    if (item.outsideEventSourceName?.trim().isNotEmpty == true) {
+      lines.add('Source: ${item.outsideEventSourceName!.trim()}');
+    }
+    if (item.outsideEventSourceUrl?.trim().isNotEmpty == true) {
+      lines.add('Link: ${item.outsideEventSourceUrl!.trim()}');
+    }
+    final ticketUrl = item.outsideEventTicketUrl?.trim();
+    if (ticketUrl?.isNotEmpty == true &&
+        ticketUrl != item.outsideEventSourceUrl?.trim()) {
+      lines.add('Tickets: $ticketUrl');
+    }
+    if (item.outsideEventConfidence != null) {
+      lines.add(
+        'Confidence: ${(item.outsideEventConfidence! * 100).round()}%',
+      );
+    }
+    if (item.outsideEventUncertainFields.isNotEmpty) {
+      lines.add('Uncertain: ${item.outsideEventUncertainFields.join(', ')}');
+    }
+    return lines;
   }
 
   /// Compact labels for enabled planning dimensions, e.g. `Difficulty 3/5`.

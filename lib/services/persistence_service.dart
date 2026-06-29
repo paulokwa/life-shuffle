@@ -4,8 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity.dart';
 import '../models/day_plan.dart' show OccurrenceOverride;
+import '../models/event_suggestion.dart';
 import '../models/manual_plan_item.dart';
 import '../models/range_type.dart';
+import '../models/source_list_snapshot.dart';
+import '../models/user_event_source.dart';
 
 /// Lightweight local storage for in-session state.
 /// Wraps SharedPreferences (localStorage on web).
@@ -58,10 +61,20 @@ class PersistenceService {
   static const _keyRemovedMap = 'ls_removed_map';
   static const _keyOccurrenceOverridesMap = 'ls_occurrence_overrides_map';
   static const _keyManualPlanItems = 'ls_manual_plan_items';
+  static const _keyOutsideEventSources = 'ls_outside_event_sources';
+  static const _keyOutsideEventSourceSnapshots =
+      'ls_outside_event_source_snapshots';
+  static const _keyCachedOutsideEvents = 'ls_cached_outside_events';
+  static const _keyCachedOutsideEventsFetchedAtMillis =
+      'ls_cached_outside_events_fetched_at_millis';
+  static bool _initialized = false;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    _initialized = true;
   }
+
+  static bool get isInitialized => _initialized;
 
   static SavedState load(List<Activity> defaultActivities) {
     final activities = _loadActivities(defaultActivities);
@@ -128,6 +141,8 @@ class PersistenceService {
         const <String, OccurrenceOverride>{};
     final manualPlanItems =
         _loadManualPlanItemsBlob() ?? const <String, ManualPlanItem>{};
+    final outsideEventSources = loadOutsideEventSources();
+    final outsideEventSourceSnapshots = loadOutsideEventSourceSnapshots();
 
     final planStyle = _prefs.getString(_keyPlanStyle) ?? 'balanced';
     final rangeType = rangeTypeFromName(_prefs.getString(_keyRangeType));
@@ -176,6 +191,8 @@ class PersistenceService {
       removedMap: removedMap,
       occurrenceOverrides: occurrenceOverrides,
       manualPlanItems: manualPlanItems,
+      outsideEventSources: outsideEventSources,
+      outsideEventSourceSnapshots: outsideEventSourceSnapshots,
     );
   }
 
@@ -327,6 +344,124 @@ class PersistenceService {
         jsonEncode(value.map((key, value) => MapEntry(key, value.toMap()))),
       );
 
+  static List<UserEventSource> loadOutsideEventSources() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyOutsideEventSources);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((map) => UserEventSource.fromMap(
+                  Map<String, dynamic>.from(map),
+                ))
+            .where((source) => source.url.trim().isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      // A malformed local-only source list should not break app startup.
+    }
+    return const [];
+  }
+
+  static void saveOutsideEventSources(List<UserEventSource> sources) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyOutsideEventSources,
+      jsonEncode(sources.map((source) => source.toMap()).toList()),
+    );
+  }
+
+  static List<SourceListSnapshot> loadOutsideEventSourceSnapshots() {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_keyOutsideEventSourceSnapshots);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((map) => SourceListSnapshot.fromMap(
+                  Map<String, dynamic>.from(map),
+                ))
+            .where((snapshot) => snapshot.sources.isNotEmpty)
+            .take(10)
+            .toList();
+      }
+    } catch (_) {
+      // A malformed backup history should not prevent app startup.
+    }
+    return const [];
+  }
+
+  static void saveOutsideEventSourceSnapshots(
+    List<SourceListSnapshot> snapshots,
+  ) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _keyOutsideEventSourceSnapshots,
+      jsonEncode(
+        snapshots.take(10).map((snapshot) => snapshot.toMap()).toList(),
+      ),
+    );
+  }
+
+  /// Cached outside-event results are device-local only (never synced to
+  /// Firestore - they can be large), but keyed by [calendarId] so switching
+  /// calendars never shows another calendar's fetched events under the
+  /// newly-selected calendar's sources. `null` covers the pre-sign-in/local
+  /// device scope.
+  static String _cachedOutsideEventsKey(String? calendarId) =>
+      '$_keyCachedOutsideEvents:${calendarId ?? 'local'}';
+
+  static String _cachedOutsideEventsFetchedAtKey(String? calendarId) =>
+      '$_keyCachedOutsideEventsFetchedAtMillis:${calendarId ?? 'local'}';
+
+  static List<EventSuggestion> loadCachedOutsideEvents(String? calendarId) {
+    if (!_initialized) return const [];
+    final raw = _prefs.getString(_cachedOutsideEventsKey(calendarId));
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((map) => EventSuggestion.fromMap(
+                  Map<String, dynamic>.from(map),
+                ))
+            .toList();
+      }
+    } catch (_) {
+      // Ignore malformed cache; refresh can rebuild it.
+    }
+    return const [];
+  }
+
+  static void saveCachedOutsideEvents(
+    String? calendarId,
+    List<EventSuggestion> events,
+  ) {
+    if (!_initialized) return;
+    _prefs.setString(
+      _cachedOutsideEventsKey(calendarId),
+      jsonEncode(events.map((event) => event.toMap()).toList()),
+    );
+  }
+
+  static int? loadCachedOutsideEventsFetchedAtMillis(String? calendarId) {
+    if (!_initialized) return null;
+    return _prefs.getInt(_cachedOutsideEventsFetchedAtKey(calendarId));
+  }
+
+  static void saveCachedOutsideEventsFetchedAtMillis(
+    String? calendarId,
+    int? value,
+  ) {
+    if (!_initialized) return;
+    _saveNullableInt(_cachedOutsideEventsFetchedAtKey(calendarId), value);
+  }
+
   static Map<String, int>? _loadCheckinMapBlob() {
     final raw = _prefs.getString(_keyCheckinMap);
     if (raw == null || raw.isEmpty) return null;
@@ -464,6 +599,8 @@ class SavedState {
     this.removedMap = const {},
     this.occurrenceOverrides = const {},
     this.manualPlanItems = const {},
+    this.outsideEventSources = const [],
+    this.outsideEventSourceSnapshots = const [],
     this.planStyle = 'balanced',
     this.rangeType = RangeType.week,
     RangeType? viewMode,
@@ -553,6 +690,15 @@ class SavedState {
   /// Stable-id-keyed manual plan items. See [ManualPlanItem].
   final Map<String, ManualPlanItem> manualPlanItems;
 
+  /// User-managed outside-event sources for this calendar. Synced through
+  /// the same Firestore calendar document as the rest of [SavedState] so
+  /// every device signed into the same calendar sees the same source list.
+  /// Fetched [EventSuggestion] results are intentionally not part of this
+  /// state - they stay device-local; see
+  /// [PersistenceService.loadCachedOutsideEvents].
+  final List<UserEventSource> outsideEventSources;
+  final List<SourceListSnapshot> outsideEventSourceSnapshots;
+
   Map<String, dynamic> toMap() {
     return {
       'activities': activities.map((activity) => activity.toMap()).toList(),
@@ -595,6 +741,12 @@ class SavedState {
           occurrenceOverrides.map((key, value) => MapEntry(key, value.toMap())),
       'manualPlanItems':
           manualPlanItems.map((key, value) => MapEntry(key, value.toMap())),
+      'outsideEventSources':
+          outsideEventSources.map((source) => source.toMap()).toList(),
+      'outsideEventSourceSnapshots': outsideEventSourceSnapshots
+          .take(10)
+          .map((snapshot) => snapshot.toMap())
+          .toList(),
     };
   }
 
@@ -660,7 +812,36 @@ class SavedState {
         map['occurrenceOverrides'],
       ),
       manualPlanItems: _readManualPlanItems(map['manualPlanItems']),
+      outsideEventSources: _readOutsideEventSources(
+        map['outsideEventSources'],
+      ),
+      outsideEventSourceSnapshots: _readOutsideEventSourceSnapshots(
+        map['outsideEventSourceSnapshots'],
+      ),
     );
+  }
+
+  static List<UserEventSource> _readOutsideEventSources(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((map) => UserEventSource.fromMap(Map<String, dynamic>.from(map)))
+        .where((source) => source.url.trim().isNotEmpty)
+        .toList();
+  }
+
+  static List<SourceListSnapshot> _readOutsideEventSourceSnapshots(
+    Object? value,
+  ) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((map) => SourceListSnapshot.fromMap(
+              Map<String, dynamic>.from(map),
+            ))
+        .where((snapshot) => snapshot.sources.isNotEmpty)
+        .take(10)
+        .toList();
   }
 
   static Map<String, OccurrenceOverride> _readOccurrenceOverrides(

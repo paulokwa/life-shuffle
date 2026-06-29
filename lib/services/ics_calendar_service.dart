@@ -1,4 +1,6 @@
 import '../models/day_plan.dart';
+import '../models/manual_plan_item.dart';
+import 'text_week_export_service.dart';
 
 class IcsCalendarService {
   IcsCalendarService._();
@@ -8,6 +10,7 @@ class IcsCalendarService {
     required String calendarTitle,
     required List<DayPlan> plan,
     DateTime? generatedAt,
+    Map<String, ManualPlanItem> manualPlanItemsById = const {},
   }) {
     final timestamp = _formatUtc(generatedAt ?? DateTime.now().toUtc());
     final lines = <String>[
@@ -38,9 +41,14 @@ class IcsCalendarService {
       final start = _dateTimeFor(item.day.date, item.plannedActivity.timeSlot);
       final end = start.add(Duration(minutes: activity.durationMinutes));
       final category = activity.category.trim();
+      final manualItem = manualPlanItemsById[item.plannedActivity.manualItemId];
+      final outsideEventLines = manualItem != null && manualItem.isOutsideEvent
+          ? TextWeekExportService.outsideEventDetailLines(manualItem)
+          : const <String>[];
       final details = [
         'Duration: ${activity.duration}',
         if (category.isNotEmpty) 'Category: $category',
+        ...outsideEventLines,
       ].join('\n');
 
       lines.addAll([

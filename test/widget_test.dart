@@ -7,16 +7,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
+import 'package:life_shuffle/models/event_suggestion.dart';
 import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
 import 'package:life_shuffle/models/range_type.dart';
+import 'package:life_shuffle/models/user_event_source.dart';
 import 'package:life_shuffle/screens/activities_screen.dart';
 import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/check_in_catchup_screen.dart';
 import 'package:life_shuffle/screens/check_in_one_by_one_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
 import 'package:life_shuffle/screens/onboarding_screen.dart';
+import 'package:life_shuffle/screens/outside_events_screen.dart';
 import 'package:life_shuffle/screens/plan_screen.dart';
 import 'package:life_shuffle/screens/print_preview_screen.dart';
 import 'package:life_shuffle/screens/progress_screen.dart';
@@ -1292,6 +1295,206 @@ void main() {
       await renamedSave.future.timeout(const Duration(seconds: 1)),
       'shared_calendar',
     );
+  });
+
+  test(
+      'Outside event sources sync through the same calendar document as plan edits',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final savedSourceUrls = Completer<List<String>>();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'shared_calendar',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (userId, calendarId, state) async {
+        if (state.outsideEventSources.isNotEmpty &&
+            !savedSourceUrls.isCompleted) {
+          savedSourceUrls.complete(
+            state.outsideEventSources.map((s) => s.url).toList(),
+          );
+        }
+        return FirestoreSyncResult.success();
+      },
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('laura_user');
+    await appState.syncWithFirestore();
+    appState.addOutsideEventSource(
+      displayName: 'Venue page',
+      url: 'https://example.com/events',
+      kind: UserEventSourceKind.webPage,
+    );
+
+    expect(
+      await savedSourceUrls.future.timeout(const Duration(seconds: 1)),
+      ['https://example.com/events'],
+    );
+  });
+
+  test(
+      'Switching calendars switches outside event sources and never mixes them',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'calendar_a',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+          outsideEventSources: const [
+            UserEventSource(
+              id: 'src-a',
+              displayName: 'Calendar A source',
+              url: 'https://example.com/a',
+              kind: UserEventSourceKind.webPage,
+            ),
+          ],
+        ),
+        _remoteCalendar(
+          userId: 'owner_user',
+          calendarId: 'calendar_b',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+          outsideEventSources: const [
+            UserEventSource(
+              id: 'src-b',
+              displayName: 'Calendar B source',
+              url: 'https://example.com/b',
+              kind: UserEventSourceKind.webPage,
+            ),
+          ],
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+
+    appState.setUserId('owner_user');
+    await appState.syncWithFirestore();
+    expect(appState.calendarId, 'calendar_a');
+    expect(appState.outsideEventSources.map((s) => s.id), ['src-a']);
+
+    appState.selectCalendar('calendar_b');
+    expect(appState.outsideEventSources.map((s) => s.id), ['src-b']);
+
+    appState.selectCalendar('calendar_a');
+    expect(appState.outsideEventSources.map((s) => s.id), ['src-a']);
+  });
+
+  testWidgets('Settings owner row shows a friendly display name, not a raw uid',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: PlannerService.defaultActivities,
+      loadAccessibleCalendars: (_) async => [
+        _remoteCalendar(
+          userId: 'owner_user',
+          ownerUserId: 'owner_user',
+          memberUserIds: const ['owner_user', 'laura_user'],
+          displayNameConfirmed: true,
+          calendarNameConfirmed: true,
+        ),
+      ],
+      saveSelectedFirestoreState: (_, __, ___) async =>
+          FirestoreSyncResult.success(),
+      upsertUserProfile: ({required userId, email, displayName}) async =>
+          FirestoreSyncResult.success(),
+      loadUserProfiles: _loadProfilesForTest,
+    );
+    appState.setUserId('laura_user');
+    await appState.syncWithFirestore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: SettingsScreen()),
+        ),
+      ),
+    );
+
+    expect(find.text('Owner'), findsOneWidget);
+    expect(find.text('Owner User'), findsOneWidget);
+    expect(find.text('owner_us...'), findsNothing);
+  });
+
+  testWidgets(
+      'Outside events screen never fetches automatically on open - only shows what is cached',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: OutsideEventsScreen()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(appState.isRefreshingOutsideEvents, isFalse);
+    expect(appState.cachedOutsideEventsFetchedAtMillis, isNull);
+    expect(appState.lastOutsideEventRefreshSummary, isNull);
+    expect(find.text('Nothing fetched yet'), findsOneWidget);
+  });
+
+  test('Outside events hides cached items from removed curated feeds',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    PersistenceService.saveCachedOutsideEvents(null, [
+      EventSuggestion(
+        id: 'removed-coast-article',
+        title: 'Coast article',
+        startDateTime: DateTime(2026, 6, 29),
+        sourceName: 'The Coast arts and music',
+        sourceType: OutsideEventSourceType.rssAtom,
+        sourceId: 'curated-rss',
+        raw: const {'feedSourceId': 'the-coast-arts-music'},
+        dedupeKey: 'removed-coast-article',
+      ),
+      EventSuggestion(
+        id: 'active-curated-item',
+        title: 'Active curated item',
+        startDateTime: DateTime(2026, 6, 29),
+        sourceName: 'The Coast food and drink',
+        sourceType: OutsideEventSourceType.rssAtom,
+        sourceId: 'curated-rss',
+        raw: const {'feedSourceId': 'the-coast-food-drink'},
+        dedupeKey: 'active-curated-item',
+      ),
+    ]);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final visibleEvents = appState.cachedOutsideEventDiscoveryResult().events;
+
+    expect(visibleEvents.map((event) => event.id), ['active-curated-item']);
   });
 
   testWidgets('Settings member list uses profile labels when available',
@@ -4304,8 +4507,7 @@ void main() {
     expect(result, FeedRefreshResult.success);
     // The SavedState actually sent to Firestore must be the live, freshly
     // rebuilt ICS - not a stale snapshot from before the refresh ran.
-    expect(capturedRefreshStates.single.cachedIcsText,
-        appState.cachedIcsText);
+    expect(capturedRefreshStates.single.cachedIcsText, appState.cachedIcsText);
     expect(capturedRefreshStates.single.cachedIcsUpdatedAtMillis,
         appState.cachedIcsUpdatedAtMillis);
   });
@@ -4407,7 +4609,8 @@ void main() {
     );
 
     final initialSyncSaveDone = Completer<void>();
-    final saveCalls = <({String userId, String calendarId, SavedState state})>[];
+    final saveCalls =
+        <({String userId, String calendarId, SavedState state})>[];
     final appState = AppState(
       activities: PlannerService.defaultActivities,
       loadAccessibleCalendars: (_) async => [defaultCalendar, otherCalendar],
@@ -5006,9 +5209,8 @@ void main() {
     );
     final planned = plan.expand((day) => day.activities).toList();
 
-    String timeSlotFor(String activityId) => planned
-        .firstWhere((p) => p.activity.id == activityId)
-        .timeSlot;
+    String timeSlotFor(String activityId) =>
+        planned.firstWhere((p) => p.activity.id == activityId).timeSlot;
 
     expect(timeSlotFor('outside-evening'), '7:00 PM');
     expect(timeSlotFor('outside-afternoon'), '3:00 PM');
@@ -6617,8 +6819,7 @@ void main() {
 
   test(
       'regenerate() advances a stale rangeStart to today instead of '
-      'reusing a past generation start date (midnight rollover)',
-      () async {
+      'reusing a past generation start date (midnight rollover)', () async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final today = _today();
@@ -8036,8 +8237,7 @@ void main() {
 
   testWidgets(
       'Month grid highlights today with a terracotta border and a TODAY '
-      'label, leaving other days unchanged',
-      (WidgetTester tester) async {
+      'label, leaving other days unchanged', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
     final appState = AppState(activities: PlannerService.defaultActivities);
@@ -9562,6 +9762,7 @@ FirestoreCalendar _remoteCalendar({
   List<String>? memberUserIds,
   bool introOnboardingCompleted = false,
   List<Activity>? activities,
+  List<UserEventSource>? outsideEventSources,
 }) {
   const updatedAtMillis = 2000;
   final resolvedCalendarId =
@@ -9581,6 +9782,7 @@ FirestoreCalendar _remoteCalendar({
       enabledMap: const {},
       checkinMap: const {},
       lockedMap: const {},
+      outsideEventSources: outsideEventSources ?? const [],
     ),
     metadata: CalendarMetadata(
       calendarId: resolvedCalendarId,
