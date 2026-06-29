@@ -27,13 +27,6 @@ const curatedRssFeedSources = <CuratedRssFeedSource>[
     defaultTags: ['tourism', 'community', 'arts/culture'],
   ),
   CuratedRssFeedSource(
-    id: 'the-coast-arts-music',
-    displayName: 'The Coast arts and music',
-    url: 'https://www.thecoast.ca/category/arts-music/feed/',
-    defaultCity: 'Halifax',
-    defaultTags: ['arts/culture', 'music'],
-  ),
-  CuratedRssFeedSource(
     id: 'the-coast-food-drink',
     displayName: 'The Coast food and drink',
     url: 'https://www.thecoast.ca/category/food-drink/feed/',

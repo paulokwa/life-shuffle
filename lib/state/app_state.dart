@@ -13,6 +13,7 @@ import '../models/mock_data.dart' show CheckStatus;
 import '../models/range_type.dart';
 import '../models/sync_message.dart';
 import '../models/user_event_source.dart';
+import '../services/curated_rss_feed_registry.dart';
 import '../services/event_dedupe_service.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/ics_calendar_service.dart';
@@ -1627,7 +1628,7 @@ class AppState extends ChangeNotifier {
       BandsintownOutsideEventAdapter(),
     ];
     return OutsideEventDiscoveryResult(
-      events: _cachedOutsideEvents,
+      events: _cachedOutsideEvents.where(_isActiveOutsideEvent).toList(),
       sources: adapters.map((adapter) => adapter.config).toList(),
       warnings: [
         for (final source in _outsideEventSources)
@@ -1645,6 +1646,16 @@ class AppState extends ChangeNotifier {
           'an AI key, webpage sources use deterministic date/title fallback.',
       webpageAiConfigured: _lastWebpageAiConfigured,
     );
+  }
+
+  static bool _isActiveOutsideEvent(EventSuggestion event) {
+    if (event.sourceId != 'curated-rss' ||
+        event.contributingSourceIds.length > 1) {
+      return true;
+    }
+    final feedSourceId = event.raw['feedSourceId'];
+    if (feedSourceId is! String) return true;
+    return curatedRssFeedSources.any((source) => source.id == feedSourceId);
   }
 
   OutsideEventSourceAdapter _adapterForSource(UserEventSource source) {

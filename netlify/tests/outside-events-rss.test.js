@@ -7,8 +7,8 @@ const rss = require('../functions/outside-events-rss');
 
 test('extractSourceId trims source query parameter', () => {
   assert.equal(
-    rss.extractSourceId({ source: ' the-coast-arts-music ' }),
-    'the-coast-arts-music',
+    rss.extractSourceId({ source: ' discover-halifax-events ' }),
+    'discover-halifax-events',
   );
   assert.equal(rss.extractSourceId({ source: ' ' }), null);
   assert.equal(rss.extractSourceId({}), null);
@@ -26,6 +26,19 @@ test('handler rejects unknown sources instead of proxying arbitrary URLs', async
     {
       httpMethod: 'GET',
       queryStringParameters: { source: 'https://example.com/feed.xml' },
+    },
+    {},
+  );
+
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(JSON.parse(response.body), { error: 'unknown_source' });
+});
+
+test('handler rejects the removed Coast arts and music feed', async () => {
+  const response = await rss.handler(
+    {
+      httpMethod: 'GET',
+      queryStringParameters: { source: 'the-coast-arts-music' },
     },
     {},
   );

@@ -8,10 +8,6 @@ const FEEDS = Object.freeze({
     name: 'Discover Halifax events',
     url: 'https://discoverhalifaxns.com/events/feed/',
   },
-  'the-coast-arts-music': {
-    name: 'The Coast arts and music',
-    url: 'https://www.thecoast.ca/category/arts-music/feed/',
-  },
   'the-coast-food-drink': {
     name: 'The Coast food and drink',
     url: 'https://www.thecoast.ca/category/food-drink/feed/',

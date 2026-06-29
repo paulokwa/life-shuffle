@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_shuffle/main.dart';
 import 'package:life_shuffle/models/activity.dart';
 import 'package:life_shuffle/models/day_plan.dart';
+import 'package:life_shuffle/models/event_suggestion.dart';
 import 'package:life_shuffle/models/manual_plan_item.dart';
 import 'package:life_shuffle/models/mock_data.dart';
 import 'package:life_shuffle/models/progress_summary.dart';
@@ -1461,6 +1462,39 @@ void main() {
     expect(appState.cachedOutsideEventsFetchedAtMillis, isNull);
     expect(appState.lastOutsideEventRefreshSummary, isNull);
     expect(find.text('Nothing fetched yet'), findsOneWidget);
+  });
+
+  test('Outside events hides cached items from removed curated feeds',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    PersistenceService.saveCachedOutsideEvents(null, [
+      EventSuggestion(
+        id: 'removed-coast-article',
+        title: 'Coast article',
+        startDateTime: DateTime(2026, 6, 29),
+        sourceName: 'The Coast arts and music',
+        sourceType: OutsideEventSourceType.rssAtom,
+        sourceId: 'curated-rss',
+        raw: const {'feedSourceId': 'the-coast-arts-music'},
+        dedupeKey: 'removed-coast-article',
+      ),
+      EventSuggestion(
+        id: 'active-curated-item',
+        title: 'Active curated item',
+        startDateTime: DateTime(2026, 6, 29),
+        sourceName: 'The Coast food and drink',
+        sourceType: OutsideEventSourceType.rssAtom,
+        sourceId: 'curated-rss',
+        raw: const {'feedSourceId': 'the-coast-food-drink'},
+        dedupeKey: 'active-curated-item',
+      ),
+    ]);
+
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final visibleEvents = appState.cachedOutsideEventDiscoveryResult().events;
+
+    expect(visibleEvents.map((event) => event.id), ['active-curated-item']);
   });
 
   testWidgets('Settings member list uses profile labels when available',
