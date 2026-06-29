@@ -24,6 +24,38 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
   String? _refreshErrorMessage;
   final Set<String> _selectedSources = {};
   final Set<String> _selectedTags = {};
+  final ScrollController _scrollController = ScrollController();
+  bool _sourcesExpanded = false;
+  bool _tagsExpanded = false;
+  bool _showScrollToTop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    final shouldShow = _scrollController.offset > 560;
+    if (shouldShow == _showScrollToTop || !mounted) return;
+    setState(() => _showScrollToTop = shouldShow);
+  }
+
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
 
   // Deliberately reads AppState's cache directly in build() below instead
   // of caching a Future in state - that one-shot-Future pattern is what
@@ -63,144 +95,138 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
     final allTags = _allTags(result.events);
     return Scaffold(
       backgroundColor: backgroundCream,
+      floatingActionButton: _showScrollToTop
+          ? FloatingActionButton.small(
+              key: const ValueKey('outside-events-back-to-top'),
+              tooltip: 'Back to top',
+              onPressed: _scrollToTop,
+              backgroundColor: surfaceWhite,
+              foregroundColor: primaryTerracotta,
+              elevation: 2,
+              child: const Icon(Icons.keyboard_arrow_up_rounded),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const LifeShuffleHeader(),
+            _OutsideEventsTopBar(
+              isRefreshing: isRefreshing,
+              onBack: () => Navigator.of(context).pop(),
+              onRefresh: () => unawaited(_refresh()),
+            ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 128),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          behavior: HitTestBehavior.opaque,
-                          child: const Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              size: 18,
-                              color: textMuted,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            'Outside events',
-                            style: GoogleFonts.lora(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w500,
-                              color: textPrimary,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          key: const ValueKey('outside-events-refresh'),
-                          onPressed:
-                              isRefreshing ? null : () => unawaited(_refresh()),
-                          icon: isRefreshing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: primaryTerracotta,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.refresh_rounded,
-                                  color: primaryTerracotta,
-                                ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Browse sourced events and add the ones you actually want. '
-                      'Sources sync across your devices for this calendar; '
-                      'fetched results are cached on this device only.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        color: textMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (isRefreshing) ...[
-                      _RefreshProgressBanner(state: state),
-                      const SizedBox(height: 14),
-                    ],
-                    if (_refreshErrorMessage != null)
-                      _MessageCard(
-                        icon: Icons.error_outline_rounded,
-                        title: 'Events could not load',
-                        body: _refreshErrorMessage!,
-                        color: const Color(0xFFFFF3EC),
-                      )
-                    else if (isRefreshing && !hasEverFetched)
-                      const _LoadingList()
-                    else
-                      Column(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: constraints.maxWidth >= 700,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 128),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _FilterSection(
-                            sources: result.sources,
-                            events: result.events,
-                            selectedSources: _selectedSources,
-                            onToggleSource: _toggleSource,
-                            allTags: allTags,
-                            selectedTags: _selectedTags,
-                            onToggleTag: _toggleTag,
-                          ),
-                          const SizedBox(height: 14),
-                          if (result.warnings.isNotEmpty ||
-                              result.aiStatusMessage.isNotEmpty) ...[
-                            _DiagnosticsSection(
-                              result: result,
-                              fetchedAtMillis:
-                                  state.cachedOutsideEventsFetchedAtMillis,
+                          Text(
+                            'Browse sourced events and add the ones you actually want. '
+                            'Sources sync across your devices for this calendar; '
+                            'fetched results are cached on this device only.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: textMuted,
+                              height: 1.4,
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (isRefreshing) ...[
+                            _RefreshProgressBanner(state: state),
                             const SizedBox(height: 14),
                           ],
-                          if (events.isEmpty)
-                            !hasEverFetched
-                                ? const _MessageCard(
-                                    icon: Icons.travel_explore_rounded,
-                                    title: 'Nothing fetched yet',
-                                    body: 'Tap refresh above to fetch '
-                                        'outside events from your sources. '
-                                        'No event is added unless you tap '
-                                        'Add.',
-                                    color: surfaceWhite,
-                                  )
-                                : const _MessageCard(
-                                    icon: Icons.search_off_rounded,
-                                    title: 'No matching outside events',
-                                    body: 'Try clearing filters or tap '
-                                        'refresh above. No event is added '
-                                        'unless you tap Add.',
-                                    color: surfaceWhite,
-                                  )
+                          if (_refreshErrorMessage != null)
+                            _MessageCard(
+                              icon: Icons.error_outline_rounded,
+                              title: 'Events could not load',
+                              body: _refreshErrorMessage!,
+                              color: const Color(0xFFFFF3EC),
+                            )
+                          else if (isRefreshing && !hasEverFetched)
+                            const _LoadingList()
                           else
-                            ...events.map(
-                              (event) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _EventSuggestionCard(
-                                  event: event,
-                                  added: _isAdded(event),
-                                  onAdd: () => _addEvent(event),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FilterSection(
+                                  sources: result.sources,
+                                  events: result.events,
+                                  selectedSources: _selectedSources,
+                                  onToggleSource: _toggleSource,
+                                  sourcesExpanded: _sourcesExpanded,
+                                  onToggleSourcesExpanded: () => setState(
+                                    () => _sourcesExpanded = !_sourcesExpanded,
+                                  ),
+                                  onClearSources: () => setState(
+                                    _selectedSources.clear,
+                                  ),
+                                  allTags: allTags,
+                                  selectedTags: _selectedTags,
+                                  onToggleTag: _toggleTag,
+                                  tagsExpanded: _tagsExpanded,
+                                  onToggleTagsExpanded: () => setState(
+                                    () => _tagsExpanded = !_tagsExpanded,
+                                  ),
+                                  onClearTags: () => setState(
+                                    _selectedTags.clear,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 14),
+                                if (result.warnings.isNotEmpty ||
+                                    result.aiStatusMessage.isNotEmpty) ...[
+                                  _DiagnosticsSection(
+                                    result: result,
+                                    fetchedAtMillis: state
+                                        .cachedOutsideEventsFetchedAtMillis,
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+                                if (events.isEmpty)
+                                  !hasEverFetched
+                                      ? const _MessageCard(
+                                          icon: Icons.travel_explore_rounded,
+                                          title: 'Nothing fetched yet',
+                                          body: 'Tap refresh above to fetch '
+                                              'outside events from your sources. '
+                                              'No event is added unless you tap '
+                                              'Add.',
+                                          color: surfaceWhite,
+                                        )
+                                      : const _MessageCard(
+                                          icon: Icons.search_off_rounded,
+                                          title: 'No matching outside events',
+                                          body: 'Try clearing filters or tap '
+                                              'refresh above. No event is added '
+                                              'unless you tap Add.',
+                                          color: surfaceWhite,
+                                        )
+                                else
+                                  ...events.map(
+                                    (event) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
+                                      child: _EventSuggestionCard(
+                                        event: event,
+                                        added: _isAdded(event),
+                                        onAdd: () => _addEvent(event),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                         ],
                       ),
-                  ],
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -275,6 +301,74 @@ class _OutsideEventsScreenState extends State<OutsideEventsScreen> {
     final minute = value.minute.toString().padLeft(2, '0');
     final period = value.hour >= 12 ? 'PM' : 'AM';
     return '${value.year}-$month-$day $hour:$minute $period';
+  }
+}
+
+class _OutsideEventsTopBar extends StatelessWidget {
+  const _OutsideEventsTopBar({
+    required this.isRefreshing,
+    required this.onBack,
+    required this.onRefresh,
+  });
+
+  final bool isRefreshing;
+  final VoidCallback onBack;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: backgroundCream,
+        border: Border(bottom: BorderSide(color: borderWarm)),
+      ),
+      padding: const EdgeInsets.fromLTRB(4, 2, 8, 8),
+      child: Row(
+        children: [
+          IconButton(
+            key: const ValueKey('outside-events-back'),
+            tooltip: 'Back',
+            onPressed: onBack,
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 18,
+              color: textMuted,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'Outside events',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.lora(
+                fontSize: 27,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+                height: 1.2,
+              ),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('outside-events-refresh'),
+            tooltip: 'Refresh events',
+            onPressed: isRefreshing ? null : onRefresh,
+            icon: isRefreshing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: primaryTerracotta,
+                    ),
+                  )
+                : const Icon(
+                    Icons.refresh_rounded,
+                    color: primaryTerracotta,
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -361,9 +455,15 @@ class _FilterSection extends StatelessWidget {
     required this.events,
     required this.selectedSources,
     required this.onToggleSource,
+    required this.sourcesExpanded,
+    required this.onToggleSourcesExpanded,
+    required this.onClearSources,
     required this.allTags,
     required this.selectedTags,
     required this.onToggleTag,
+    required this.tagsExpanded,
+    required this.onToggleTagsExpanded,
+    required this.onClearTags,
   });
 
   final List<OutsideEventSourceConfig> sources;
@@ -375,67 +475,170 @@ class _FilterSection extends StatelessWidget {
   /// select/deselect together.
   final Set<String> selectedSources;
   final ValueChanged<String> onToggleSource;
+  final bool sourcesExpanded;
+  final VoidCallback onToggleSourcesExpanded;
+  final VoidCallback onClearSources;
   final List<String> allTags;
   final Set<String> selectedTags;
   final ValueChanged<String> onToggleTag;
+  final bool tagsExpanded;
+  final VoidCallback onToggleTagsExpanded;
+  final VoidCallback onClearTags;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'SOURCES',
-          style: GoogleFonts.dmSans(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: textMuted,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: sources.where((source) => source.canFetch).map((source) {
-            final selected = selectedSources.contains(source.id);
-            final count = events
-                .where((event) => event.contributingSourceIds.contains(
-                      source.id,
-                    ))
-                .length;
-            return _FilterChip(
-              label: '${source.displayName} ($count)',
-              selected: selected,
-              onTap: () => onToggleSource(source.id),
-            );
-          }).toList(),
-        ),
-        if (allTags.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          Text(
-            'TAGS',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: textMuted,
+    final fetchableSources =
+        sources.where((source) => source.canFetch).toList();
+    return LsCard(
+      key: const ValueKey('outside-events-filters'),
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _CollapsibleFilterGroup(
+            groupKey: const ValueKey('outside-events-sources-filter'),
+            label: 'Sources',
+            itemCount: fetchableSources.length,
+            selectedCount: selectedSources.length,
+            expanded: sourcesExpanded,
+            onToggleExpanded: onToggleSourcesExpanded,
+            onClear: onClearSources,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: fetchableSources.map((source) {
+                final selected = selectedSources.contains(source.id);
+                final count = events
+                    .where((event) => event.contributingSourceIds.contains(
+                          source.id,
+                        ))
+                    .length;
+                return _FilterChip(
+                  label: '${source.displayName} ($count)',
+                  selected: selected,
+                  onTap: () => onToggleSource(source.id),
+                );
+              }).toList(),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: allTags.map((tag) {
-              return _FilterChip(
-                label: tag,
-                selected: selectedTags.contains(tag),
-                onTap: () => onToggleTag(tag),
-              );
-            }).toList(),
-          ),
+          if (allTags.isNotEmpty) ...[
+            const Divider(height: 1, thickness: 1, color: borderWarm),
+            _CollapsibleFilterGroup(
+              groupKey: const ValueKey('outside-events-tags-filter'),
+              label: 'Tags',
+              itemCount: allTags.length,
+              selectedCount: selectedTags.length,
+              expanded: tagsExpanded,
+              onToggleExpanded: onToggleTagsExpanded,
+              onClear: onClearTags,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: allTags.map((tag) {
+                  return _FilterChip(
+                    label: tag,
+                    selected: selectedTags.contains(tag),
+                    onTap: () => onToggleTag(tag),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
+    );
+  }
+}
+
+class _CollapsibleFilterGroup extends StatelessWidget {
+  const _CollapsibleFilterGroup({
+    required this.groupKey,
+    required this.label,
+    required this.itemCount,
+    required this.selectedCount,
+    required this.expanded,
+    required this.onToggleExpanded,
+    required this.onClear,
+    required this.child,
+  });
+
+  final Key groupKey;
+  final String label;
+  final int itemCount;
+  final int selectedCount;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
+  final VoidCallback onClear;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = selectedCount == 0
+        ? 'All $itemCount available'
+        : '$selectedCount selected';
+    return Material(
+      key: groupKey,
+      type: MaterialType.transparency,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: onToggleExpanded,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          summary,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: selectedCount == 0
+                                ? textMuted
+                                : primaryTerracotta,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (selectedCount > 0)
+                TextButton(
+                  onPressed: onClear,
+                  child: const Text('Clear'),
+                ),
+              IconButton(
+                tooltip: expanded ? 'Hide $label' : 'Show $label',
+                onPressed: onToggleExpanded,
+                icon: Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: textMuted,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Align(alignment: Alignment.centerLeft, child: child),
+            ),
+        ],
+      ),
     );
   }
 }
