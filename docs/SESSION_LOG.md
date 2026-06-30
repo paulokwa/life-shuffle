@@ -2234,3 +2234,31 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Slice 15 is complete and commit-ready. Week and Month History show archive-only text patterns, and day-detail tests correctly account for lazy list inflation.
 - **Next recommended step**: Gather real-use feedback before considering any parked calendar-grid, arbitrary-range, chart, or deeper analytics work.
 - **Open questions**: None.
+
+---
+
+## 2026-06-30 — MVP 2 slice 16: Simple archived History status chart
+
+- **Goal**: Add one lightweight status chart to Week and Month History using archived `PlanHistoryEntry` data only.
+- **Summary**: Added a compact stacked status bar for Done, Partly, Skipped, and Unchecked as the first scrollable History detail card, before category statistics and insights. Segment widths are proportional to the selected period's archived counts; the numeric legend always shows all four counts and a combined semantics label announces them without relying on colour. The existing past-only archive index excludes future entries. Removed past entries keep counting under their archived check-in status, consistent with existing History and Progress decisions. Empty periods hide the chart and Today mode is unchanged.
+- **Files changed**:
+  - `lib/screens/history_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Use Flutter `Row`/`Expanded`/`ColoredBox` widgets instead of adding a chart package.
+  - Keep the chart in the existing first scrollable extras block so it appears before category stats and insights without making the fixed mobile header taller.
+  - Hide the chart for empty periods rather than showing an all-zero bar; the existing calm period empty state remains authoritative.
+  - Preserve the existing four status buckets. Removed is metadata, not a fifth status.
+- **Tests added**: Week archived counts, Month appearance, future-entry exclusion, empty-period hiding, exact four-status counts, and preservation of category stats, streak card, insights, and day list.
+- **Validation**:
+  - `dart format lib/screens/history_screen.dart test/widget_test.dart` — passed.
+  - `flutter analyze --no-fatal-infos` — passed with the same 16 pre-existing info-level lints in unrelated files; no new errors or warnings.
+  - `flutter test` — passed, 408/408 tests.
+  - `git diff --check` — passed.
+- **Out-of-scope confirmed**: No day-mode chart, dashboard, year view, custom range, AI, chart dependency, backend/Firestore rules change, or `docs/MASTER_PLAN.md` change.
+- **Current state**: Slice 16 is complete, fully validated, and commit-ready.
+- **Next recommended step**: Run the full validation suite, then gather real-use feedback before adding any further charts.
+- **Open questions**: None.

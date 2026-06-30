@@ -10629,10 +10629,14 @@ void main() {
       await tester.pump();
 
       expect(find.text('May 2026'), findsOneWidget);
-      expect(
-        find.byKey(ValueKey('history-day-${_dateKey(may.date)}')),
-        findsOneWidget,
+      final mayDay = find.byKey(ValueKey('history-day-${_dateKey(may.date)}'));
+      await tester.scrollUntilVisible(
+        mayDay,
+        200,
+        scrollable: find.byType(Scrollable).last,
       );
+      await tester.pumpAndSettle();
+      expect(mayDay, findsOneWidget);
     });
 
     testWidgets('Future period navigation is disabled at current period',
@@ -10746,6 +10750,144 @@ void main() {
       expect(find.text('Frozen archive title'), findsOneWidget);
       expect(find.text('Live replacement title'), findsNothing);
       expect(find.text('Done'), findsOneWidget);
+    });
+
+    group('Status chart', () {
+      testWidgets('Week view shows archived status counts', (tester) async {
+        final history = [
+          _historyEntry(
+            id: 'done',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'partly',
+            date: DateTime(2026, 6, 16),
+            status: CheckStatus.partly,
+          ),
+          _historyEntry(
+            id: 'skipped',
+            date: DateTime(2026, 6, 17),
+            status: CheckStatus.skipped,
+          ),
+          _historyEntry(id: 'unchecked', date: DateTime(2026, 6, 18)),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: DateTime(2026, 6, 18),
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(
+            find.byKey(const ValueKey('history-status-chart')), findsOneWidget);
+        for (final label in ['Done', 'Partly', 'Skipped', 'Unchecked']) {
+          expect(
+              find.byKey(ValueKey('history-status-$label-1')), findsOneWidget);
+        }
+      });
+
+      testWidgets('Month view shows archived status chart', (tester) async {
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory([
+            _historyEntry(
+              id: 'month-done',
+              date: DateTime(2026, 6, 2),
+              status: CheckStatus.done,
+            ),
+          ]),
+          now: DateTime(2026, 6, 18),
+        );
+        await tester.tap(find.text('Month'));
+        await tester.pump();
+
+        expect(
+            find.byKey(const ValueKey('history-status-chart')), findsOneWidget);
+        expect(find.byKey(const ValueKey('history-status-Done-1')),
+            findsOneWidget);
+      });
+
+      testWidgets('Future archive entries are excluded from status chart',
+          (tester) async {
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory([
+            _historyEntry(
+              id: 'past-done',
+              date: DateTime(2026, 6, 17),
+              status: CheckStatus.done,
+            ),
+            _historyEntry(
+              id: 'future-skipped',
+              date: DateTime(2026, 6, 21),
+              status: CheckStatus.skipped,
+            ),
+          ]),
+          now: DateTime(2026, 6, 20),
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('history-status-Done-1')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('history-status-Skipped-0')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('history-status-Skipped-1')),
+            findsNothing);
+      });
+
+      testWidgets('Empty periods hide status chart', (tester) async {
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(const []),
+          now: DateTime(2026, 6, 18),
+        );
+
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+            find.byKey(const ValueKey('history-status-chart')), findsNothing);
+
+        await tester.tap(find.text('Month'));
+        await tester.pump();
+        expect(
+            find.byKey(const ValueKey('history-status-chart')), findsNothing);
+      });
+
+      testWidgets('Chart keeps existing History sections and day list',
+          (tester) async {
+        final date = DateTime(2026, 6, 17);
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory([
+            _historyEntry(
+              id: 'mixed',
+              date: date,
+              status: CheckStatus.done,
+            ),
+          ]),
+          now: DateTime(2026, 6, 18),
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('history-category-breakdown')),
+            findsOneWidget);
+        expect(
+            find.byKey(const ValueKey('history-streak-card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('history-insights-card')),
+            findsOneWidget);
+        final day = find.byKey(ValueKey('history-day-${_dateKey(date)}'));
+        await tester.scrollUntilVisible(
+          day,
+          200,
+          scrollable: find.byType(Scrollable).last,
+        );
+        expect(day, findsOneWidget);
+      });
     });
 
     group('Category breakdown', () {

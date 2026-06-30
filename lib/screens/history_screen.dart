@@ -566,6 +566,8 @@ class _HistoryList extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              _HistoryStatusChart(entries: categoryEntries),
+              const SizedBox(height: 10),
               _CategoryBreakdown(entries: categoryEntries),
               const SizedBox(height: 10),
               _InsightsCard(insights: insights),
@@ -575,6 +577,114 @@ class _HistoryList extends StatelessWidget {
         final day = grouped[index - offset];
         return _HistoryDayCard(date: day.date, entries: day.entries);
       },
+    );
+  }
+}
+
+class _HistoryStatusChart extends StatelessWidget {
+  const _HistoryStatusChart({required this.entries});
+
+  final List<PlanHistoryEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = _HistorySummary.fromEntries(entries);
+    final statuses = [
+      ('Done', summary.done, accentSage),
+      ('Partly', summary.partly, sand),
+      ('Skipped', summary.skipped, textMuted),
+      ('Unchecked', summary.unchecked, primaryTerracotta),
+    ];
+    final semanticsLabel = 'Status chart: ${summary.done} done, '
+        '${summary.partly} partly, ${summary.skipped} skipped, '
+        '${summary.unchecked} unchecked.';
+
+    return Semantics(
+      key: const ValueKey('history-status-chart'),
+      container: true,
+      label: semanticsLabel,
+      child: ExcludeSemantics(
+        child: LsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Status',
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(100),
+                child: SizedBox(
+                  height: 10,
+                  child: Row(
+                    children: [
+                      for (final status in statuses)
+                        if (status.$2 > 0)
+                          Expanded(
+                            key: ValueKey(
+                              'history-status-segment-${status.$1}-${status.$2}',
+                            ),
+                            flex: status.$2,
+                            child: ColoredBox(color: status.$3),
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 7,
+                children: [
+                  for (final status in statuses)
+                    _StatusLegendItem(
+                      label: status.$1,
+                      value: status.$2,
+                      color: status.$3,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusLegendItem extends StatelessWidget {
+  const _StatusLegendItem({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          '$label $value',
+          key: ValueKey('history-status-$label-$value'),
+          style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+        ),
+      ],
     );
   }
 }
