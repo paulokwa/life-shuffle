@@ -141,33 +141,39 @@ class _NavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 64,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedScale(
-              scale: active ? 1.08 : 1.0,
-              duration: const Duration(milliseconds: 150),
-              child: Icon(
-                item.icon,
-                size: 22,
-                color: active ? primaryTerracotta : textMuted,
+    return Semantics(
+      button: true,
+      selected: active,
+      label: '${item.label} tab',
+      child: InkResponse(
+        onTap: onTap,
+        radius: 32,
+        child: SizedBox(
+          width: 64,
+          height: 64,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedScale(
+                scale: active ? 1.08 : 1.0,
+                duration: const Duration(milliseconds: 150),
+                child: Icon(
+                  item.icon,
+                  size: 22,
+                  color: active ? primaryTerracotta : textMuted,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              item.label,
-              style: GoogleFonts.dmSans(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: active ? primaryTerracotta : textMuted,
+              const SizedBox(height: 2),
+              Text(
+                item.label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: active ? primaryTerracotta : textMuted,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
