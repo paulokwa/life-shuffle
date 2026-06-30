@@ -195,6 +195,11 @@ class _HistoryViewState extends State<_HistoryView> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _PeriodSummary(entries: periodEntries),
               ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _StreakCard(history: widget.history, today: _today),
+              ),
               const SizedBox(height: 14),
             ],
             Expanded(
@@ -701,6 +706,165 @@ class _CategoryTally {
   int skipped = 0;
   int unchecked = 0;
 }
+
+class _StreakSummary {
+  const _StreakSummary({
+    required this.currentStreak,
+    required this.longestStreak,
+  });
+
+  final int currentStreak;
+  final int longestStreak;
+
+  static _StreakSummary fromEntries(
+    List<PlanHistoryEntry> entries,
+    DateTime today,
+  ) {
+    final qualifying = <DateTime>{};
+    for (final entry in entries) {
+      final date = _dateOnly(entry.date);
+      if (date.isAfter(today)) continue;
+      if (entry.status == CheckStatus.done ||
+          entry.status == CheckStatus.partly) {
+        qualifying.add(date);
+      }
+    }
+
+    // Current streak: walk backwards from today (if qualifying) or from
+    // yesterday (today still open). Past days without qualifying entries
+    // break the chain.
+    var currentStreak = 0;
+    final start = qualifying.contains(today)
+        ? today
+        : today.subtract(const Duration(days: 1));
+    var cursor = start;
+    while (qualifying.contains(cursor)) {
+      currentStreak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    if (qualifying.isEmpty) {
+      return const _StreakSummary(currentStreak: 0, longestStreak: 0);
+    }
+
+    // Longest streak: longest consecutive qualifying-date run ever.
+    final sorted = qualifying.toList()..sort();
+    var longest = 1;
+    var run = 1;
+    for (var i = 1; i < sorted.length; i++) {
+      final gap = sorted[i].difference(sorted[i - 1]).inDays;
+      if (gap == 1) {
+        run++;
+        if (run > longest) longest = run;
+      } else {
+        run = 1;
+      }
+    }
+
+    return _StreakSummary(currentStreak: currentStreak, longestStreak: longest);
+  }
+}
+
+class _StreakCard extends StatelessWidget {
+  const _StreakCard({required this.history, required this.today});
+
+  final List<PlanHistoryEntry> history;
+  final DateTime today;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = _StreakSummary.fromEntries(history, today);
+
+    return LsCard(
+      key: const ValueKey('history-streak-card'),
+      child: summary.longestStreak == 0
+          ? Row(
+              children: [
+                const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: textMuted,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'No streaks yet.',
+                  style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department_rounded,
+                            color: primaryTerracotta,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Current streak',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _streakDaysLabel(summary.currentStreak),
+                        key: const ValueKey('history-streak-current'),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 36,
+                  color: warmBeige,
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Best',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _streakDaysLabel(summary.longestStreak),
+                        key: const ValueKey('history-streak-best'),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+String _streakDaysLabel(int days) => days == 1 ? '1 day' : '$days days';
 
 Future<void> _showHistoryDaySheet(
   BuildContext context,

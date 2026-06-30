@@ -11031,6 +11031,263 @@ void main() {
         );
       });
     });
+
+    group('Streak tracking', () {
+      testWidgets('shows No streaks yet when archive is empty', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final appState = _appStateWithHistory([]);
+        await _pumpHistoryScreen(tester, appState);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('history-streak-card')),
+          findsOneWidget,
+        );
+        expect(find.text('No streaks yet.'), findsOneWidget);
+      });
+
+      testWidgets('current streak counts consecutive done days up to today',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: today,
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: today.subtract(const Duration(days: 1)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a3',
+            date: today.subtract(const Duration(days: 2)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '3 days',
+        );
+      });
+
+      testWidgets('partly done counts toward streak', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: today,
+            status: CheckStatus.partly,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: today.subtract(const Duration(days: 1)),
+            status: CheckStatus.partly,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '2 days',
+        );
+      });
+
+      testWidgets('skipped does not extend streak', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: today,
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: today.subtract(const Duration(days: 1)),
+            status: CheckStatus.skipped,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a3',
+            date: today.subtract(const Duration(days: 2)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '1 day',
+        );
+      });
+
+      testWidgets('unchecked day in the past breaks streak', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: today,
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: today.subtract(const Duration(days: 1)),
+            status: CheckStatus.none,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a3',
+            date: today.subtract(const Duration(days: 2)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '1 day',
+        );
+      });
+
+      testWidgets('future dates are ignored in streak calculation',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: today.add(const Duration(days: 1)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: today,
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '1 day',
+        );
+      });
+
+      testWidgets('longest streak reflects best historical run',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final today = _today();
+        final appState = _appStateWithHistory([
+          // Old 4-day run
+          _historyEntry(
+            id: 'b1',
+            date: today.subtract(const Duration(days: 10)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'b2',
+            date: today.subtract(const Duration(days: 9)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'b3',
+            date: today.subtract(const Duration(days: 8)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'b4',
+            date: today.subtract(const Duration(days: 7)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          // Current 2-day run
+          _historyEntry(
+            id: 'b5',
+            date: today.subtract(const Duration(days: 1)),
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+          _historyEntry(
+            id: 'b6',
+            date: today,
+            status: CheckStatus.done,
+            category: 'Health',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: today);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-best')),
+              )
+              .data,
+          '4 days',
+        );
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('history-streak-current')),
+              )
+              .data,
+          '2 days',
+        );
+      });
+    });
   });
 }
 

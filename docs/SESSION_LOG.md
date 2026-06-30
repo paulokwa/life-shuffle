@@ -2179,3 +2179,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: History week and month views now show a ranked "By category" section built exclusively from frozen archive data, scrollable with the day list.
 - **Next recommended step**: Gather real-use feedback; next natural steps are calendar-grid history, custom ranges, or richer long-term trend cards.
 - **Open questions**: None.
+
+---
+
+## 2026-06-29 (continued) - MVP 2 slice 14: Archived streak tracking
+
+- **Goal**: Add current completion streak and longest completion streak to the History week/month views using only frozen `PlanHistoryEntry` data, without charts, AI, year view, custom ranges, or backend changes.
+- **Summary**: Added a streak card at the top of the History week/month screen (above the scrollable list, inside the `if (_mode != _HistoryMode.today)` block). The card shows "Current streak" and "Best" side by side when any qualifying data exists, or "No streaks yet." for an empty archive. A day qualifies if it has at least one Done or Partly Done entry in the archive; Skipped does not extend a streak; past days with no qualifying entry break it; future dates are excluded. Today is treated as "open" — if today has no qualifying entry yet, the backward walk starts from yesterday instead, so a real ongoing streak isn't zeroed out first thing in the morning. Global streak values are displayed regardless of which historical period is being browsed. `_StreakSummary.fromEntries` and `_StreakCard` are private to `history_screen.dart`; `_streakDaysLabel` is a small top-level helper. All three sit after `_CategoryTally` and before `_showHistoryDaySheet`.
+- **Files changed**:
+  - `lib/screens/history_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Streak card is positioned in the fixed Column (`if (_mode != _HistoryMode.today)` block) between `_PeriodSummary` and the `Expanded` list widget, so it's always visible without scrolling.
+  - "Today is open" rule: if today has no qualifying archive entry, start the backward walk from yesterday — this preserves a multi-day streak that was intact yesterday and prevents a streak of 0 every morning before the user completes today's activities.
+  - Global streaks (not period-scoped): the card always reflects the all-time current/longest streak, even when browsing an old week or month, matching the brief's "do not create historical streak playback" requirement.
+  - `_StreakSummary` is kept private to `history_screen.dart` — no need to expose a separate model; the same `_dateOnly` helper already used by `_indexPastEntries` normalises dates before comparison.
+- **Tests run**:
+  - `dart format lib/screens/history_screen.dart test/widget_test.dart` — passed; `widget_test.dart` reformatted.
+  - `flutter analyze --no-fatal-infos` — passed; same 16 pre-existing info-level lints in unrelated files, no new errors or warnings.
+  - `flutter test` — passed, 316/316 tests. 7 new tests in `group('History screen > Streak tracking', ...)`: empty archive shows "No streaks yet.", current streak counts consecutive done days up to today (3 days), partly done counts toward streak (2 days), skipped does not extend streak (current = 1 despite flanking done entries), unchecked past day breaks streak (current = 1), future dates ignored (current = 1 not 2), longest streak reflects best historical run (best = 4, current = 2).
+  - `git diff --check` — passed; only the pre-existing LF-to-CRLF normalisation warnings.
+- **Out-of-scope confirmed**: No charts, no AI, no year view, no custom range picker, no changes to `docs/MASTER_PLAN.md`, no changes to `firestore.rules`.
+- **Current state**: History week and month views now show a streak card (current streak + best) and a ranked "By category" section, both built exclusively from frozen archive data.
+- **Next recommended step**: Gather real-use feedback; next natural history steps are calendar-grid history, custom ranges, or richer trend cards.
+- **Open questions**: None.
