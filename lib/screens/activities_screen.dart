@@ -10,13 +10,45 @@ import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import 'outside_events_screen.dart';
 
-class ActivitiesScreen extends StatelessWidget {
+enum _ActivityVisibility { all, active, paused }
+
+class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key});
+
+  @override
+  State<ActivitiesScreen> createState() => _ActivitiesScreenState();
+}
+
+class _ActivitiesScreenState extends State<ActivitiesScreen> {
+  final _searchController = TextEditingController();
+  _ActivityVisibility _visibility = _ActivityVisibility.all;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Activity> _filteredActivities(List<Activity> activities) {
+    final query = _searchController.text.trim().toLowerCase();
+    return activities.where((activity) {
+      final matchesQuery = query.isEmpty ||
+          activity.title.toLowerCase().contains(query) ||
+          activity.category.toLowerCase().contains(query);
+      final matchesVisibility = switch (_visibility) {
+        _ActivityVisibility.all => true,
+        _ActivityVisibility.active => activity.enabled,
+        _ActivityVisibility.paused => !activity.enabled,
+      };
+      return matchesQuery && matchesVisibility;
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final activities = state.activities;
+    final filteredActivities = _filteredActivities(activities);
 
     return SafeArea(
       child: Column(
@@ -42,99 +74,22 @@ class ActivitiesScreen extends StatelessWidget {
                           height: 1.2,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => showActivityFormSheet(context),
-                        child: Container(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: primaryTerracotta,
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.add_rounded,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Add',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
+                      FilledButton.icon(
+                        onPressed: () => showActivityFormSheet(context),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                          backgroundColor: primaryTerracotta,
+                          foregroundColor: Colors.white,
                         ),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  GestureDetector(
-                    key: const ValueKey('activities-outside-events-entry'),
-                    onTap: () => _openOutsideEvents(context, state),
-                    behavior: HitTestBehavior.opaque,
-                    child: LsCard(
-                      color: const Color(0xFFEEF6F2),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: accentSage.withValues(alpha: 0.14),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              Icons.travel_explore_rounded,
-                              size: 17,
-                              color: accentSage,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Discover outside events',
-                                  style: GoogleFonts.dmSans(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  'Browse sourced local ideas and add one to '
-                                  'your plan',
-                                  style: GoogleFonts.dmSans(
-                                    fontSize: 12,
-                                    color: textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 14,
-                            color: textMuted,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
+                  InkWell(
                     onTap: () => _showStarterPicker(context),
-                    behavior: HitTestBehavior.opaque,
+                    borderRadius: BorderRadius.circular(20),
                     child: LsCard(
                       color: const Color(0xFFFFF8F5),
                       child: Row(
@@ -185,6 +140,61 @@ class ActivitiesScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    key: const ValueKey('activities-outside-events-entry'),
+                    onTap: () => _openOutsideEvents(context, state),
+                    borderRadius: BorderRadius.circular(20),
+                    child: LsCard(
+                      color: const Color(0xFFEEF6F2),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accentSage.withValues(alpha: 0.14),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.travel_explore_rounded,
+                              size: 17,
+                              color: accentSage,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Discover outside events',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Browse sourced local ideas and add one to your plan',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: textMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   Text(
                     'YOUR ACTIVITIES',
@@ -196,6 +206,57 @@ class ActivitiesScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  if (activities.isNotEmpty) ...[
+                    TextField(
+                      key: const ValueKey('activities-search-field'),
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: 'Search activities',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                        filled: true,
+                        fillColor: surfaceWhite,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: const BorderSide(color: borderWarm),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: const BorderSide(color: borderWarm),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final option in _ActivityVisibility.values)
+                          ChoiceChip(
+                            label: Text(switch (option) {
+                              _ActivityVisibility.all => 'All',
+                              _ActivityVisibility.active => 'Active',
+                              _ActivityVisibility.paused => 'Paused',
+                            }),
+                            selected: _visibility == option,
+                            onSelected: (_) =>
+                                setState(() => _visibility = option),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (activities.isEmpty)
                     LsCard(
                       child: Column(
@@ -218,11 +279,60 @@ class ActivitiesScreen extends StatelessWidget {
                               height: 1.4,
                             ),
                           ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton(
+                                onPressed: () => _showStarterPicker(context),
+                                child: const Text('Choose starters'),
+                              ),
+                              OutlinedButton(
+                                onPressed: () => showActivityFormSheet(context),
+                                child: const Text('Add your own'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (filteredActivities.isEmpty)
+                    LsCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No matching activities',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Try a different search or show all activities.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _visibility = _ActivityVisibility.all;
+                              });
+                            },
+                            child: const Text('Clear filters'),
+                          ),
                         ],
                       ),
                     )
                   else
-                    ...activities.map(
+                    ...filteredActivities.map(
                       (activity) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ActivityCard(
@@ -332,6 +442,14 @@ Future<void> showActivityFormSheet(BuildContext context, {Activity? activity}) {
             );
           }
           Navigator.of(sheetContext).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                activity == null ? 'Activity added.' : 'Activity saved.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         },
       );
     },
@@ -708,7 +826,7 @@ class _ActivityCard extends StatelessWidget {
         ? 'any day'
         : '${activity.allowedWeekdays.length} days';
     final consecutive = activity.noConsecutiveDays ? ', no back-to-back' : '';
-    return 'Max ${activity.maxPerWeek}/week, $days$consecutive';
+    return 'Up to ${activity.maxPerWeek}/week, $days$consecutive';
   }
 }
 
@@ -777,7 +895,7 @@ class DimensionFields extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Planning dimensions',
+            'Extra planning details',
             style: GoogleFonts.dmSans(
               fontSize: 12,
               color: textMuted,
@@ -1039,109 +1157,125 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                   ),
                 ],
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _maxPerWeekController,
-                  keyboardType: TextInputType.number,
-                  decoration: _inputDecoration(
-                    'Max per week',
-                    helperText:
-                        'Clamped to ${_allowedWeekdays.length} based on allowed days',
+                Theme(
+                  data: Theme.of(context).copyWith(
+                    dividerColor: Colors.transparent,
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) return null;
-                    final parsed = int.tryParse(value.trim());
-                    if (parsed == null || parsed <= 0) {
-                      return 'Use a number from 1 to 7';
-                    }
-                    if (parsed > 7) return 'Keep it to 7 or fewer';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                _WeekdaySelector(
-                  selectedWeekdays: _allowedWeekdays,
-                  onChanged: (weekday) {
-                    setState(() {
-                      if (_allowedWeekdays.contains(weekday)) {
-                        if (_allowedWeekdays.length > 1) {
-                          _allowedWeekdays.remove(weekday);
-                        }
-                      } else {
-                        _allowedWeekdays.add(weekday);
-                      }
-                      _clampMaxPerWeekToAllowedDays();
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                Material(
-                  color: surfaceWhite,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    side: const BorderSide(color: borderWarm),
-                  ),
-                  child: SwitchListTile.adaptive(
-                    value: _mustIncludeInPlans,
-                    activeThumbColor: accentSage,
-                    activeTrackColor: accentSage.withValues(alpha: 0.28),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 2,
+                  child: Material(
+                    color: surfaceWhite,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: const BorderSide(color: borderWarm),
                     ),
-                    title: Text(
-                      'Must include in plans',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: textPrimary,
+                    clipBehavior: Clip.antiAlias,
+                    child: ExpansionTile(
+                      key: const ValueKey('activity-planning-options'),
+                      initiallyExpanded: true,
+                      title: Text(
+                        'Planning options',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      'The planner adds this first, then still fills the '
-                      'rest of the plan with other activities.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
+                      subtitle: Text(
+                        'Choose how often and when this can appear.',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: textMuted,
+                        ),
                       ),
+                      childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                      children: [
+                        TextFormField(
+                          controller: _maxPerWeekController,
+                          keyboardType: TextInputType.number,
+                          decoration: _inputDecoration(
+                            'How often each week?',
+                            helperText: 'Up to ${_allowedWeekdays.length}, '
+                                'based on your available days',
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return null;
+                            }
+                            final parsed = int.tryParse(value.trim());
+                            if (parsed == null || parsed <= 0) {
+                              return 'Use a number from 1 to 7';
+                            }
+                            if (parsed > 7) return 'Keep it to 7 or fewer';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        _WeekdaySelector(
+                          selectedWeekdays: _allowedWeekdays,
+                          onChanged: (weekday) {
+                            setState(() {
+                              if (_allowedWeekdays.contains(weekday)) {
+                                if (_allowedWeekdays.length > 1) {
+                                  _allowedWeekdays.remove(weekday);
+                                }
+                              } else {
+                                _allowedWeekdays.add(weekday);
+                              }
+                              _clampMaxPerWeekToAllowedDays();
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile.adaptive(
+                          value: _mustIncludeInPlans,
+                          activeThumbColor: accentSage,
+                          activeTrackColor: accentSage.withValues(alpha: 0.28),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Always try to include this',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Adds this first, then fills the rest of the plan.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: textMuted,
+                            ),
+                          ),
+                          onChanged: (value) {
+                            setState(() => _mustIncludeInPlans = value);
+                          },
+                        ),
+                        const Divider(height: 1, color: borderWarm),
+                        SwitchListTile.adaptive(
+                          value: _noConsecutiveDays,
+                          activeThumbColor: accentSage,
+                          activeTrackColor: accentSage.withValues(alpha: 0.28),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Avoid back-to-back days',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Spreads this out when another day is available.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: textMuted,
+                            ),
+                          ),
+                          onChanged: (value) {
+                            setState(() => _noConsecutiveDays = value);
+                          },
+                        ),
+                      ],
                     ),
-                    onChanged: (value) {
-                      setState(() => _mustIncludeInPlans = value);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Material(
-                  color: surfaceWhite,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    side: const BorderSide(color: borderWarm),
-                  ),
-                  child: SwitchListTile.adaptive(
-                    value: _noConsecutiveDays,
-                    activeThumbColor: accentSage,
-                    activeTrackColor: accentSage.withValues(alpha: 0.28),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 2,
-                    ),
-                    title: Text(
-                      'Avoid back-to-back days',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'The planner avoids adjacent days when it has another option.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: textMuted,
-                      ),
-                    ),
-                    onChanged: (value) {
-                      setState(() => _noConsecutiveDays = value);
-                    },
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1168,7 +1302,7 @@ class _ActivityFormSheetState extends State<_ActivityFormSheet> {
                       ),
                     ),
                     subtitle: Text(
-                      'Disabled activities stay here but are skipped by regeneration.',
+                      'Turn this off to pause it without losing it.',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         color: textMuted,

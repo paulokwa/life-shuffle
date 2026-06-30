@@ -34,14 +34,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingStep(
       title: 'Get a week plan\nin seconds',
       body:
-          'Tap Shuffle and we\'ll put together a balanced, varied plan. Swap anything that doesn\'t feel right.',
+          'Make a plan from your activities and rules. Shuffle the unlocked parts whenever you want a fresh mix.',
       icon: Icons.bolt_rounded,
       accentColor: sand,
     ),
     _OnboardingStep(
       title: 'Check in as\nyou go',
       body:
-          'Mark activities done, partly done, or skipped — no typing needed. See your progress build over time.',
+          'Mark activities done, partly done, or skipped — no typing needed. Look back gently at what worked for you.',
       icon: Icons.check_circle_outline_rounded,
       accentColor: dustySky,
     ),

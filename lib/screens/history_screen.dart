@@ -189,7 +189,7 @@ class _HistoryViewState extends State<_HistoryView> {
                   segments: const [
                     ButtonSegment(
                       value: _HistoryMode.today,
-                      label: Text('Today'),
+                      label: Text('Recent'),
                     ),
                     ButtonSegment(
                       value: _HistoryMode.week,
@@ -270,7 +270,7 @@ class _HistoryEmptyState extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 switch (mode) {
-                  _HistoryMode.today => 'No past days yet',
+                  _HistoryMode.today => 'No recent days yet',
                   _HistoryMode.week => 'No archived days in this week',
                   _HistoryMode.month => 'No archived days in this month',
                 },
@@ -391,7 +391,10 @@ class _PeriodSummary extends StatelessWidget {
               _SummaryCount(label: 'Done', value: summary.done),
               _SummaryCount(label: 'Partly', value: summary.partly),
               _SummaryCount(label: 'Skipped', value: summary.skipped),
-              _SummaryCount(label: 'Unchecked', value: summary.unchecked),
+              _SummaryCount(
+                label: 'Not checked in',
+                value: summary.unchecked,
+              ),
             ],
           ),
         ],

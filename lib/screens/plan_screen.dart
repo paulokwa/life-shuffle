@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
 import '../widgets/category_chip.dart';
+import '../widgets/bottom_nav_shell.dart' show BottomNavScope, BottomNavTab;
 import '../widgets/outside_event_metadata_card.dart';
 import '../widgets/status_choice.dart';
 import 'activities_screen.dart'
@@ -71,6 +72,7 @@ class PlanScreen extends StatelessWidget {
         ? state.generatedRange.days.any((d) => d.activities.isNotEmpty)
         : plans.any((d) => d.activities.isNotEmpty);
     final restCount = plans.where((d) => d.activities.isEmpty).length;
+    final hasEnabledActivities = state.activities.any((a) => a.enabled);
 
     void openDaySheet(DayPlan plan) => _openDaySheet(context, state, plan);
 
@@ -99,6 +101,16 @@ class PlanScreen extends StatelessWidget {
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 14),
+                  Text(
+                    'VIEW PLAN AS',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                      color: textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   _RangeTypeControl(
                     current: state.viewMode,
                     onChanged: state.setViewMode,
@@ -140,6 +152,8 @@ class PlanScreen extends StatelessWidget {
                   if (state.plannerConflictMessage != null) ...[
                     _PlannerConflictCard(
                       message: state.plannerConflictMessage!,
+                      onReviewRules: () => BottomNavScope.maybeOf(context)
+                          ?.onNavigate(BottomNavTab.activities),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -163,12 +177,24 @@ class PlanScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Add some activities then tap Regenerate below to '
-                            'build your week.',
+                            hasEnabledActivities
+                                ? 'Make a plan when you want a little direction.'
+                                : 'Choose a few starter activities or add your own first.',
                             style: GoogleFonts.dmSans(
                               fontSize: 13,
                               color: textMuted,
                               height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton.icon(
+                            onPressed: () => BottomNavScope.maybeOf(context)
+                                ?.onNavigate(BottomNavTab.activities),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: Text(
+                              hasEnabledActivities
+                                  ? 'Review activities'
+                                  : 'Add activities',
                             ),
                           ),
                         ],
@@ -192,23 +218,38 @@ class PlanScreen extends StatelessWidget {
                     ],
                   ],
                   const SizedBox(height: 20),
-                  GestureDetector(
-                    onTap: () => state.regenerate(),
-                    child: Container(
-                      width: double.infinity,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: primaryTerracotta,
-                        borderRadius: BorderRadius.circular(100),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Regenerate unlocked',
-                        style: GoogleFonts.dmSans(
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: hasEnabledActivities
+                          ? () {
+                              final hadPlan = hasAnyActivities;
+                              state.regenerate();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    hadPlan
+                                        ? 'Plan shuffled. Undo is available above.'
+                                        : 'Your plan is ready.',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: primaryTerracotta,
+                        disabledBackgroundColor: warmBeige,
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: textMuted,
+                        textStyle: GoogleFonts.dmSans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
                         ),
+                      ),
+                      child: Text(
+                        hasAnyActivities ? 'Shuffle unlocked' : 'Make plan',
                       ),
                     ),
                   ),
@@ -327,7 +368,7 @@ class _RangeTypeSegment extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        height: 34,
+        height: 44,
         margin: const EdgeInsets.symmetric(horizontal: 2),
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
@@ -377,6 +418,7 @@ class _WeekNavControl extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: () => onSelected(index),
             child: Container(
+              constraints: const BoxConstraints(minHeight: 44),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
                 color: selected ? warmBeige : Colors.transparent,
@@ -416,6 +458,12 @@ class _RangeExpansionCard extends StatelessWidget {
         RangeType.week => '1 week',
         RangeType.twoWeek => '2 weeks',
         RangeType.month => 'a month',
+      };
+
+  String get _actionLabel => switch (viewMode) {
+        RangeType.week => 'Make a 1-week plan',
+        RangeType.twoWeek => 'Make a 2-week plan',
+        RangeType.month => 'Make a month plan',
       };
 
   @override
@@ -475,7 +523,7 @@ class _RangeExpansionCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            child: const Text('Generate'),
+            child: Text(_actionLabel),
           ),
         ],
       ),
@@ -878,9 +926,13 @@ class _SyncNoticeCard extends StatelessWidget {
 }
 
 class _PlannerConflictCard extends StatelessWidget {
-  const _PlannerConflictCard({required this.message});
+  const _PlannerConflictCard({
+    required this.message,
+    required this.onReviewRules,
+  });
 
   final String message;
+  final VoidCallback onReviewRules;
 
   @override
   Widget build(BuildContext context) {
@@ -924,6 +976,11 @@ class _PlannerConflictCard extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: onReviewRules,
+                  child: const Text('Review activity rules'),
+                ),
               ],
             ),
           ),
@@ -963,7 +1020,7 @@ class _RegenerationUndoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Week regenerated',
+                  'Plan shuffled',
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -972,7 +1029,7 @@ class _RegenerationUndoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Undo to restore the previous week.',
+                  'Undo to restore the previous plan.',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     color: textMuted,
@@ -1150,7 +1207,7 @@ class _DayBlock extends StatelessWidget {
                   ),
                   padding: EdgeInsets.zero,
                   constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                      const BoxConstraints(minWidth: 44, minHeight: 44),
                   tooltip: 'Add item',
                 ),
               ],
@@ -1528,7 +1585,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                   activityId: activity.id,
                   status: CheckStatus.partly,
                   selectedStatus: activity.status,
-                  label: 'Partly',
+                  label: 'Partly done',
                   selectedColor: sand,
                   onTap: onStatusSelected,
                 ),
@@ -1544,7 +1601,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                   activityId: activity.id,
                   status: CheckStatus.none,
                   selectedStatus: activity.status,
-                  label: 'Unchecked',
+                  label: 'Clear check-in',
                   selectedColor: primaryTerracotta,
                   onTap: onStatusSelected,
                 ),
@@ -1564,7 +1621,7 @@ class _DaySheetActivityCard extends StatelessWidget {
                 onTap: onEditPlannedItem,
                 behavior: HitTestBehavior.opaque,
                 child: Text(
-                  'Edit this plan item',
+                  'Edit this date',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1595,7 +1652,7 @@ class _DaySheetActivityCard extends StatelessWidget {
               onTap: onEditTemplate,
               behavior: HitTestBehavior.opaque,
               child: Text(
-                'Edit activity template',
+                'Edit future versions',
                 style: GoogleFonts.dmSans(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -1749,7 +1806,7 @@ class _PlanItemEditorSheetState extends State<_PlanItemEditorSheet> {
               ),
               const SizedBox(height: 18),
               Text(
-                'Edit this plan item',
+                'Edit this date',
                 style: GoogleFonts.lora(
                   fontSize: 24,
                   fontWeight: FontWeight.w500,
@@ -1842,7 +1899,7 @@ class _PlanItemEditorSheetState extends State<_PlanItemEditorSheet> {
                 onTap: _editTemplate,
                 behavior: HitTestBehavior.opaque,
                 child: Text(
-                  'Edit activity template',
+                  'Edit future versions',
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

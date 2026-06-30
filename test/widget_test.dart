@@ -38,6 +38,7 @@ import 'package:life_shuffle/services/text_week_export_service.dart';
 import 'package:life_shuffle/theme/app_colors.dart';
 import 'package:life_shuffle/widgets/auth_gate.dart';
 import 'package:life_shuffle/widgets/bottom_nav_shell.dart';
+import 'package:life_shuffle/widgets/check_in_circle.dart';
 import 'package:life_shuffle/widgets/life_shuffle_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -3047,11 +3048,11 @@ void main() {
       find.byKey(const ValueKey('settings-publishing-card')),
       findsOneWidget,
     );
-    expect(find.text('Calendar feed'), findsOneWidget);
-    expect(find.text('Not enabled yet'), findsOneWidget);
+    expect(find.text('Phone calendar link'), findsOneWidget);
+    expect(find.text('Not set up yet'), findsOneWidget);
     expect(
       find.text(
-        'Turn this on to create a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
+        'Turn this on to create a private link for Apple Calendar, Google Calendar, or Outlook.',
       ),
       findsOneWidget,
     );
@@ -3091,7 +3092,7 @@ void main() {
     expect(appState.feedEnabled, isTrue);
     expect(firstToken, isNotNull);
     expect(firstToken!.length, greaterThanOrEqualTo(32));
-    expect(find.text('Feed is live'), findsOneWidget);
+    expect(find.text('Link is active'), findsOneWidget);
     expect(
       find.textContaining(
         '/.netlify/functions/calendar-feed?token=$firstToken',
@@ -3131,7 +3132,7 @@ void main() {
 
     expect(appState.feedEnabled, isFalse);
     expect(appState.feedToken, isNull);
-    expect(find.text('Not enabled yet'), findsOneWidget);
+    expect(find.text('Not set up yet'), findsOneWidget);
     expect(find.byKey(const ValueKey('settings-feed-token-preview')),
         findsNothing);
   });
@@ -3194,11 +3195,11 @@ void main() {
     );
     expect(find.byKey(const ValueKey('settings-download-raw-ics')),
         findsOneWidget);
-    expect(find.text('Download raw ICS'), findsOneWidget);
+    expect(find.text('Check raw calendar file'), findsOneWidget);
     expect(
       find.text(
-        'Download raw ICS is only for checking whether Life '
-        "Shuffle's feed has updated before Google Calendar "
+        'This file is only for checking whether Life '
+        "Shuffle's calendar link has updated before Google Calendar "
         'refreshes.',
       ),
       findsOneWidget,
@@ -3311,8 +3312,8 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('FEED ACTIONS'), findsOneWidget);
-    expect(find.text('ADVANCED DIAGNOSTICS'), findsOneWidget);
-    expect(find.text('TOKEN'), findsOneWidget);
+    expect(find.text('TROUBLESHOOTING'), findsOneWidget);
+    expect(find.text('RESET PRIVATE LINK'), findsOneWidget);
   });
 
   testWidgets('Settings exposes week text export copy action',
@@ -4799,10 +4800,111 @@ void main() {
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Planning dimensions'), findsNothing);
+    expect(find.text('Extra planning details'), findsNothing);
     expect(find.text('Difficulty'), findsNothing);
     expect(find.text('Energy'), findsNothing);
     expect(find.text('Social'), findsNothing);
+  });
+
+  testWidgets('Activities search filters by title and category',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'walk-search',
+          title: 'Waterfront walk',
+          category: 'Outside',
+          durationMinutes: 30,
+        ),
+        Activity(
+          id: 'read-search',
+          title: 'Read a novel',
+          category: 'Creative',
+          durationMinutes: 45,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('activities-search-field')),
+      'creative',
+    );
+    await tester.pump();
+
+    expect(find.text('Read a novel'), findsOneWidget);
+    expect(find.text('Waterfront walk'), findsNothing);
+  });
+
+  testWidgets('Activities filters active and paused items locally',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(
+      activities: [
+        Activity(
+          id: 'active-filter',
+          title: 'Active idea',
+          category: 'Outside',
+          durationMinutes: 30,
+        ),
+        Activity(
+          id: 'paused-filter',
+          title: 'Paused idea',
+          category: 'Rest',
+          durationMinutes: 30,
+          enabled: false,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: appState,
+          child: const Scaffold(body: ActivitiesScreen()),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Paused'));
+    await tester.pump();
+    expect(find.text('Paused idea'), findsOneWidget);
+    expect(find.text('Active idea'), findsNothing);
+
+    await tester.tap(find.text('Active'));
+    await tester.pump();
+    expect(find.text('Active idea'), findsOneWidget);
+    expect(find.text('Paused idea'), findsNothing);
+  });
+
+  testWidgets('Check-in circle exposes status semantics and a 44px target',
+      (WidgetTester tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CheckInCircle(status: CheckStatus.partly),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byType(CheckInCircle)).label,
+      contains('Partly done'),
+    );
+    expect(tester.getSize(find.byType(CheckInCircle)).shortestSide, 44);
+    semantics.dispose();
   });
 
   testWidgets('Activity form uses enabled dimension defaults when adding',
@@ -4829,7 +4931,7 @@ void main() {
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Planning dimensions'), findsOneWidget);
+    expect(find.text('Extra planning details'), findsOneWidget);
     expect(find.text('Difficulty'), findsOneWidget);
     expect(find.text('Energy'), findsOneWidget);
     expect(find.text('Social'), findsOneWidget);
@@ -4848,7 +4950,7 @@ void main() {
     expect(appState.activities.single.social, 'group');
   });
 
-  testWidgets('Activity form shows Must include in plans toggle and saves it',
+  testWidgets('Activity form shows include-in-plan toggle and saves it',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
@@ -4866,19 +4968,19 @@ void main() {
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Must include in plans'), findsOneWidget);
+    expect(find.text('Always try to include this'), findsOneWidget);
     expect(
       find.text(
-        'The planner adds this first, then still fills the rest of the '
-        'plan with other activities.',
+        'Adds this first, then fills the rest of the plan.',
       ),
       findsOneWidget,
     );
 
     await tester.enterText(find.byType(TextFormField).first, 'Eat Together');
-    await tester.tap(
-      find.widgetWithText(SwitchListTile, 'Must include in plans'),
-    );
+    final includeToggle =
+        find.widgetWithText(SwitchListTile, 'Always try to include this');
+    await tester.ensureVisible(includeToggle);
+    await tester.tap(includeToggle);
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -4917,7 +5019,10 @@ void main() {
     await tester.tap(find.text('S').at(1));
     await tester.pumpAndSettle();
 
-    expect(find.text('Clamped to 3 based on allowed days'), findsOneWidget);
+    expect(
+      find.text('Up to 3, based on your available days'),
+      findsOneWidget,
+    );
 
     await tester.enterText(find.byType(TextFormField).at(2), '6');
     await tester.ensureVisible(find.text('Save'));
@@ -7117,9 +7222,9 @@ void main() {
     expect(find.text(day.fullLabel), findsWidgets);
     expect(find.text(planned.title), findsWidgets);
     expect(find.text('Done'), findsOneWidget);
-    expect(find.text('Partly'), findsOneWidget);
+    expect(find.text('Partly done'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
-    expect(find.text('Unchecked'), findsOneWidget);
+    expect(find.text('Clear check-in'), findsOneWidget);
   });
 
   testWidgets(
@@ -7143,7 +7248,7 @@ void main() {
       find.byKey(ValueKey('day-sheet-edit-activity-${planned.id}')),
       findsOneWidget,
     );
-    expect(find.text('Edit this plan item'), findsOneWidget);
+    expect(find.text('Edit this date'), findsOneWidget);
     expect(
       find.byKey(ValueKey('day-sheet-remove-activity-${planned.id}')),
       findsOneWidget,
@@ -7152,7 +7257,7 @@ void main() {
       find.byKey(ValueKey('day-sheet-edit-template-${planned.id}')),
       findsOneWidget,
     );
-    expect(find.text('Edit activity template'), findsOneWidget);
+    expect(find.text('Edit future versions'), findsOneWidget);
   });
 
   testWidgets(
@@ -7191,9 +7296,9 @@ void main() {
       find.byKey(const ValueKey('plan-item-editor-sheet')),
       findsOneWidget,
     );
-    // "Edit this plan item" is both the day sheet's action label and the
+    // "Edit this date" is both the day sheet's action label and the
     // focused editor's own header, so both are on screen at once.
-    expect(find.text('Edit this plan item'), findsWidgets);
+    expect(find.text('Edit this date'), findsWidgets);
     expect(
       find.byKey(const ValueKey('plan-item-editor-scope-note')),
       findsOneWidget,
@@ -7598,7 +7703,7 @@ void main() {
     expect(find.text('Edit activity'), findsWidgets);
     expect(find.widgetWithText(TextFormField, 'Morning walk'), findsOneWidget);
     expect(find.text('Preferred time'), findsOneWidget);
-    expect(find.text('Max per week'), findsOneWidget);
+    expect(find.text('How often each week?'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, 'Sunrise walk');
     await tester.ensureVisible(find.text('Save'));
@@ -8419,9 +8524,9 @@ void main() {
     expect(find.byKey(const ValueKey('day-checkin-sheet')), findsOneWidget);
     expect(find.text('Check in after this day.'), findsWidgets);
     expect(find.text('Done'), findsNothing);
-    expect(find.text('Partly'), findsNothing);
+    expect(find.text('Partly done'), findsNothing);
     expect(find.text('Skipped'), findsNothing);
-    expect(find.text('Unchecked'), findsNothing);
+    expect(find.text('Clear check-in'), findsNothing);
   });
 
   testWidgets(
@@ -8471,9 +8576,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Done'), findsOneWidget);
-    expect(find.text('Partly'), findsOneWidget);
+    expect(find.text('Partly done'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
-    expect(find.text('Unchecked'), findsOneWidget);
+    expect(find.text('Clear check-in'), findsOneWidget);
 
     final planned = pastDay.activities.first;
     await tester.tap(
@@ -8551,10 +8656,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // "Max per week" only appears on the activity template form (not
+    // "How often each week?" only appears on the activity form (not
     // elsewhere on the Today screen), so finding it confirms the sheet
     // actually opened rather than just that the tap didn't crash.
-    expect(find.text('Max per week'), findsOneWidget);
+    expect(find.text('How often each week?'), findsOneWidget);
   });
 
   testWidgets('Today quick action Generate week calls AppState.regenerate',
@@ -10459,7 +10564,7 @@ void main() {
       await _pumpHistoryScreen(tester, _appStateWithHistory(const []));
 
       expect(find.byKey(const ValueKey('history-empty')), findsOneWidget);
-      expect(find.text('No past days yet'), findsOneWidget);
+      expect(find.text('No recent days yet'), findsOneWidget);
       expect(
         find.text(
           'Days will appear here as your plans build a little history.',
@@ -10514,7 +10619,7 @@ void main() {
           findsOneWidget);
       expect(find.byKey(const ValueKey('history-summary-Skipped-1')),
           findsOneWidget);
-      expect(find.byKey(const ValueKey('history-summary-Unchecked-1')),
+      expect(find.byKey(const ValueKey('history-summary-Not checked in-1')),
           findsOneWidget);
       expect(find.text('38% complete'), findsOneWidget);
     });

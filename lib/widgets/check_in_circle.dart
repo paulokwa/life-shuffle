@@ -16,15 +16,36 @@ class CheckInCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: size,
-        height: size,
-        decoration: _decoration(),
-        alignment: Alignment.center,
-        child: _child(),
+    final statusLabel = switch (status) {
+      CheckStatus.none => 'Not checked in',
+      CheckStatus.done => 'Done',
+      CheckStatus.partly => 'Partly done',
+      CheckStatus.skipped => 'Skipped',
+    };
+    return Semantics(
+      button: onTap != null,
+      label: 'Check-in status: $statusLabel',
+      hint: onTap == null ? null : 'Tap to change status',
+      child: Material(
+        color: Colors.transparent,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: SizedBox(
+            width: size < 44 ? 44 : size,
+            height: size < 44 ? 44 : size,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: size,
+                height: size,
+                decoration: _decoration(),
+                alignment: Alignment.center,
+                child: _child(),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

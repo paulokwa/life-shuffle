@@ -91,7 +91,7 @@ class ProgressScreen extends StatelessWidget {
                     ],
                   ),
                   Text(
-                    'This week',
+                    'A gentle look at your plans',
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                   const SizedBox(height: 20),
@@ -137,7 +137,7 @@ class ProgressScreen extends StatelessWidget {
                       const SizedBox(width: 10),
                       _SummaryTile(
                         value: rateLabel,
-                        label: 'Completion',
+                        label: 'How it went',
                         color: primaryTerracotta,
                       ),
                     ],
@@ -375,7 +375,7 @@ class _RecentSummaryCard extends StatelessWidget {
               ),
               _RecentCount(
                 value: summary.unchecked,
-                label: 'Unchecked',
+                label: 'Not checked in',
                 color: primaryTerracotta,
               ),
             ],
