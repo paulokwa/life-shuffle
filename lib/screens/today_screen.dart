@@ -96,6 +96,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
     final allActivities = week.expand((d) => d.activities).toList();
     final planned = allActivities.length;
+    final hasEnabledActivities = state.activities.any((a) => a.enabled);
     final done =
         allActivities.where((a) => a.status == CheckStatus.done).length;
     final partly =
@@ -123,7 +124,11 @@ class _TodayScreenState extends State<TodayScreen> {
                 children: [
                   _GreetingBlock(dateLabel: _formattedDate()),
                   const SizedBox(height: 16),
-                  _NextUpCard(nextUp: nextUp),
+                  _NextUpCard(
+                    nextUp: nextUp,
+                    hasPlan: planned > 0,
+                    hasEnabledActivities: hasEnabledActivities,
+                  ),
                   if (showCheckInPrompt) ...[
                     const SizedBox(height: 12),
                     _CheckInCard(
@@ -134,9 +139,13 @@ class _TodayScreenState extends State<TodayScreen> {
                   const SizedBox(height: 12),
                   _ThisWeekCard(planned: planned, done: done, partly: partly),
                   const SizedBox(height: 16),
-                  _QuickActionsSection(state: state),
+                  _QuickActionsSection(state: state, hasPlan: planned > 0),
                   const SizedBox(height: 16),
-                  _TodaysPlanSection(activities: todayActivities),
+                  _TodaysPlanSection(
+                    activities: todayActivities,
+                    hasPlan: planned > 0,
+                    hasEnabledActivities: hasEnabledActivities,
+                  ),
                 ],
               ),
             ),
@@ -179,9 +188,15 @@ class _GreetingBlock extends StatelessWidget {
 // ─── Next up card ─────────────────────────────────────────────────────────────
 
 class _NextUpCard extends StatelessWidget {
-  const _NextUpCard({required this.nextUp});
+  const _NextUpCard({
+    required this.nextUp,
+    required this.hasPlan,
+    required this.hasEnabledActivities,
+  });
 
   final PlannedActivity? nextUp;
+  final bool hasPlan;
+  final bool hasEnabledActivities;
 
   IconData _icon(String category) => switch (category) {
         'Creative' => Icons.menu_book_rounded,
@@ -218,7 +233,11 @@ class _NextUpCard extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                'Nothing else planned today — enjoy your day',
+                !hasEnabledActivities
+                    ? 'Add a few activities to start shaping your plan'
+                    : !hasPlan
+                        ? 'No plan yet — make one when you’re ready'
+                        : 'Nothing else planned today — enjoy your day',
                 style: GoogleFonts.dmSans(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
@@ -532,9 +551,10 @@ class _ProgressBar extends StatelessWidget {
 // ─── Quick actions ────────────────────────────────────────────────────────────
 
 class _QuickActionsSection extends StatelessWidget {
-  const _QuickActionsSection({required this.state});
+  const _QuickActionsSection({required this.state, required this.hasPlan});
 
   final AppState state;
+  final bool hasPlan;
 
   @override
   Widget build(BuildContext context) {
@@ -567,10 +587,25 @@ class _QuickActionsSection extends StatelessWidget {
             Expanded(
               child: QuickActionCard(
                 key: const ValueKey('today-quick-action-generate-week'),
-                label: 'Generate week',
+                label: hasPlan ? 'Shuffle plan' : 'Make plan',
                 icon: Icons.bolt_rounded,
                 accentColor: accentSage,
-                onTap: state.regenerate,
+                onTap: () {
+                  state.regenerate();
+                  if (context.findAncestorWidgetOfExactType<Scaffold>() !=
+                      null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          hasPlan
+                              ? 'Plan shuffled. You can undo this from Plan.'
+                              : 'Your plan is ready.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
               ),
             ),
           ],
@@ -611,9 +646,15 @@ class _QuickActionsSection extends StatelessWidget {
 // ─── Today's plan ─────────────────────────────────────────────────────────────
 
 class _TodaysPlanSection extends StatelessWidget {
-  const _TodaysPlanSection({required this.activities});
+  const _TodaysPlanSection({
+    required this.activities,
+    required this.hasPlan,
+    required this.hasEnabledActivities,
+  });
 
   final List<PlannedActivity> activities;
+  final bool hasPlan;
+  final bool hasEnabledActivities;
 
   @override
   Widget build(BuildContext context) {
@@ -632,10 +673,55 @@ class _TodaysPlanSection extends StatelessWidget {
         const SizedBox(height: 10),
         if (activities.isEmpty)
           LsCard(
-            child: Text(
-              'No activities planned for today. Go to the Plan tab to generate or adjust your week.',
-              style: GoogleFonts.dmSans(
-                  fontSize: 14, color: textMuted, height: 1.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  !hasEnabledActivities
+                      ? 'No activities yet'
+                      : !hasPlan
+                          ? 'No plan yet'
+                          : 'Nothing planned for today',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  !hasEnabledActivities
+                      ? 'Add your own activity or choose a few starters.'
+                      : !hasPlan
+                          ? 'Make a plan when you want a little direction.'
+                          : 'Open Plan if you want to add something to this day.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    color: textMuted,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () {
+                    final nav = BottomNavScope.maybeOf(context);
+                    if (!hasEnabledActivities) {
+                      nav?.onNavigate(BottomNavTab.activities);
+                    } else {
+                      nav?.onNavigate(BottomNavTab.plan);
+                    }
+                  },
+                  icon: Icon(
+                    hasEnabledActivities
+                        ? Icons.calendar_today_rounded
+                        : Icons.add_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    hasEnabledActivities ? 'Open Plan' : 'Add activities',
+                  ),
+                ),
+              ],
             ),
           )
         else

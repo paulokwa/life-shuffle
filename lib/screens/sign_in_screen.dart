@@ -39,7 +39,7 @@ class _SignInScreenState extends State<SignInScreen> {
       debugPrint('[AuthDebug] unexpected error: $e');
       if (mounted) {
         setState(() {
-          _error = 'Sign-in failed: $e';
+          _error = 'We couldn\'t sign you in just now. Please try again.';
           _loading = false;
         });
       }
@@ -50,18 +50,17 @@ class _SignInScreenState extends State<SignInScreen> {
     // Dynamic code generated when the API key HTTP-referrer restriction blocks the request.
     if (e.code.startsWith('requests-from-referer-') &&
         e.code.endsWith('-are-blocked')) {
-      return 'Sign-in failed: API key blocks requests from origin "${origin ?? '?'}". '
-          'Add this referrer under Google Cloud Console → APIs & Services → Credentials → [API key] → HTTP referrers.';
+      return 'Sign-in is not available from this address. Try the usual Life Shuffle link or contact the app owner.';
     }
     return switch (e.code) {
       'unauthorized-domain' =>
-        'Sign-in failed [${e.code}]: origin="${origin ?? '?'}" — add this host under Firebase Auth > Settings > Authorized domains.',
+        'Sign-in is not available from this address. Try the usual Life Shuffle link.',
       'popup-blocked' =>
-        'Sign-in failed: the browser blocked the Google sign-in popup.',
+        'Your browser blocked the Google sign-in window. Allow pop-ups, then try again.',
       'popup-closed-by-user' => 'Sign-in was cancelled before Google finished.',
       'operation-not-allowed' =>
-        'Sign-in failed: enable Google as a sign-in provider in Firebase Authentication.',
-      _ => 'Sign-in failed (${e.code}): ${e.message ?? 'Try again.'}',
+        'Google sign-in is temporarily unavailable. Please try again later.',
+      _ => 'We couldn\'t sign you in just now. Please try again.',
     };
   }
 

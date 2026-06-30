@@ -222,7 +222,7 @@ class _CatchupItemCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: OutcomeButton(
-                  label: 'Partly',
+                  label: 'Partly done',
                   background: sand.withValues(alpha: 0.20),
                   foreground: sand,
                   onTap: () => _setStatus(context, CheckStatus.partly),

@@ -70,7 +70,7 @@ class _WeekReviewView extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Mark what happened across the week. No typing needed.',
+                    'Mark what happened across the week. Changes save as you go.',
                     style: GoogleFonts.dmSans(fontSize: 14, color: textMuted),
                   ),
                 ],
@@ -233,7 +233,7 @@ class _WeekReviewItemCard extends StatelessWidget {
                   activityId: activity.id,
                   status: CheckStatus.partly,
                   selectedStatus: activity.status,
-                  label: 'Partly',
+                  label: 'Partly done',
                   selectedColor: sand,
                   onTap: (status) => _setStatus(context, status),
                 ),
