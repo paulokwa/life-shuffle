@@ -2206,3 +2206,25 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: History week and month views now show a streak card (current streak + best) and a ranked "By category" section, both built exclusively from frozen archive data.
 - **Next recommended step**: Gather real-use feedback; next natural history steps are calendar-grid history, custom ranges, or richer trend cards.
 - **Open questions**: None.
+
+---
+
+## 2026-06-29 (continued) — MVP 2 slice 15: Archived trend insights (WIP — session interrupted mid-debug)
+
+- **Goal**: Add a "Patterns" insight card (`_InsightsCard`) to the History week/month views containing up to 5 gentle, text-only insight strings derived from frozen `PlanHistoryEntry` data, without charts, AI, year view, custom ranges, or backend changes.
+- **Summary**: `_HistoryInsights.fromPeriod()` was added as a private class computing up to 5 insight types: (1) active-days count (done + partly, threshold ≥1), (2) most-planned category (≥2 planned), (3) best-completion category (≥3 planned, 70%+ done/partly), (4) period-over-period comparison (this week vs prior week, or this month vs prior month), and (5) weekday-strength (≥2 global entries, ≥3 qualifying weekdays — not yet wired to a passing test). `_InsightsCard` renders with `key: ValueKey('history-insights-card')` inside `LsCard`, showing a "Patterns" heading and one bullet row per insight, or a "Patterns will appear once there is a little more history." placeholder when the insights list is empty. 9 tests were added. During test execution, 5 of the 9 tests failed because `_InsightsCard` was at list index 1 in a `ListView.separated` and was not being inflated in the test viewport despite `cacheExtent: 1000`. The fix attempted in this session was to merge both `_CategoryBreakdown` and `_InsightsCard` into a single `Column` at list index 0 so the combined widget always starts at y=0 and is always inflated. This made all 9 insight tests pass, but broke 1 pre-existing test ("Week grouping stays archive-driven after regeneration") because the `_HistoryDayCard` at list index 1 (after the merged extras at index 0) is now not inflated in that test's viewport. **Session ended mid-fix; 1 test is still failing.**
+- **Files changed** (so far):
+  - `lib/screens/history_screen.dart` — added `_HistoryInsights`, `_InsightsCard`; changed `_HistoryList` to merge both extras into a single Column at list index 0 instead of two separate list items at index 0 and 1; wired insights computation into `_HistoryViewState.build()`; added `_previousPeriodEntries` getter
+  - `test/widget_test.dart` — added 9 insight tests; cleaned up temporary diagnostic assertions from the "active days" test
+- **Decisions made** (so far):
+  - Insight copy is gentle and descriptive ("You had completed or partly completed activities on N days this week."), not scorey ("You scored X%").
+  - Active days threshold: 1 qualifying day minimum. Most-planned threshold: 2 planned. Best-completion threshold: 3 planned + 70% done-or-partly. Weekday-strength threshold: 2 global entries + 3 qualifying weekdays.
+  - Merged both extra cards into a single list item at index 0 in `_HistoryList` to guarantee `_InsightsCard` is always inflated (it's inside the always-visible index-0 item rather than at a lazy-loaded index 1).
+- **Tests run**:
+  - `flutter test --name "insight"` — 7/7 passing.
+  - `flutter test --name "comparison"` — 3/3 passing (includes week-over-week and month-over-month).
+  - `flutter test` — 401 passing, **1 failing** (`History screen Week grouping stays archive-driven after regeneration`).
+- **Current state**: **BROKEN — 1 test failing, do not commit.** The 9 insight tests all pass. The remaining failure is `_HistoryDayCard` at list index 1 not being inflated in the "Week grouping" test, despite being at roughly 202–258 px from the list top and the default `cacheExtent` of 250 px. Root cause is unclear (see `TROUBLESHOOTING_LOG.md`). No `dart format`, `flutter analyze`, or doc updates have been done for Slice 15 yet.
+- **Next recommended step**: Add `cacheExtent: 2000` (or a similarly generous value) to the `ListView.separated` in `_HistoryList.build()` and re-run `flutter test` to confirm all 402 tests pass. If that fixes the last failing test, run the full validation sequence (`dart format lib/screens/history_screen.dart test/widget_test.dart`, `flutter analyze --no-fatal-infos`, `flutter test`, `git diff --check`) and then update `docs/ROADMAP.md`, `docs/PARKING_LOT.md`, `docs/SESSION_LOG.md` (mark this entry complete), and `docs/DECISIONS.md` before committing with message "Add archived trend cards to History".
+- **Open questions**:
+  - Why does the default `cacheExtent` (250 px) fail to inflate a `_HistoryDayCard` that starts at roughly 202–258 px, when the viewport is estimated to be ~0–200 px? This is the root of the remaining failure. The merged-extras approach sidesteps the question for insight tests but does not explain the mystery.

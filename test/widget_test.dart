@@ -11288,6 +11288,353 @@ void main() {
         );
       });
     });
+
+    group('Insights / patterns', () {
+      testWidgets(
+          'insights card shows Patterns will appear when period has '
+          'too little data for any insight', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        // 1 unchecked entry in the week → no active-day insight (0 done/partly),
+        // no most-planned insight (top category has only 1, below threshold 2),
+        // no best-completion, no comparison (no previous data), no weekday insight
+        // (not enough global history) → insights list is empty → Patterns card.
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.none,
+            category: 'Outside',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('history-insights-card')),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'Patterns will appear once there is a little more history.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('active days insight counts done and partly days',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        // Thursday; current week = Mon Jun 15 – Sun Jun 21
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: DateTime(2026, 6, 16),
+            status: CheckStatus.partly,
+            category: 'Outside',
+          ),
+          // Skipped does not count as an active day.
+          _historyEntry(
+            id: 'a3',
+            date: DateTime(2026, 6, 17),
+            status: CheckStatus.skipped,
+            category: 'Creative',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('history-insights-card')),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'You had completed or partly completed activities on '
+            '2 days this week.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('most active category insight shows top category',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'a3',
+            date: DateTime(2026, 6, 16),
+            category: 'Creative',
+            status: CheckStatus.done,
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.text(
+            'Your most planned category was Outside with 2 activities.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('best completion category insight shown when threshold met',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        // Health has 3 planned, all done → 100%. Creative has 1 → below
+        // threshold of 3 so it is excluded from the best-completion insight.
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'h1',
+            date: DateTime(2026, 6, 15),
+            category: 'Health',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'h2',
+            date: DateTime(2026, 6, 16),
+            category: 'Health',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'h3',
+            date: DateTime(2026, 6, 17),
+            category: 'Health',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'c1',
+            date: DateTime(2026, 6, 15),
+            category: 'Creative',
+            status: CheckStatus.done,
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.text('Your most completed category was Health at 100%.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets(
+          'no best completion insight when all categories are below threshold',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        // Only 2 planned per category → below threshold of 3.
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'a2',
+            date: DateTime(2026, 6, 16),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'b1',
+            date: DateTime(2026, 6, 15),
+            category: 'Creative',
+            status: CheckStatus.done,
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(find.textContaining('most completed category'), findsNothing);
+      });
+
+      testWidgets('week-over-week comparison shows correct counts',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        // Thursday June 18: current week = Jun 15–21; previous = Jun 8–14.
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          // Current week: 3 done/partly.
+          _historyEntry(
+            id: 'c1',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'c2',
+            date: DateTime(2026, 6, 16),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'c3',
+            date: DateTime(2026, 6, 17),
+            status: CheckStatus.partly,
+            category: 'Creative',
+          ),
+          // Previous week: 2 done/partly.
+          _historyEntry(
+            id: 'p1',
+            date: DateTime(2026, 6, 8),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'p2',
+            date: DateTime(2026, 6, 9),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'p3',
+            date: DateTime(2026, 6, 10),
+            status: CheckStatus.skipped,
+            category: 'Creative',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        expect(
+          find.text(
+            'You completed or partly completed 3 activities this week, '
+            'compared to 2 last week.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('month-over-month comparison shows correct counts',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          // Current month (June): 2 done.
+          _historyEntry(
+            id: 'm1',
+            date: DateTime(2026, 6, 5),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'm2',
+            date: DateTime(2026, 6, 10),
+            status: CheckStatus.done,
+            category: 'Creative',
+          ),
+          // Previous month (May): 1 done, 1 skipped.
+          _historyEntry(
+            id: 'p1',
+            date: DateTime(2026, 5, 15),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'p2',
+            date: DateTime(2026, 5, 20),
+            status: CheckStatus.skipped,
+            category: 'Creative',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Month'));
+        await tester.pump();
+        expect(
+          find.text(
+            'You completed or partly completed 2 activities this month, '
+            'compared to 1 last month.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('future entries within the period are excluded from insights',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        // Today = Thursday June 18. Week = Jun 15–21. Jun 19 (Friday) is
+        // still in the week but is a future date → must be excluded.
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'f1',
+            date: DateTime(2026, 6, 19),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        // Only 1 active day (Jun 15). Jun 19 is future and excluded.
+        expect(
+          find.text(
+            'You had completed or partly completed activities on '
+            '1 day this week.',
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('insights card does not appear in Today mode',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final appState = _appStateWithHistory([
+          _historyEntry(
+            id: 'a1',
+            date: DateTime(2026, 6, 15),
+            status: CheckStatus.done,
+            category: 'Outside',
+          ),
+        ]);
+        await _pumpHistoryScreen(tester, appState, now: now);
+        // Default mode is Today — insights card must not be in the tree.
+        expect(
+          find.byKey(const ValueKey('history-insights-card')),
+          findsNothing,
+        );
+      });
+    });
   });
 }
 

@@ -92,6 +92,23 @@ class _HistoryViewState extends State<_HistoryView> {
         _HistoryMode.month => _selectedMonth.isBefore(_currentMonth),
       };
 
+  List<PlanHistoryEntry> get _previousPeriodEntries {
+    if (_mode == _HistoryMode.today) return const [];
+    if (_mode == _HistoryMode.week) {
+      final prevStart = _selectedWeekStart.subtract(const Duration(days: 7));
+      final prevEnd = _selectedWeekStart.subtract(const Duration(days: 1));
+      return _daysInRange(_historyByDate, prevStart, prevEnd)
+          .expand((d) => d.entries)
+          .toList();
+    }
+    final prevMonthStart =
+        DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+    final prevMonthEnd = _selectedMonth.subtract(const Duration(days: 1));
+    return _daysInRange(_historyByDate, prevMonthStart, prevMonthEnd)
+        .expand((d) => d.entries)
+        .toList();
+  }
+
   List<_HistoryDay> get _visibleDays {
     if (_mode == _HistoryMode.today) {
       return _daysFromIndex(_historyByDate);
@@ -116,6 +133,15 @@ class _HistoryViewState extends State<_HistoryView> {
   Widget build(BuildContext context) {
     final grouped = _visibleDays;
     final periodEntries = grouped.expand((day) => day.entries).toList();
+    final insights = _mode != _HistoryMode.today
+        ? _HistoryInsights.fromPeriod(
+            periodEntries: periodEntries,
+            previousEntries: _previousPeriodEntries,
+            allHistory: widget.history,
+            mode: _mode,
+            today: _today,
+          )
+        : const <String>[];
 
     return Scaffold(
       key: const ValueKey('history-screen'),
@@ -210,6 +236,7 @@ class _HistoryViewState extends State<_HistoryView> {
                       categoryEntries: _mode != _HistoryMode.today
                           ? periodEntries
                           : const [],
+                      insights: insights,
                     ),
             ),
           ],
@@ -510,24 +537,40 @@ class _HistoryList extends StatelessWidget {
   const _HistoryList({
     required this.grouped,
     required this.categoryEntries,
+    required this.insights,
   });
 
   final List<_HistoryDay> grouped;
 
-  /// Non-empty only in week/month mode; drives the category breakdown header.
+  /// Non-empty only in week/month mode; drives the category breakdown and
+  /// insights cards.
   final List<PlanHistoryEntry> categoryEntries;
+
+  /// Pre-computed insight strings for this period; empty list triggers the
+  /// "Patterns will appear" placeholder in [_InsightsCard].
+  final List<String> insights;
 
   @override
   Widget build(BuildContext context) {
-    final showCategory = categoryEntries.isNotEmpty;
-    final offset = showCategory ? 1 : 0;
+    final showExtras = categoryEntries.isNotEmpty;
+    final offset = showExtras ? 1 : 0;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       itemCount: grouped.length + offset,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        if (showCategory && index == 0) {
-          return _CategoryBreakdown(entries: categoryEntries);
+        if (showExtras && index == 0) {
+          // Both extra cards are bundled into a single list item so they are
+          // always inflated (this item starts at y=0 and is never lazy-skipped).
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _CategoryBreakdown(entries: categoryEntries),
+              const SizedBox(height: 10),
+              _InsightsCard(insights: insights),
+            ],
+          );
         }
         final day = grouped[index - offset];
         return _HistoryDayCard(date: day.date, entries: day.entries);
@@ -865,6 +908,232 @@ class _StreakCard extends StatelessWidget {
 }
 
 String _streakDaysLabel(int days) => days == 1 ? '1 day' : '$days days';
+
+class _HistoryInsights {
+  // Minimum planned entries a category must have before it qualifies for the
+  // best-completion insight. Prevents "100%" from a single planned item.
+  static const int _minCategoryPlanned = 3;
+
+  // Minimum total entries a weekday must have (across all history) before it
+  // qualifies for the strongest-weekday insight. Requires at least this many
+  // occurrences across at least 3 distinct weekdays before showing anything.
+  static const int _minWeekdayEntries = 2;
+
+  static List<String> fromPeriod({
+    required List<PlanHistoryEntry> periodEntries,
+    required List<PlanHistoryEntry> previousEntries,
+    required List<PlanHistoryEntry> allHistory,
+    required _HistoryMode mode,
+    required DateTime today,
+  }) {
+    if (periodEntries.isEmpty) return const [];
+
+    final periodLabel = mode == _HistoryMode.week ? 'week' : 'month';
+    final prevLabel = mode == _HistoryMode.week ? 'last week' : 'last month';
+    final insights = <String>[];
+
+    // 1. Active days: count distinct days with at least one Done or Partly.
+    final activeDates = <DateTime>{};
+    for (final e in periodEntries) {
+      if (e.status == CheckStatus.done || e.status == CheckStatus.partly) {
+        activeDates.add(_dateOnly(e.date));
+      }
+    }
+    if (activeDates.isNotEmpty) {
+      final n = activeDates.length;
+      insights.add(
+        'You had completed or partly completed activities on '
+        '${n == 1 ? "1 day" : "$n days"} this $periodLabel.',
+      );
+    }
+
+    // 2. Most planned category — only when the top category has at least 2
+    //    planned entries so a single-activity period does not yield noise.
+    final counts = <String, int>{};
+    for (final e in periodEntries) {
+      counts[e.category] = (counts[e.category] ?? 0) + 1;
+    }
+    if (counts.isNotEmpty) {
+      final top = counts.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      final n = top.value;
+      if (n >= 2) {
+        insights.add(
+          'Your most planned category was ${top.key} with '
+          '${n == 1 ? "1 activity" : "$n activities"}.',
+        );
+      }
+    }
+
+    // 3. Best completion category — only for categories with enough planned
+    //    entries to make the percentage meaningful.
+    final tallies = <String, _CategoryTally>{};
+    for (final e in periodEntries) {
+      final t = tallies.putIfAbsent(e.category, _CategoryTally.new);
+      t.planned++;
+      if (e.status == CheckStatus.done) t.done++;
+      if (e.status == CheckStatus.partly) t.partly++;
+      if (e.status == CheckStatus.skipped) t.skipped++;
+      if (e.status == CheckStatus.none) t.unchecked++;
+    }
+    final eligible = tallies.entries
+        .where((entry) => entry.value.planned >= _minCategoryPlanned)
+        .toList();
+    if (eligible.isNotEmpty) {
+      final best = eligible
+          .reduce((a, b) => _tallyPct(a.value) >= _tallyPct(b.value) ? a : b);
+      final pct = _tallyPct(best.value);
+      if (pct > 0) {
+        insights.add(
+          'Your most completed category was ${best.key} at $pct%.',
+        );
+      }
+    }
+
+    // 4. Period vs previous period comparison.
+    if (previousEntries.isNotEmpty) {
+      final currentDone = periodEntries
+          .where(
+            (e) =>
+                e.status == CheckStatus.done || e.status == CheckStatus.partly,
+          )
+          .length;
+      final prevDone = previousEntries
+          .where(
+            (e) =>
+                e.status == CheckStatus.done || e.status == CheckStatus.partly,
+          )
+          .length;
+      final cLabel =
+          currentDone == 1 ? '1 activity' : '$currentDone activities';
+      if (currentDone == prevDone) {
+        insights.add(
+          'You completed or partly completed $cLabel this $periodLabel, '
+          'the same as $prevLabel.',
+        );
+      } else {
+        insights.add(
+          'You completed or partly completed $cLabel this $periodLabel, '
+          'compared to $prevDone $prevLabel.',
+        );
+      }
+    }
+
+    // 5. Strongest day of week across global history (past entries only).
+    final wdTotal = <int, int>{};
+    final wdDonePartly = <int, int>{};
+    for (final e in allHistory) {
+      final date = _dateOnly(e.date);
+      if (date.isAfter(today)) continue;
+      final wd = date.weekday;
+      wdTotal[wd] = (wdTotal[wd] ?? 0) + 1;
+      if (e.status == CheckStatus.done || e.status == CheckStatus.partly) {
+        wdDonePartly[wd] = (wdDonePartly[wd] ?? 0) + 1;
+      }
+    }
+    final qualified = wdTotal.entries
+        .where((entry) => entry.value >= _minWeekdayEntries)
+        .toList();
+    if (qualified.length >= 3) {
+      final strongest = qualified.reduce((a, b) =>
+          (wdDonePartly[a.key] ?? 0) >= (wdDonePartly[b.key] ?? 0) ? a : b);
+      if ((wdDonePartly[strongest.key] ?? 0) > 0) {
+        const weekdays = [
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+          'Sunday',
+        ];
+        insights.add(
+          'Historically, ${weekdays[strongest.key - 1]} tends to be your '
+          'most active day.',
+        );
+      }
+    }
+
+    return insights;
+  }
+
+  static int _tallyPct(_CategoryTally t) => t.planned == 0
+      ? 0
+      : (((t.done + t.partly * 0.5) / t.planned) * 100).round();
+}
+
+class _InsightsCard extends StatelessWidget {
+  const _InsightsCard({required this.insights});
+
+  final List<String> insights;
+
+  @override
+  Widget build(BuildContext context) {
+    return LsCard(
+      key: const ValueKey('history-insights-card'),
+      child: insights.isEmpty
+          ? Row(
+              children: [
+                const Icon(
+                  Icons.lightbulb_outline_rounded,
+                  color: textMuted,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Patterns will appear once there is a little more history.',
+                    style: GoogleFonts.dmSans(fontSize: 13, color: textMuted),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Patterns',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (int i = 0; i < insights.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Container(
+                          width: 4,
+                          height: 4,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accentSage,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          insights[i],
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            color: textPrimary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
 
 Future<void> _showHistoryDaySheet(
   BuildContext context,
