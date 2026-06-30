@@ -54,12 +54,12 @@ If it is exciting but too early, put it here.
 - **Why it is parked**: Auth/profile work can slow down early momentum. Start local first, then Firebase/anonymous auth later.
 - **Possible phase**: MVP 2 or later
 
-### Historical calendar archive and trends
+### Historical calendar browsing and richer trends
 
-- **Idea**: Preserve dated plan and check-in history from calendar creation so users can go back through past weeks, two-week ranges, months, and eventually year-style views.
+- **Idea**: Add read-only browsing across archived past weeks, two-week ranges, months, and eventually year-style views, plus richer long-term trends.
 - **Why it is useful**: Users should be able to see what was planned, done, partly done, skipped, and left unchecked over time, not just the currently generated range. This would also support richer trends, streaks, category breakdowns, and long-term analytics.
-- **Status update (2026-06-29)**: The underlying persistence foundation now exists - `PlanHistoryEntry` (`lib/models/plan_history_entry.dart`) is an occurrence-keyed snapshot (title/time/duration/category/dimensions/source/check-in status/locked/removed) captured by `AppState` on every generate/regenerate/manual-edit/check-in/removal, synced through the existing flat `SavedState`/Firestore path. Once an occurrence's date is today or earlier, its snapshot fields freeze so a later source-`Activity` rename or a regeneration landing different content on the same date can't quietly rewrite what actually happened; only an explicit per-occurrence edit, check-in, lock, or removal updates an existing entry after that point. See `DECISIONS.md`'s 2026-06-29 entry for the full rationale. **Still parked**: any actual "go back in time" browsing UI, year/N-day views, trends/streaks/charts built from the archive, and switching `ProgressSummaryCalculator`/the Progress screen to read from archived entries instead of the live generated/visible window (deliberately left unchanged this round - see `ROADMAP.md` MVP 2 slice 9).
-- **Why it is parked**: Building the browsing/trends UI before proving the persistence model is safe (real document-size growth, real multi-device sync behavior) risks the same "exciting but too early" trap this file exists to prevent.
+- **Status update (2026-06-29)**: Slice 9 added the persisted `PlanHistoryEntry` foundation, and Slice 10 now uses it for the existing Past 7/Past 30/Difficulty/Recent Rhythm summaries. **Still parked**: any actual "go back in time" browsing UI, year/N-day views, and richer long-term charts or trends.
+- **Why it is parked**: The existing summaries are now historically honest without needing a separate browsing surface. More UI and analytics should wait for a concrete need and real archive-growth experience.
 - **Possible phase**: Later MVP 2 analytics/history slice, now that the archive foundation exists to build on.
 
 ### Custom N-day planning horizon

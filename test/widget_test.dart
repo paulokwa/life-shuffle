@@ -9783,6 +9783,181 @@ void main() {
     expect(rhythm.hasComparisonHistory, isFalse);
   });
 
+  test('Archive progress includes entries older than the live plan range', () {
+    final now = DateTime(2026, 6, 18, 14);
+    final history = [
+      _historyEntry(
+        id: 'older',
+        date: DateTime(2026, 6, 1),
+        status: CheckStatus.done,
+      ),
+      _historyEntry(
+        id: 'today',
+        date: DateTime(2026, 6, 18),
+        status: CheckStatus.partly,
+      ),
+    ];
+
+    final summary = ProgressSummaryCalculator.recentFromHistory(
+      history,
+      days: 30,
+      now: now,
+    );
+
+    expect(summary.planned, 2);
+    expect(summary.done, 1);
+    expect(summary.partly, 1);
+  });
+
+  test('Archive progress stays stable across source rename and regeneration',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    await PersistenceService.init();
+    final appState = AppState(activities: PlannerService.defaultActivities);
+    final today = _todayWithActivities(appState);
+    final planned = today.activities.first;
+    planned.status = CheckStatus.done;
+    appState.notifyCheckIn(planned);
+    final before = ProgressSummaryCalculator.recentFromHistory(
+      appState.planHistory,
+      days: 7,
+    );
+    final archivedTitle =
+        appState.planHistoryEntryFor(today.date, planned.activity.id)!.title;
+
+    appState.updateActivity(
+      planned.activity.id,
+      title: 'Renamed after planning',
+      category: planned.activity.category,
+      durationMinutes: planned.activity.durationMinutes,
+      preferredTime: planned.activity.preferredTime,
+      maxPerWeek: planned.activity.maxPerWeek,
+      allowedWeekdays: planned.activity.allowedWeekdays,
+      noConsecutiveDays: planned.activity.noConsecutiveDays,
+      enabled: planned.activity.enabled,
+      mustIncludeInPlans: planned.activity.mustIncludeInPlans,
+    );
+    appState.regenerate();
+    final after = ProgressSummaryCalculator.recentFromHistory(
+      appState.planHistory,
+      days: 7,
+    );
+
+    expect(after.done, greaterThanOrEqualTo(before.done));
+    expect(
+      appState.planHistoryEntryFor(today.date, planned.activity.id)!.title,
+      archivedTitle,
+    );
+  });
+
+  test('Archive difficulty summary uses the archived difficulty snapshot', () {
+    final now = DateTime(2026, 6, 18);
+    final entry = _historyEntry(
+      id: 'hard-before-rename',
+      date: now,
+      difficulty: 5,
+      status: CheckStatus.done,
+    );
+    final currentActivity = Activity(
+      id: 'hard-before-rename',
+      title: 'Now easy',
+      category: 'Rest',
+      durationMinutes: 20,
+      difficulty: 1,
+    );
+
+    final summary = ProgressSummaryCalculator.recentHardFromHistory(
+      [entry],
+      days: 7,
+      now: now,
+    );
+
+    expect(currentActivity.difficulty, 1);
+    expect(summary.planned, 1);
+    expect(summary.done, 1);
+  });
+
+  test('Archive rhythm compares against previous-7 entries', () {
+    final now = DateTime(2026, 6, 18);
+    final history = [
+      _historyEntry(id: 'today', date: now, status: CheckStatus.done),
+      _historyEntry(
+        id: 'yesterday',
+        date: now.subtract(const Duration(days: 1)),
+        status: CheckStatus.partly,
+      ),
+      _historyEntry(
+        id: 'previous',
+        date: now.subtract(const Duration(days: 7)),
+        status: CheckStatus.done,
+      ),
+    ];
+
+    final rhythm = ProgressSummaryCalculator.rhythmFromHistory(
+      history,
+      now: now,
+    );
+
+    expect(rhythm.currentStreakDays, 2);
+    expect(rhythm.past7DonePartly, 2);
+    expect(rhythm.previous7DonePartly, 1);
+    expect(rhythm.comparisonDelta, 1);
+  });
+
+  test('Archive historical summaries ignore future entries', () {
+    final now = DateTime(2026, 6, 18);
+    final history = [
+      _historyEntry(id: 'today', date: now, status: CheckStatus.done),
+      _historyEntry(
+        id: 'future',
+        date: now.add(const Duration(days: 1)),
+        difficulty: 5,
+        status: CheckStatus.done,
+      ),
+    ];
+
+    expect(
+      ProgressSummaryCalculator.recentFromHistory(
+        history,
+        days: 7,
+        now: now,
+      ).planned,
+      1,
+    );
+    expect(
+      ProgressSummaryCalculator.recentHardFromHistory(
+        history,
+        days: 7,
+        now: now,
+      ).planned,
+      0,
+    );
+    expect(
+      ProgressSummaryCalculator.rhythmFromHistory(history, now: now)
+          .past7Planned,
+      1,
+    );
+  });
+
+  test('Removed past archive entries remain part of historical summaries', () {
+    final now = DateTime(2026, 6, 18);
+    final summary = ProgressSummaryCalculator.recentFromHistory(
+      [
+        _historyEntry(
+          id: 'removed',
+          date: now,
+          status: CheckStatus.skipped,
+          removed: true,
+        ),
+      ],
+      days: 7,
+      now: now,
+    );
+
+    expect(summary.planned, 1);
+    expect(summary.skipped, 1);
+  });
+
   test('Looking ahead summary counts upcoming next 7 days only', () {
     final now = DateTime(2026, 6, 18, 14);
     final plans = [
@@ -9935,22 +10110,34 @@ void main() {
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await PersistenceService.init();
-    final appState = AppState(activities: PlannerService.defaultActivities);
     final today = _today();
-    appState.weekPlan
-      ..clear()
-      ..addAll([
-        _summaryDay(today, [
-          CheckStatus.done,
-        ]),
-        _summaryDay(today.subtract(const Duration(days: 1)), [
-          CheckStatus.partly,
-        ]),
-        _summaryDay(today.subtract(const Duration(days: 7)), [
-          CheckStatus.done,
-        ]),
-      ]);
-    final expected = ProgressSummaryCalculator.rhythm(appState.weekPlan);
+    final history = [
+      _historyEntry(id: 'today', date: today, status: CheckStatus.done),
+      _historyEntry(
+        id: 'yesterday',
+        date: today.subtract(const Duration(days: 1)),
+        status: CheckStatus.partly,
+      ),
+      _historyEntry(
+        id: 'previous',
+        date: today.subtract(const Duration(days: 7)),
+        status: CheckStatus.done,
+      ),
+    ];
+    final savedState = SavedState(
+      activities: const [],
+      seed: 0,
+      updatedAtMillis: 1000,
+      planHistory: {
+        for (final entry in history) entry.occurrenceKey: entry,
+      },
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    );
+    final appState = AppState(activities: const [], savedState: savedState);
+    final expected =
+        ProgressSummaryCalculator.rhythmFromHistory(appState.planHistory);
 
     await _pumpProgressScreen(tester, appState);
 
@@ -10105,12 +10292,12 @@ void main() {
       recentItems[2].status = CheckStatus.skipped;
     }
 
-    final expected7 = ProgressSummaryCalculator.recentHard(
-      appState.weekPlan,
+    final expected7 = ProgressSummaryCalculator.recentHardFromHistory(
+      appState.planHistory,
       days: 7,
     );
-    final expected30 = ProgressSummaryCalculator.recentHard(
-      appState.weekPlan,
+    final expected30 = ProgressSummaryCalculator.recentHardFromHistory(
+      appState.planHistory,
       days: 30,
     );
 
@@ -10283,6 +10470,33 @@ DayPlan _summaryDay(
           status: statuses[i],
         ),
     ],
+  );
+}
+
+PlanHistoryEntry _historyEntry({
+  required String id,
+  required DateTime date,
+  CheckStatus status = CheckStatus.none,
+  int difficulty = 3,
+  bool removed = false,
+}) {
+  final dateOnly = DateTime(date.year, date.month, date.day);
+  final dateKey = _dateKey(dateOnly);
+  return PlanHistoryEntry(
+    occurrenceKey: '$dateKey:$id',
+    date: dateOnly,
+    sourceActivityId: id,
+    title: 'Archived $id',
+    timeSlot: '9:00 AM',
+    durationMinutes: 30,
+    category: 'Outside',
+    difficulty: difficulty,
+    energy: 'medium',
+    social: 'either',
+    status: status,
+    removed: removed,
+    createdAtMillis: 1000,
+    updatedAtMillis: 1000,
   );
 }
 

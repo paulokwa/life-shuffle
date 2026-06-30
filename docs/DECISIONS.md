@@ -83,3 +83,13 @@ Each entry should include:
   - Read `ProgressSummaryCalculator`/the Progress screen from the archive immediately - deferred; Progress still reads the live generated/visible window for this slice. See `PARKING_LOT.md`'s "Historical calendar archive and trends" entry and `ROADMAP.md` MVP 2 slice 9.
 - **Status**: Active
 - **Related files**: `lib/models/plan_history_entry.dart`, `lib/state/app_state.dart`, `lib/services/persistence_service.dart`
+
+### 2026-06-29 — Count removed past occurrences in historical Progress
+
+- **Decision**: Progress summaries count archived occurrences dated today or earlier even when `PlanHistoryEntry.removed` is true, using the entry's last archived check-in status.
+- **Why**: Removal means the occurrence was later taken out of the live plan; it does not erase that it was planned for that historical date. Keeping it in the historical denominator avoids silently rewriting the past. No separate removed metric is added in this slice.
+- **Alternatives considered**:
+  - Exclude all removed entries, which would make past totals change after removal.
+  - Add a visible Removed bucket, which would widen the existing Progress UI beyond this slice's minimal-change scope.
+- **Status**: Active
+- **Related files**: `lib/models/progress_summary.dart`, `lib/models/plan_history_entry.dart`

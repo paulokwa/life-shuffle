@@ -2071,3 +2071,30 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Decide whether the next slice is a simple "day/week history" read-only browsing view over `AppState.planHistory`, or switching `ProgressSummaryCalculator` to read archived entries for past dates instead of the live `weekPlan` window (so progress stats stay accurate even after a regeneration changes what's currently generated for a past date that already happened).
 - **Open questions**:
   - Should the eventual history-browsing UI read directly from `AppState.planHistory`, or should a dedicated query/grouping helper (mirroring `ProgressSummaryCalculator`'s day-grouping pattern) be added once there's a concrete view to build against?
+
+---
+
+## 2026-06-29 (continued) - MVP 2 slice 10: archive-backed Progress summaries
+
+- **Goal**: Make the existing historical Progress summaries read frozen `PlanHistoryEntry` snapshots instead of only the current live generated window, without adding a History screen, year/custom-range browsing, or richer charts.
+- **Summary**: Added archive-specific recent, hard/difficulty, and rhythm calculators to `ProgressSummaryCalculator` and wired Progress's Past 7, Past 30, Difficulty, and Recent Rhythm sections to `AppState.planHistory`. All historical calculators exclude future-dated archive entries. Removed today/past entries continue to count as historically planned and use their archived status. Looking Ahead remains based on the live generated plan, as do the existing This week summary and category breakdown. Empty archives preserve the existing calm empty states.
+- **Files changed**:
+  - `lib/models/progress_summary.dart`
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Removed occurrences dated today/past remain part of historical planned totals; removal does not erase that they were once planned. No new Removed UI bucket was added.
+  - Keep the existing live-plan calculators for callers that still need them; add explicit archive methods rather than changing their input meaning.
+  - Keep Looking Ahead and This week/category live-plan based.
+- **Tests run**:
+  - `dart format lib/models/progress_summary.dart lib/screens/progress_screen.dart test/widget_test.dart` - passed.
+  - `flutter analyze --no-fatal-infos` - passed with the same 16 pre-existing info-level lints in unrelated files; no errors.
+  - `flutter test` - passed, 368/368 tests.
+  - `git diff --check` - passed; only the checkout's existing LF-to-CRLF normalization warnings were printed.
+- **Current state**: Existing Progress history is archive-backed and resilient to source activity changes/regeneration; future planning remains live-plan based.
+- **Next recommended step**: Let the archive accumulate in real use before deciding whether a separate read-only History browsing surface is worth prioritizing.
+- **Open questions**: None.

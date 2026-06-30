@@ -40,12 +40,16 @@ class ProgressScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final week = state.weekPlan;
+    final history = state.planHistory;
     final stats = _compute(week);
-    final past7 = ProgressSummaryCalculator.recent(week, days: 7);
-    final past30 = ProgressSummaryCalculator.recent(week, days: 30);
-    final hardPast7 = ProgressSummaryCalculator.recentHard(week, days: 7);
-    final hardPast30 = ProgressSummaryCalculator.recentHard(week, days: 30);
-    final rhythm = ProgressSummaryCalculator.rhythm(week);
+    final past7 = ProgressSummaryCalculator.recentFromHistory(history, days: 7);
+    final past30 =
+        ProgressSummaryCalculator.recentFromHistory(history, days: 30);
+    final hardPast7 =
+        ProgressSummaryCalculator.recentHardFromHistory(history, days: 7);
+    final hardPast30 =
+        ProgressSummaryCalculator.recentHardFromHistory(history, days: 30);
+    final rhythm = ProgressSummaryCalculator.rhythmFromHistory(history);
     final lookingAhead = ProgressSummaryCalculator.lookingAhead(week);
     final rateLabel = '${(stats.rate * 100).round()}%';
 

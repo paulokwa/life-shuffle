@@ -1,5 +1,6 @@
 import 'day_plan.dart';
 import 'mock_data.dart' show CheckStatus;
+import 'plan_history_entry.dart';
 
 class ProgressSummary {
   const ProgressSummary({
@@ -134,6 +135,48 @@ class ProgressSummaryCalculator {
     );
   }
 
+  /// Summarizes immutable archived occurrences for a recent historical
+  /// window. Removed occurrences still count because they were part of the
+  /// plan for that date; their last archived check-in status is preserved.
+  static ProgressSummary recentFromHistory(
+    List<PlanHistoryEntry> history, {
+    required int days,
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? DateTime.now());
+    final start = today.subtract(Duration(days: days - 1));
+    var planned = 0;
+    var done = 0;
+    var partly = 0;
+    var skipped = 0;
+    var unchecked = 0;
+
+    for (final entry in history) {
+      final date = _dateOnly(entry.date);
+      if (date.isBefore(start) || date.isAfter(today)) continue;
+      planned++;
+      switch (entry.status) {
+        case CheckStatus.done:
+          done++;
+        case CheckStatus.partly:
+          partly++;
+        case CheckStatus.skipped:
+          skipped++;
+        case CheckStatus.none:
+          unchecked++;
+      }
+    }
+
+    return ProgressSummary(
+      days: days,
+      planned: planned,
+      done: done,
+      partly: partly,
+      skipped: skipped,
+      unchecked: unchecked,
+    );
+  }
+
   static DifficultyProgressSummary recentHard(
     List<DayPlan> plans, {
     required int days,
@@ -164,6 +207,45 @@ class ProgressSummaryCalculator {
           case CheckStatus.none:
             break;
         }
+      }
+    }
+
+    return DifficultyProgressSummary(
+      days: days,
+      planned: planned,
+      done: done,
+      partly: partly,
+      skipped: skipped,
+    );
+  }
+
+  static DifficultyProgressSummary recentHardFromHistory(
+    List<PlanHistoryEntry> history, {
+    required int days,
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? DateTime.now());
+    final start = today.subtract(Duration(days: days - 1));
+    var planned = 0;
+    var done = 0;
+    var partly = 0;
+    var skipped = 0;
+
+    for (final entry in history) {
+      final date = _dateOnly(entry.date);
+      if (date.isBefore(start) || date.isAfter(today) || entry.difficulty < 4) {
+        continue;
+      }
+      planned++;
+      switch (entry.status) {
+        case CheckStatus.done:
+          done++;
+        case CheckStatus.partly:
+          partly++;
+        case CheckStatus.skipped:
+          skipped++;
+        case CheckStatus.none:
+          break;
       }
     }
 
@@ -209,6 +291,52 @@ class ProgressSummaryCalculator {
           !date.isAfter(previous7End)) {
         previous7Planned += day.activities.length;
         previous7DonePartly += dayDonePartly;
+      }
+    }
+
+    var currentStreakDays = 0;
+    var cursor = today;
+    while (hasDoneOrPartlyByDate[cursor] == true) {
+      currentStreakDays++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return RhythmProgressSummary(
+      currentStreakDays: currentStreakDays,
+      past7DonePartly: past7DonePartly,
+      previous7DonePartly: previous7DonePartly,
+      past7Planned: past7Planned,
+      previous7Planned: previous7Planned,
+    );
+  }
+
+  static RhythmProgressSummary rhythmFromHistory(
+    List<PlanHistoryEntry> history, {
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? DateTime.now());
+    final past7Start = today.subtract(const Duration(days: 6));
+    final previous7Start = today.subtract(const Duration(days: 13));
+    final previous7End = today.subtract(const Duration(days: 7));
+    var past7Planned = 0;
+    var past7DonePartly = 0;
+    var previous7Planned = 0;
+    var previous7DonePartly = 0;
+    final hasDoneOrPartlyByDate = <DateTime, bool>{};
+
+    for (final entry in history) {
+      final date = _dateOnly(entry.date);
+      if (date.isAfter(today)) continue;
+      final doneOrPartly = _isDoneOrPartly(entry.status);
+      if (doneOrPartly) hasDoneOrPartlyByDate[date] = true;
+
+      if (!date.isBefore(past7Start)) {
+        past7Planned++;
+        if (doneOrPartly) past7DonePartly++;
+      } else if (!date.isBefore(previous7Start) &&
+          !date.isAfter(previous7End)) {
+        previous7Planned++;
+        if (doneOrPartly) previous7DonePartly++;
       }
     }
 
