@@ -123,6 +123,14 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('settings-advanced-event-sources')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings-advanced-event-sources')),
+    );
+    await tester.pumpAndSettle();
+
     final saveButton = find.byKey(
       const ValueKey('settings-save-outside-source-list'),
     );
