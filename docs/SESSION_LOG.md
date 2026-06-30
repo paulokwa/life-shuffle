@@ -2098,3 +2098,31 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Existing Progress history is archive-backed and resilient to source activity changes/regeneration; future planning remains live-plan based.
 - **Next recommended step**: Let the archive accumulate in real use before deciding whether a separate read-only History browsing surface is worth prioritizing.
 - **Open questions**: None.
+
+---
+
+## 2026-06-29 (continued) - MVP 2 slice 11: simple archived-day History browsing
+
+- **Goal**: Let users browse past archived days and inspect frozen occurrence details without adding charts, year/custom-range navigation, AI, or a new primary navigation tab.
+- **Summary**: Added a read-only `HistoryScreen`, reachable from a new `History` action beside the Progress heading. It reads only `AppState.planHistory`, excludes future-dated entries, groups past/today entries newest-first, and shows a compact daily planned/done/partly summary. Tapping a date opens a mobile bottom sheet showing archived title, time, category, check-in status, and `Removed from plan` when applicable. The empty archive state is calm and explains that days appear as history accumulates. The existing five-item bottom navigation and Progress calculations are unchanged.
+- **Files changed**:
+  - `lib/screens/history_screen.dart` (new)
+  - `lib/screens/progress_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Use a Progress action and pushed route rather than adding a sixth bottom-navigation tab.
+  - Include today-or-earlier archive entries and exclude every future entry.
+  - Keep History read-only; check-ins and occurrence edits remain in existing Plan/check-in surfaces.
+  - Reuse Slice 10's removed-entry semantics and show removal as an additive marker alongside the archived check-in status.
+- **Tests run**:
+  - Five focused History widget tests passed: Progress navigation/newest-first grouping, future exclusion, frozen archived snapshot after live activity rename/regeneration, removed-entry representation, and empty state.
+  - `dart format lib/screens/history_screen.dart lib/screens/progress_screen.dart test/widget_test.dart` - passed.
+  - `flutter analyze --no-fatal-infos` - passed with the same 16 pre-existing info-level lints in unrelated files; no new analyzer issues.
+  - `flutter test` - passed, 373/373 tests.
+  - `git diff --check` - passed; only the checkout's existing LF-to-CRLF normalization warnings were printed.
+- **Current state**: Users can open History from Progress, scan archived days newest-first, and inspect honest frozen occurrence details.
+- **Next recommended step**: Let the simple day browser accumulate real-use feedback before considering week/month history navigation or richer trends.
+- **Open questions**: None.

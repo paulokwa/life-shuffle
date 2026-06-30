@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../models/day_plan.dart';
 import '../models/mock_data.dart' show CheckStatus;
 import '../models/progress_summary.dart';
+import 'history_screen.dart';
 import '../state/app_state.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
@@ -64,14 +65,30 @@ class ProgressScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Progress',
-                    style: GoogleFonts.lora(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w500,
-                      color: textPrimary,
-                      height: 1.2,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Progress',
+                          style: GoogleFonts.lora(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w500,
+                            color: textPrimary,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        key: const ValueKey('progress-open-history'),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => HistoryScreen(appState: state),
+                          ),
+                        ),
+                        icon: const Icon(Icons.history_rounded, size: 18),
+                        label: const Text('History'),
+                      ),
+                    ],
                   ),
                   Text(
                     'This week',

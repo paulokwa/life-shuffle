@@ -19,6 +19,7 @@ import 'package:life_shuffle/screens/calendar_name_screen.dart';
 import 'package:life_shuffle/screens/check_in_catchup_screen.dart';
 import 'package:life_shuffle/screens/check_in_one_by_one_screen.dart';
 import 'package:life_shuffle/screens/display_name_screen.dart';
+import 'package:life_shuffle/screens/history_screen.dart';
 import 'package:life_shuffle/screens/onboarding_screen.dart';
 import 'package:life_shuffle/screens/outside_events_screen.dart';
 import 'package:life_shuffle/screens/plan_screen.dart';
@@ -10319,6 +10320,154 @@ void main() {
       summary: expected30,
     );
   });
+
+  group('History screen', () {
+    testWidgets('Progress action opens newest-first archived past days',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final today = _today();
+      final older = _historyEntry(
+        id: 'older-history',
+        date: today.subtract(const Duration(days: 4)),
+        title: 'Older archived walk',
+      );
+      final newer = _historyEntry(
+        id: 'newer-history',
+        date: today.subtract(const Duration(days: 1)),
+        title: 'Newer archived dinner',
+        status: CheckStatus.done,
+      );
+      final appState = _appStateWithHistory([older, newer]);
+
+      await _pumpProgressScreen(tester, appState);
+      await tester.tap(find.byKey(const ValueKey('progress-open-history')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('history-screen')), findsOneWidget);
+      final newerDay = find.byKey(
+        ValueKey('history-day-${_dateKey(newer.date)}'),
+      );
+      final olderDay = find.byKey(
+        ValueKey('history-day-${_dateKey(older.date)}'),
+      );
+      expect(newerDay, findsOneWidget);
+      expect(olderDay, findsOneWidget);
+      expect(
+        tester.getTopLeft(newerDay).dy,
+        lessThan(tester.getTopLeft(olderDay).dy),
+      );
+    });
+
+    testWidgets('History excludes future archive entries',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final past = _historyEntry(
+        id: 'past-history',
+        date: now.subtract(const Duration(days: 1)),
+      );
+      final future = _historyEntry(
+        id: 'future-history',
+        date: now.add(const Duration(days: 1)),
+      );
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory([past, future]),
+        now: now,
+      );
+
+      expect(
+        find.byKey(ValueKey('history-day-${_dateKey(past.date)}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('history-day-${_dateKey(future.date)}')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Day detail uses archived snapshot after activity rename',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final date = _today().subtract(const Duration(days: 2));
+      final archived = _historyEntry(
+        id: 'renamed-history',
+        date: date,
+        title: 'Original archived title',
+        timeSlot: '7:30 PM',
+        category: 'Creative',
+        status: CheckStatus.partly,
+      );
+      final currentActivity = Activity(
+        id: 'renamed-history',
+        title: 'Renamed live activity',
+        category: 'Rest',
+        durationMinutes: 30,
+      );
+      final appState = _appStateWithHistory(
+        [archived],
+        activities: [currentActivity],
+      );
+      appState.regenerate();
+
+      await _pumpHistoryScreen(tester, appState);
+      await tester.tap(
+        find.byKey(ValueKey('history-day-${_dateKey(date)}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('history-day-sheet')), findsOneWidget);
+      expect(find.text('Original archived title'), findsOneWidget);
+      expect(find.text('7:30 PM'), findsOneWidget);
+      expect(find.text('Creative'), findsOneWidget);
+      expect(find.text('Partly done'), findsOneWidget);
+      expect(find.text('Renamed live activity'), findsNothing);
+    });
+
+    testWidgets('Removed historical entry is represented honestly',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final removed = _historyEntry(
+        id: 'removed-history',
+        date: _today().subtract(const Duration(days: 1)),
+        title: 'Removed archived plan',
+        status: CheckStatus.skipped,
+        removed: true,
+      );
+
+      await _pumpHistoryScreen(tester, _appStateWithHistory([removed]));
+      await tester.tap(
+        find.byKey(ValueKey('history-day-${_dateKey(removed.date)}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Removed archived plan'), findsOneWidget);
+      expect(find.text('Skipped'), findsOneWidget);
+      expect(find.text('Removed from plan'), findsOneWidget);
+    });
+
+    testWidgets('Empty archive shows a calm empty state',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+
+      await _pumpHistoryScreen(tester, _appStateWithHistory(const []));
+
+      expect(find.byKey(const ValueKey('history-empty')), findsOneWidget);
+      expect(find.text('No past days yet'), findsOneWidget);
+      expect(
+        find.text(
+          'Days will appear here as your plans build a little history.',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
 }
 
 FirestoreCalendar _remoteCalendar({
@@ -10446,6 +10595,16 @@ Future<void> _pumpProgressScreen(WidgetTester tester, AppState appState) async {
   );
 }
 
+Future<void> _pumpHistoryScreen(
+  WidgetTester tester,
+  AppState appState, {
+  DateTime? now,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(home: HistoryScreen(appState: appState, now: now)),
+  );
+}
+
 DayPlan _summaryDay(
   DateTime date,
   List<CheckStatus> statuses, {
@@ -10476,6 +10635,9 @@ DayPlan _summaryDay(
 PlanHistoryEntry _historyEntry({
   required String id,
   required DateTime date,
+  String? title,
+  String timeSlot = '9:00 AM',
+  String category = 'Outside',
   CheckStatus status = CheckStatus.none,
   int difficulty = 3,
   bool removed = false,
@@ -10486,10 +10648,10 @@ PlanHistoryEntry _historyEntry({
     occurrenceKey: '$dateKey:$id',
     date: dateOnly,
     sourceActivityId: id,
-    title: 'Archived $id',
-    timeSlot: '9:00 AM',
+    title: title ?? 'Archived $id',
+    timeSlot: timeSlot,
     durationMinutes: 30,
-    category: 'Outside',
+    category: category,
     difficulty: difficulty,
     energy: 'medium',
     social: 'either',
@@ -10497,6 +10659,26 @@ PlanHistoryEntry _historyEntry({
     removed: removed,
     createdAtMillis: 1000,
     updatedAtMillis: 1000,
+  );
+}
+
+AppState _appStateWithHistory(
+  List<PlanHistoryEntry> entries, {
+  List<Activity> activities = const [],
+}) {
+  return AppState(
+    activities: activities,
+    savedState: SavedState(
+      activities: activities,
+      seed: 0,
+      updatedAtMillis: 1000,
+      planHistory: {
+        for (final entry in entries) entry.occurrenceKey: entry,
+      },
+      enabledMap: const {},
+      checkinMap: const {},
+      lockedMap: const {},
+    ),
   );
 }
 
