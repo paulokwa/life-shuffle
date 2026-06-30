@@ -200,17 +200,11 @@ class _HistoryViewState extends State<_HistoryView> {
             Expanded(
               child: grouped.isEmpty
                   ? _HistoryEmptyState(mode: _mode)
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                      itemCount: grouped.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final day = grouped[index];
-                        return _HistoryDayCard(
-                          date: day.date,
-                          entries: day.entries,
-                        );
-                      },
+                  : _HistoryList(
+                      grouped: grouped,
+                      categoryEntries: _mode != _HistoryMode.today
+                          ? periodEntries
+                          : const [],
                     ),
             ),
           ],
@@ -505,6 +499,207 @@ class _HistoryDayCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HistoryList extends StatelessWidget {
+  const _HistoryList({
+    required this.grouped,
+    required this.categoryEntries,
+  });
+
+  final List<_HistoryDay> grouped;
+
+  /// Non-empty only in week/month mode; drives the category breakdown header.
+  final List<PlanHistoryEntry> categoryEntries;
+
+  @override
+  Widget build(BuildContext context) {
+    final showCategory = categoryEntries.isNotEmpty;
+    final offset = showCategory ? 1 : 0;
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      itemCount: grouped.length + offset,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        if (showCategory && index == 0) {
+          return _CategoryBreakdown(entries: categoryEntries);
+        }
+        final day = grouped[index - offset];
+        return _HistoryDayCard(date: day.date, entries: day.entries);
+      },
+    );
+  }
+}
+
+class _CategoryBreakdown extends StatelessWidget {
+  const _CategoryBreakdown({required this.entries});
+
+  final List<PlanHistoryEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = _CategoryStat.fromEntries(entries);
+    return LsCard(
+      key: const ValueKey('history-category-breakdown'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'By category',
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (int i = 0; i < stats.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _CategoryStatRow(stat: stats[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryStatRow extends StatelessWidget {
+  const _CategoryStatRow({required this.stat});
+
+  final _CategoryStat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('history-category-${stat.category}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  stat.category,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                '${stat.completionPercent}%',
+                key: ValueKey('history-category-pct-${stat.category}'),
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: accentSage,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _CategoryStatChip(label: 'Planned', value: stat.planned),
+              _CategoryStatChip(label: 'Done', value: stat.done),
+              _CategoryStatChip(label: 'Partly', value: stat.partly),
+              _CategoryStatChip(label: 'Skipped', value: stat.skipped),
+              _CategoryStatChip(label: 'Unchecked', value: stat.unchecked),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryStatChip extends StatelessWidget {
+  const _CategoryStatChip({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: warmBeige.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        '$value $label',
+        style: GoogleFonts.dmSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryStat {
+  const _CategoryStat({
+    required this.category,
+    required this.planned,
+    required this.done,
+    required this.partly,
+    required this.skipped,
+    required this.unchecked,
+  });
+
+  final String category;
+  final int planned;
+  final int done;
+  final int partly;
+  final int skipped;
+  final int unchecked;
+
+  int get completionPercent =>
+      planned == 0 ? 0 : (((done + partly * 0.5) / planned) * 100).round();
+
+  static List<_CategoryStat> fromEntries(List<PlanHistoryEntry> entries) {
+    final tallies = <String, _CategoryTally>{};
+    for (final entry in entries) {
+      final t = tallies.putIfAbsent(entry.category, _CategoryTally.new);
+      t.planned++;
+      switch (entry.status) {
+        case CheckStatus.done:
+          t.done++;
+        case CheckStatus.partly:
+          t.partly++;
+        case CheckStatus.skipped:
+          t.skipped++;
+        case CheckStatus.none:
+          t.unchecked++;
+      }
+    }
+    return (tallies.entries
+        .map(
+          (e) => _CategoryStat(
+            category: e.key,
+            planned: e.value.planned,
+            done: e.value.done,
+            partly: e.value.partly,
+            skipped: e.value.skipped,
+            unchecked: e.value.unchecked,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => b.planned.compareTo(a.planned)));
+  }
+}
+
+class _CategoryTally {
+  int planned = 0;
+  int done = 0;
+  int partly = 0;
+  int skipped = 0;
+  int unchecked = 0;
 }
 
 Future<void> _showHistoryDaySheet(

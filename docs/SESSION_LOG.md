@@ -2151,3 +2151,31 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Current state**: Users can browse archive-backed History as all days, one week, or one month at a time without navigating into future periods.
 - **Next recommended step**: Gather real-use feedback before considering calendar-grid history, custom ranges, year view, or richer analytics.
 - **Open questions**: None.
+
+---
+
+## 2026-06-29 (continued) - MVP 2 slice 13: Category statistics from archived history
+
+- **Goal**: Show a ranked per-category breakdown in History week/month views using only frozen `PlanHistoryEntry` archive data, without charts, AI, streak/trend cards, year view, custom range picker, or backend changes.
+- **Summary**: Added a "By category" card as the first scrollable item in the week/month list (below the existing period summary). Each category row shows name, weighted completion percentage (Done = 1, Partly = 0.5), and planned/done/partly/skipped/unchecked chip counts, ranked by planned count descending. Future-dated entries are excluded by the existing `_indexPastEntries` guard. Empty periods suppress the card entirely. Today mode is unchanged. The new `_CategoryBreakdown` is placed inside the `ListView` via a new `_HistoryList` widget (replacing the inline `ListView.separated` in `_HistoryViewState.build`) so the card scrolls with the day list rather than living in the fixed non-scrollable column — avoiding potential layout overflow when a period has many categories.
+- **Files changed**:
+  - `lib/screens/history_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Put `_CategoryBreakdown` as the first item in the `ListView` (via `_HistoryList`) rather than in the fixed Column above `Expanded`, so it scrolls with the day cards and can never overflow the screen regardless of category count.
+  - Use a dedicated `_CategoryStatChip` widget (no key on the Container) instead of reusing `_SummaryCount`, because `_SummaryCount` embeds a `ValueKey('history-summary-$label-$value')` on its Container; reusing it in multiple category rows would produce duplicate keys visible to existing test finders that assert `findsOneWidget`.
+  - `_CategoryTally` is a simple mutable accumulator private to `history_screen.dart`; no need to expose it as a public model.
+  - Show all five status counts (planned/done/partly/skipped/unchecked) unconditionally per category row, matching the period summary's always-show pattern.
+  - Today mode passes an empty `categoryEntries` list to `_HistoryList`, so no category breakdown is ever shown there.
+- **Tests run**:
+  - `dart format lib/screens/history_screen.dart test/widget_test.dart` - passed; both files reformatted.
+  - `flutter analyze --no-fatal-infos` - passed with the same 16 pre-existing info-level lints in unrelated files; no new errors or warnings.
+  - `flutter test` - passed, 387/387 tests. 7 net new tests in `group('History screen > Category breakdown', ...)`: week view shows breakdown from archived entries, month view shows breakdown from archived entries, categories ranked by planned count descending (dy-position check for 3 categories), completion percentage uses done=1/partly=0.5 (38% for 1+1+1+1), future entries within same week excluded, empty week/month hides breakdown, Today mode has no breakdown.
+  - `git diff --check` - passed; only the checkout's existing LF-to-CRLF normalization warnings were printed.
+- **Out-of-scope confirmed**: No charts, no AI, no streak/trend insight cards, no year view, no custom range picker, no changes to `docs/MASTER_PLAN.md`, no changes to `firestore.rules`.
+- **Current state**: History week and month views now show a ranked "By category" section built exclusively from frozen archive data, scrollable with the day list.
+- **Next recommended step**: Gather real-use feedback; next natural steps are calendar-grid history, custom ranges, or richer long-term trend cards.
+- **Open questions**: None.

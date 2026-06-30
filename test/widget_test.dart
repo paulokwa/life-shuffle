@@ -10730,6 +10730,307 @@ void main() {
       expect(find.text('Live replacement title'), findsNothing);
       expect(find.text('Done'), findsOneWidget);
     });
+
+    group('Category breakdown', () {
+      testWidgets('Week view shows category breakdown from archived entries',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final history = [
+          _historyEntry(
+            id: 'w1',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'w2',
+            date: DateTime(2026, 6, 16),
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'w3',
+            date: DateTime(2026, 6, 17),
+            category: 'Creative',
+          ),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: now,
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('history-category-breakdown')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('history-category-Outside')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('history-category-Creative')),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('Month view shows category breakdown from archived entries',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final history = [
+          _historyEntry(
+            id: 'm1',
+            date: DateTime(2026, 6, 5),
+            category: 'Rest',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'm2',
+            date: DateTime(2026, 6, 12),
+            category: 'Creative',
+          ),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: now,
+        );
+        await tester.tap(find.text('Month'));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('history-category-breakdown')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('history-category-Rest')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('history-category-Creative')),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('Categories are ranked by planned count descending',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        final history = [
+          // Outside: 3 entries
+          _historyEntry(
+            id: 'o1',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'o2',
+            date: DateTime(2026, 6, 16),
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'o3',
+            date: DateTime(2026, 6, 17),
+            category: 'Outside',
+          ),
+          // Creative: 2 entries
+          _historyEntry(
+            id: 'c1',
+            date: DateTime(2026, 6, 15),
+            category: 'Creative',
+          ),
+          _historyEntry(
+            id: 'c2',
+            date: DateTime(2026, 6, 16),
+            category: 'Creative',
+          ),
+          // Rest: 1 entry
+          _historyEntry(
+            id: 'r1',
+            date: DateTime(2026, 6, 15),
+            category: 'Rest',
+          ),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: now,
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        final outside = find.byKey(const ValueKey('history-category-Outside'));
+        final creative =
+            find.byKey(const ValueKey('history-category-Creative'));
+        final rest = find.byKey(const ValueKey('history-category-Rest'));
+        expect(outside, findsOneWidget);
+        expect(creative, findsOneWidget);
+        expect(rest, findsOneWidget);
+        // Outside(3) > Creative(2) > Rest(1): top-to-bottom = lowest dy first
+        expect(
+          tester.getTopLeft(outside).dy,
+          lessThan(tester.getTopLeft(creative).dy),
+        );
+        expect(
+          tester.getTopLeft(creative).dy,
+          lessThan(tester.getTopLeft(rest).dy),
+        );
+      });
+
+      testWidgets('Category completion percentage uses done=1 and partly=0.5',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final now = DateTime(2026, 6, 18);
+        // 4 planned: 1 done (1.0) + 1 partly (0.5) + 1 skipped + 1 unchecked
+        // = round(1.5 / 4 * 100) = 38%
+        final history = [
+          _historyEntry(
+            id: 'p1',
+            date: DateTime(2026, 6, 15),
+            category: 'Outside',
+            status: CheckStatus.done,
+          ),
+          _historyEntry(
+            id: 'p2',
+            date: DateTime(2026, 6, 16),
+            category: 'Outside',
+            status: CheckStatus.partly,
+          ),
+          _historyEntry(
+            id: 'p3',
+            date: DateTime(2026, 6, 17),
+            category: 'Outside',
+            status: CheckStatus.skipped,
+          ),
+          _historyEntry(
+            id: 'p4',
+            date: DateTime(2026, 6, 18),
+            category: 'Outside',
+          ),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: now,
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('history-category-pct-Outside')),
+          findsOneWidget,
+        );
+        expect(find.text('38%'), findsOneWidget);
+      });
+
+      testWidgets('Future archive entries are excluded from category stats',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        // now=Jun 20 (Saturday); current week=Jun 15-21
+        // Jun 21 (Sunday) is within the week but after today -> excluded
+        final now = DateTime(2026, 6, 20);
+        final history = [
+          _historyEntry(
+            id: 'past',
+            date: DateTime(2026, 6, 17),
+            category: 'Outside',
+          ),
+          _historyEntry(
+            id: 'future',
+            date: DateTime(2026, 6, 21),
+            category: 'Creative',
+          ),
+        ];
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(history),
+          now: now,
+        );
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('history-category-Outside')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('history-category-Creative')),
+          findsNothing,
+        );
+      });
+
+      testWidgets('Empty week and month hide category breakdown',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+
+        await _pumpHistoryScreen(
+          tester,
+          _appStateWithHistory(const []),
+          now: DateTime(2026, 6, 18),
+        );
+
+        await tester.tap(find.text('Week'));
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('history-previous-period')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('history-category-breakdown')),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Month'));
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('history-previous-period')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('history-category-breakdown')),
+          findsNothing,
+        );
+      });
+
+      testWidgets('Today mode shows no category breakdown (no regression)',
+          (WidgetTester tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await PersistenceService.init();
+        final history = [
+          _historyEntry(
+            id: 'today-entry',
+            date: _today(),
+            category: 'Outside',
+          ),
+        ];
+
+        await _pumpHistoryScreen(tester, _appStateWithHistory(history));
+
+        // Today mode: day cards visible, no category breakdown
+        expect(
+          find.byKey(const ValueKey('history-category-breakdown')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('history-day-${_dateKey(_today())}')),
+          findsOneWidget,
+        );
+      });
+    });
   });
 }
 
