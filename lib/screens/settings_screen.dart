@@ -17,6 +17,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/life_shuffle_header.dart';
 import '../widgets/ls_card.dart';
+import '../widgets/bottom_nav_shell.dart' show BottomNavScope, BottomNavTab;
 import 'onboarding_screen.dart';
 import 'print_preview_screen.dart';
 
@@ -255,14 +256,14 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   _ActivityDefaultsCard(state: state),
                   const SizedBox(height: 16),
-                  const _SectionLabel(label: 'CATEGORIES'),
+                  const _SectionLabel(label: 'CATEGORY GUIDE'),
                   const SizedBox(height: 10),
                   LsCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Manage the categories used to organise your activities.',
+                          'Categories help organise activities. Choose one when adding or editing an activity.',
                           style: GoogleFonts.dmSans(
                             fontSize: 13,
                             color: textMuted,
@@ -281,35 +282,15 @@ class SettingsScreen extends StatelessWidget {
                             'At home',
                           ].map((c) => _EditableChip(label: c)).toList(),
                         ),
-                        const SizedBox(height: 12),
-                        GestureDetector(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.add_rounded,
-                                size: 16,
-                                color: primaryTerracotta,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Add category',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: primaryTerracotta,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const _SectionLabel(label: 'OUTSIDE EVENT SOURCES'),
-                  const SizedBox(height: 10),
-                  _OutsideEventSourcesCard(state: state),
+                  _AdvancedSettingsSection(
+                    title: 'Outside event sources',
+                    subtitle: 'Advanced tools for event discovery',
+                    child: _OutsideEventSourcesCard(state: state),
+                  ),
                   const SizedBox(height: 16),
                   const _SectionLabel(label: 'PUBLISHING'),
                   const SizedBox(height: 10),
@@ -415,6 +396,35 @@ class _ExportPrintCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: warmBeige.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Range: ${_exportRangeLabel(state.viewMode)} '
+                    '(set in Plan)',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => BottomNavScope.maybeOf(context)
+                      ?.onNavigate(BottomNavTab.plan),
+                  child: const Text('Open Plan'),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -517,6 +527,12 @@ class _ExportPrintCard extends StatelessWidget {
       ),
     );
   }
+
+  static String _exportRangeLabel(RangeType viewMode) => switch (viewMode) {
+        RangeType.week => '1 week',
+        RangeType.twoWeek => '2 weeks',
+        RangeType.month => 'Month',
+      };
 }
 
 class _OutputDetailToggleRow extends StatelessWidget {
@@ -1668,7 +1684,7 @@ class _PublishingCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Calendar feed',
+                      'Phone calendar link',
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1677,7 +1693,7 @@ class _PublishingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      state.feedEnabled ? 'Feed is live' : 'Not enabled yet',
+                      state.feedEnabled ? 'Link is active' : 'Not set up yet',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1700,8 +1716,8 @@ class _PublishingCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             state.feedEnabled
-                ? 'Your calendar feed is live. Copy the link below into Apple Calendar, Google Calendar, or Outlook to subscribe.'
-                : 'Turn this on to create a private link you can subscribe to from Apple Calendar, Google Calendar, or Outlook.',
+                ? 'Copy this private link into Apple Calendar, Google Calendar, or Outlook.'
+                : 'Turn this on to create a private link for Apple Calendar, Google Calendar, or Outlook.',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               height: 1.35,
@@ -1770,13 +1786,13 @@ class _PublishingCard extends StatelessWidget {
                   _PublishingActionButton(
                     key: const ValueKey('settings-refresh-feed-now'),
                     icon: Icons.sync_rounded,
-                    label: 'Refresh feed',
+                    label: 'Update now',
                     onTap: () => unawaited(_refreshFeedNow(context, state)),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
-              const _PublishingGroupLabel(label: 'ADVANCED DIAGNOSTICS'),
+              const _PublishingGroupLabel(label: 'TROUBLESHOOTING'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 10,
@@ -1785,15 +1801,15 @@ class _PublishingCard extends StatelessWidget {
                   _PublishingActionButton(
                     key: const ValueKey('settings-download-raw-ics'),
                     icon: Icons.download_rounded,
-                    label: 'Download raw ICS',
+                    label: 'Check raw calendar file',
                     onTap: () => _downloadRawIcs(context, state.feedToken!),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
-                'Download raw ICS is only for checking whether Life '
-                "Shuffle's feed has updated before Google Calendar "
+                'This file is only for checking whether Life '
+                "Shuffle's calendar link has updated before Google Calendar "
                 'refreshes.',
                 key: const ValueKey('settings-download-raw-ics-note'),
                 style: GoogleFonts.dmSans(
@@ -1804,7 +1820,7 @@ class _PublishingCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 14),
-            const _PublishingGroupLabel(label: 'TOKEN'),
+            const _PublishingGroupLabel(label: 'RESET PRIVATE LINK'),
             const SizedBox(height: 8),
             Wrap(
               spacing: 10,
@@ -1814,13 +1830,13 @@ class _PublishingCard extends StatelessWidget {
                   _PublishingActionButton(
                     key: const ValueKey('settings-regenerate-feed-token'),
                     icon: Icons.refresh_rounded,
-                    label: 'Regenerate token',
+                    label: 'Create new link',
                     onTap: state.regenerateFeedToken,
                   ),
                 _PublishingActionButton(
                   key: const ValueKey('settings-revoke-feed-token'),
                   icon: Icons.link_off_rounded,
-                  label: 'Revoke token',
+                  label: 'Remove private link',
                   onTap: state.revokeFeedToken,
                   quiet: true,
                 ),
@@ -2892,6 +2908,7 @@ class _PublishingActionButton extends StatelessWidget {
       onTap: disabled ? null : onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: quiet || disabled ? warmBeige : const Color(0xFFFAF0EC),
@@ -2923,6 +2940,48 @@ class _PublishingActionButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AdvancedSettingsSection extends StatelessWidget {
+  const _AdvancedSettingsSection({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const ValueKey('settings-advanced-event-sources'),
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+        childrenPadding: EdgeInsets.zero,
+        leading: const Icon(
+          Icons.travel_explore_rounded,
+          color: primaryTerracotta,
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.dmSans(fontSize: 12, color: textMuted),
+        ),
+        children: [child],
       ),
     );
   }
