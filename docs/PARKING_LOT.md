@@ -58,8 +58,8 @@ If it is exciting but too early, put it here.
 
 - **Idea**: Add read-only browsing across archived past weeks, two-week ranges, months, and eventually year-style views, plus richer long-term trends.
 - **Why it is useful**: Users should be able to see what was planned, done, partly done, skipped, and left unchecked over time, not just the currently generated range. This would also support richer trends, streaks, category breakdowns, and long-term analytics.
-- **Status update (2026-06-29)**: Slice 9 added the persisted `PlanHistoryEntry` foundation, Slice 10 uses it for existing Progress summaries, and Slice 11 adds a simple newest-first archived-day list with read-only day details. **Still parked**: week/month history navigation, year/N-day views, range pickers, and richer long-term charts or trends.
-- **Why it is parked**: Basic day browsing and honest summaries now exist. Broader calendar-style navigation and analytics should wait for a concrete need and real archive-growth experience.
+- **Status update (2026-06-29)**: Slice 9 added the persisted `PlanHistoryEntry` foundation, Slice 10 uses it for existing Progress summaries, Slice 11 added archived-day details, and Slice 12 added bounded previous-week and previous-month browsing with archive-only summaries. **Still parked**: year/N-day views, custom range pickers, calendar-grid history, and richer long-term charts or trends.
+- **Why it is parked**: Day, week, and month list browsing with honest summaries now exists. Calendar-grid history, arbitrary ranges, and analytics should wait for a concrete need and real archive-growth experience.
 - **Possible phase**: Later MVP 2 analytics/history slice, now that the archive foundation exists to build on.
 
 ### Custom N-day planning horizon

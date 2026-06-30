@@ -2099,8 +2099,6 @@ Use it when a session ends or when enough context has changed that the next assi
 - **Next recommended step**: Let the archive accumulate in real use before deciding whether a separate read-only History browsing surface is worth prioritizing.
 - **Open questions**: None.
 
----
-
 ## 2026-06-29 (continued) - MVP 2 slice 11: simple archived-day History browsing
 
 - **Goal**: Let users browse past archived days and inspect frozen occurrence details without adding charts, year/custom-range navigation, AI, or a new primary navigation tab.
@@ -2125,4 +2123,31 @@ Use it when a session ends or when enough context has changed that the next assi
   - `git diff --check` - passed; only the checkout's existing LF-to-CRLF normalization warnings were printed.
 - **Current state**: Users can open History from Progress, scan archived days newest-first, and inspect honest frozen occurrence details.
 - **Next recommended step**: Let the simple day browser accumulate real-use feedback before considering week/month history navigation or richer trends.
+- **Open questions**: None.
+
+---
+
+## 2026-06-29 (continued) - MVP 2 slice 12: Week and Month History navigation
+
+- **Goal**: Extend archive-backed History with simple previous-week and previous-month browsing, archive-only period totals, and a completion percentage, without charts, custom ranges, year view, AI, or backend/rules changes.
+- **Summary**: Converted the History view to stateful period navigation with a `Today / Week / Month` segmented control. Today retains Slice 11's full newest-first day list. Week resets to the current Monday–Sunday week and Month resets to the current calendar month; both have previous/next chevrons, with Next disabled whenever the selected period is current. A period summary shows Planned, Done, Partly, Skipped, Unchecked, and a weighted completion percentage (Done full credit, Partly half credit), all calculated from frozen `PlanHistoryEntry` values only. The existing newest-day-first cards/detail sheet are reused inside each period. Empty periods show period-specific friendly copy while leaving older navigation available. History is indexed once by date when the route opens, so changing periods gathers only the selected dates instead of regrouping the complete archive repeatedly.
+- **Files changed**:
+  - `lib/screens/history_screen.dart`
+  - `test/widget_test.dart`
+  - `docs/ROADMAP.md`
+  - `docs/PARKING_LOT.md`
+  - `docs/SESSION_LOG.md`
+- **Decisions made**:
+  - Weeks are Monday–Sunday, matching the app's existing calendar-grid convention.
+  - Switching into Week or Month always returns to the current period, making the disabled future boundary predictable.
+  - Completion uses the same gentle weighted convention already used by the live Progress summary: Done = 1, Partly = 0.5, divided by Planned.
+  - Keep period filtering local to the read-only History route with a date-indexed cache; no `AppState` API was added because no other consumer currently needs period queries.
+- **Tests run**:
+  - Twelve focused History tests passed, including current/previous week, current/previous month, summaries/completion, disabled future navigation, empty week/month navigation, and frozen archive display after regeneration.
+  - `dart format lib/screens/history_screen.dart test/widget_test.dart` - passed.
+  - `flutter analyze --no-fatal-infos` - passed with the same 16 pre-existing info-level lints in unrelated files; no new analyzer issues.
+  - `flutter test` - passed, 380/380 tests.
+  - `git diff --check` - passed; only the checkout's existing LF-to-CRLF normalization warnings were printed.
+- **Current state**: Users can browse archive-backed History as all days, one week, or one month at a time without navigating into future periods.
+- **Next recommended step**: Gather real-use feedback before considering calendar-grid history, custom ranges, year view, or richer analytics.
 - **Open questions**: None.

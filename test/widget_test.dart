@@ -10467,6 +10467,269 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('Current week shows archive totals and completion percentage',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final history = [
+        _historyEntry(
+          id: 'week-done',
+          date: DateTime(2026, 6, 15),
+          status: CheckStatus.done,
+        ),
+        _historyEntry(
+          id: 'week-partly',
+          date: DateTime(2026, 6, 16),
+          status: CheckStatus.partly,
+        ),
+        _historyEntry(
+          id: 'week-skipped',
+          date: DateTime(2026, 6, 17),
+          status: CheckStatus.skipped,
+        ),
+        _historyEntry(
+          id: 'week-unchecked',
+          date: DateTime(2026, 6, 18),
+        ),
+      ];
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory(history),
+        now: now,
+      );
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+
+      expect(find.text('Week of June 15–21'), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('history-period-summary')), findsOneWidget);
+      expect(find.byKey(const ValueKey('history-summary-Planned-4')),
+          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('history-summary-Done-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('history-summary-Partly-1')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('history-summary-Skipped-1')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('history-summary-Unchecked-1')),
+          findsOneWidget);
+      expect(find.text('38% complete'), findsOneWidget);
+    });
+
+    testWidgets('Previous week navigation shows its archived days',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final current = _historyEntry(
+        id: 'current-week',
+        date: DateTime(2026, 6, 16),
+      );
+      final previous = _historyEntry(
+        id: 'previous-week',
+        date: DateTime(2026, 6, 10),
+        status: CheckStatus.done,
+      );
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory([current, previous]),
+        now: now,
+      );
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('history-previous-period')),
+      );
+      await tester.pump();
+
+      expect(find.text('Week of June 8–14'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('history-day-${_dateKey(previous.date)}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('history-day-${_dateKey(current.date)}')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Current month shows archive totals and daily breakdown',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final juneEntries = [
+        _historyEntry(
+          id: 'june-done',
+          date: DateTime(2026, 6, 2),
+          status: CheckStatus.done,
+        ),
+        _historyEntry(
+          id: 'june-unchecked',
+          date: DateTime(2026, 6, 14),
+        ),
+      ];
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory(juneEntries),
+        now: now,
+      );
+      await tester.tap(find.text('Month'));
+      await tester.pump();
+
+      expect(find.text('June 2026'), findsOneWidget);
+      expect(find.byKey(const ValueKey('history-summary-Planned-2')),
+          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('history-summary-Done-1')), findsOneWidget);
+      expect(find.text('50% complete'), findsOneWidget);
+      expect(
+        find.byKey(
+          ValueKey('history-day-${_dateKey(juneEntries.last.date)}'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Previous month navigation shows its archived days',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final may = _historyEntry(
+        id: 'may-history',
+        date: DateTime(2026, 5, 20),
+      );
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory([may]),
+        now: now,
+      );
+      await tester.tap(find.text('Month'));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('history-previous-period')),
+      );
+      await tester.pump();
+
+      expect(find.text('May 2026'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('history-day-${_dateKey(may.date)}')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Future period navigation is disabled at current period',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory(const []),
+        now: DateTime(2026, 6, 18),
+      );
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('history-next-period')),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      await tester.tap(find.text('Month'));
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('history-next-period')),
+            )
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('Empty historical week and month keep older navigation',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+
+      await _pumpHistoryScreen(
+        tester,
+        _appStateWithHistory(const []),
+        now: DateTime(2026, 6, 18),
+      );
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('history-previous-period')),
+      );
+      await tester.pump();
+      expect(find.text('No archived days in this week'), findsOneWidget);
+      expect(find.text('0% complete'), findsOneWidget);
+
+      await tester.tap(find.text('Month'));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('history-previous-period')),
+      );
+      await tester.pump();
+      expect(find.text('No archived days in this month'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('history-previous-period')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('Week grouping stays archive-driven after regeneration',
+        (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await PersistenceService.init();
+      final now = DateTime(2026, 6, 18);
+      final archived = _historyEntry(
+        id: 'archive-source',
+        date: DateTime(2026, 6, 16),
+        title: 'Frozen archive title',
+        status: CheckStatus.done,
+      );
+      final appState = _appStateWithHistory(
+        [archived],
+        activities: [
+          Activity(
+            id: 'archive-source',
+            title: 'Live replacement title',
+            category: 'Rest',
+            durationMinutes: 30,
+          ),
+        ],
+      );
+      appState.regenerate();
+
+      await _pumpHistoryScreen(tester, appState, now: now);
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(ValueKey('history-day-${_dateKey(archived.date)}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Frozen archive title'), findsOneWidget);
+      expect(find.text('Live replacement title'), findsNothing);
+      expect(find.text('Done'), findsOneWidget);
+    });
   });
 }
 
