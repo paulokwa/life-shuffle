@@ -10547,10 +10547,16 @@ void main() {
       await tester.pump();
 
       expect(find.text('Week of June 8–14'), findsOneWidget);
-      expect(
-        find.byKey(ValueKey('history-day-${_dateKey(previous.date)}')),
-        findsOneWidget,
+      final previousDay = find.byKey(
+        ValueKey('history-day-${_dateKey(previous.date)}'),
       );
+      await tester.scrollUntilVisible(
+        previousDay,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      expect(previousDay, findsOneWidget);
       expect(
         find.byKey(ValueKey('history-day-${_dateKey(current.date)}')),
         findsNothing,
@@ -10588,12 +10594,16 @@ void main() {
       expect(
           find.byKey(const ValueKey('history-summary-Done-1')), findsOneWidget);
       expect(find.text('50% complete'), findsOneWidget);
-      expect(
-        find.byKey(
-          ValueKey('history-day-${_dateKey(juneEntries.last.date)}'),
-        ),
-        findsOneWidget,
+      final latestJuneDay = find.byKey(
+        ValueKey('history-day-${_dateKey(juneEntries.last.date)}'),
       );
+      await tester.scrollUntilVisible(
+        latestJuneDay,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      expect(latestJuneDay, findsOneWidget);
     });
 
     testWidgets('Previous month navigation shows its archived days',
@@ -10721,9 +10731,16 @@ void main() {
       await _pumpHistoryScreen(tester, appState, now: now);
       await tester.tap(find.text('Week'));
       await tester.pump();
-      await tester.tap(
-        find.byKey(ValueKey('history-day-${_dateKey(archived.date)}')),
+      final archivedDay = find.byKey(
+        ValueKey('history-day-${_dateKey(archived.date)}'),
       );
+      await tester.scrollUntilVisible(
+        archivedDay,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(archivedDay);
       await tester.pumpAndSettle();
 
       expect(find.text('Frozen archive title'), findsOneWidget);
